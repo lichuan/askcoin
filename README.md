@@ -1,2 +1,2 @@
-# askcoin-core
-askcoin-core node source
+# askcoin
+askcoin is a cryptocurrency for real-time ask & answer questions.
