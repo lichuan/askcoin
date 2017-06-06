@@ -1,0 +1,3 @@
+[submodule "depend/fly"]
+	path = depend/fly
+	url = git@github.com:lichuan/fly.git
