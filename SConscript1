@@ -1,0 +1,8 @@
+Import("env")
+Files = Glob("*.cpp") + Glob("*/*.cpp")
+for f in Files:
+  if str(f).endswith("test_client.cpp"):
+    Files.remove(f)
+    break    
+test_server = env.Program("test_server", Files)
+Return("test_server")
