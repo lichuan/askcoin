@@ -1,3 +1,6 @@
 [submodule "depend/fly"]
 	path = depend/fly
 	url = git@github.com:lichuan/fly.git
+[submodule "depend/secp256k1"]
+	path = depend/secp256k1
+	url = git@github.com:lichuan/secp256k1.git
