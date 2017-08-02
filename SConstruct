@@ -17,7 +17,6 @@ libs = [
     crypto_algorithms,
     fly,
     secp256k1,
-    "ssl",
     "crypto"
 ]
 
