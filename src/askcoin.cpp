@@ -1,24 +1,3 @@
-/* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
- *                    _______    _                                     *
- *                   (  ____ \  ( \     |\     /|                      * 
- *                   | (    \/  | (     ( \   / )                      *
- *                   | (__      | |      \ (_) /                       *
- *                   |  __)     | |       \   /                        *
- *                   | (        | |        ) (                         *
- *                   | )        | (____/\  | |                         *
- *                   |/         (_______/  \_/                         *
- *                                                                     *
- *                                                                     *
- *     fly is an awesome c++11 network library.                        *
- *                                                                     *
- *   @author: lichuan                                                  *
- *   @qq: 308831759                                                    *
- *   @email: lichuan@lichuan.me                                        *
- *   @github: https://github.com/lichuan/fly                           *
- *   @date: 2015-06-10 13:34:21                                        *
- *                                                                     *
- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
-
 #include <unistd.h>
 #include <unordered_map>
 #include <fcntl.h>
@@ -26,20 +5,14 @@
 #include "fly/init.hpp"
 #include "fly/net/server.hpp"
 #include "fly/base/logger.hpp"
-
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include "support/cleanse.h"
 #include "crypto/sha512.h"
 #include "hash.h"
 #include "compat/sanity.h"
-
-
-
 #include <secp256k1.h>
 //#include <secp256k1_recovery.h>
-
-
 
 using namespace std::placeholders;
 static secp256k1_context* secp256k1_context_sign = NULL;
@@ -842,30 +815,31 @@ bool AppInitSanityChecks()
         
 }
 
+using fly::net::Wsock;
 
-class Test_Server : public fly::base::Singleton<Test_Server>
+class Askcoin : public fly::base::Singleton<Askcoin>
 {
 public:
-    bool allow(std::shared_ptr<fly::net::Connection> connection)
+    bool allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     {
         return true;
     }
     
-    void init(std::shared_ptr<fly::net::Connection> connection)
+    void init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     {
         std::lock_guard<std::mutex> guard(m_mutex);
         m_connections[connection->id()] = connection;
         LOG_INFO("connection count: %u", m_connections.size());
     }
     
-    void dispatch(std::unique_ptr<fly::net::Message> message)
+    void dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
     {
-        std::shared_ptr<fly::net::Connection> connection = message->get_connection();
+        std::shared_ptr<fly::net::Connection<Wsock>> connection = message->get_connection();
         const fly::net::Addr &addr = connection->peer_addr();
         LOG_INFO("recv message from %s:%d raw_data: %s", addr.m_host.c_str(), addr.m_port, message->raw_data().c_str());
     }
     
-    void close(std::shared_ptr<fly::net::Connection> connection)
+    void close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     {
         LOG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
         std::lock_guard<std::mutex> guard(m_mutex);
@@ -873,7 +847,7 @@ public:
         LOG_INFO("connection count: %u", m_connections.size());
     }
     
-    void be_closed(std::shared_ptr<fly::net::Connection> connection)
+    void be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     {
         LOG_INFO("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
         std::lock_guard<std::mutex> guard(m_mutex);
@@ -887,14 +861,14 @@ public:
         fly::init();
 
         fly::base::Logger::instance()->init(fly::base::DEBUG, "server", "./log/");
-
-
+        
         if (!AppInitSanityChecks())
         {
             // InitError will have been called with detailed error, which ends up on console
             LOG_FATAL("sanity check failed");            
             exit(EXIT_FAILURE);
         }
+
 
         LOG_INFO("sanity check ok");
 
@@ -903,12 +877,12 @@ public:
         
         
         //test tcp server
-        std::unique_ptr<fly::net::Server> server(new fly::net::Server(fly::net::Addr("127.0.0.1", 8899),
-                                                                      std::bind(&Test_Server::allow, this, _1),
-                                                                      std::bind(&Test_Server::init, this, _1),
-                                                                      std::bind(&Test_Server::dispatch, this, _1),
-                                                                      std::bind(&Test_Server::close, this, _1),
-                                                                      std::bind(&Test_Server::be_closed, this, _1)));
+        std::unique_ptr<fly::net::Server<Wsock>> server(new fly::net::Server<Wsock>(fly::net::Addr("127.0.0.1", 8899),
+                                                                      std::bind(&Askcoin::allow, this, _1),
+                                                                      std::bind(&Askcoin::init, this, _1),
+                                                                      std::bind(&Askcoin::dispatch, this, _1),
+                                                                      std::bind(&Askcoin::close, this, _1),
+                                                                      std::bind(&Askcoin::be_closed, this, _1)));
 
         if(server->start())
         {
@@ -922,11 +896,11 @@ public:
     }
     
 private:
-    std::unordered_map<uint64, std::shared_ptr<fly::net::Connection>> m_connections;
+    std::unordered_map<uint64, std::shared_ptr<fly::net::Connection<Wsock>>> m_connections;
     std::mutex m_mutex;
 };
 
 int main()
 {
-    Test_Server::instance()->main();
+    Askcoin::instance()->main();
 }
