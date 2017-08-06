@@ -865,7 +865,7 @@ public:
         if (!AppInitSanityChecks())
         {
             // InitError will have been called with detailed error, which ends up on console
-            LOG_FATAL("sanity check failed");            
+            LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
 
@@ -891,7 +891,7 @@ public:
         }
         else
         {
-            LOG_ERROR("start server failed");
+            LOG_FATAL("start server failed");
         }
     }
     
