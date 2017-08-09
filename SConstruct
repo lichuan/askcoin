@@ -17,14 +17,19 @@ libs = [
     crypto_algorithms,
     fly,
     secp256k1,
-    "crypto"
+    "crypto",
+    "leveldb"
 ]
 
 lib_path = [
-#    "#build/bin"
+    "#depend/leveldb/out-static"
 ]
 
-env = Environment(CCFLAGS='-g -O2 -Wall -std=c++11', LINKFLAGS='-pthread', CPPPATH=["#src", "#depend/fly/src", "#depend/fly/depend/rapidjson/include"])
+env = Environment(CCFLAGS='-g -O2 -Wall -std=c++11', LINKFLAGS='-pthread', CPPPATH=[
+    "#src", "#depend/fly/src",
+    "#depend/leveldb/include",
+    "#depend/fly/depend/rapidjson/include",])
+
 env.Replace(LIBS=libs, LIBPATH=lib_path)
 
 Export("env")

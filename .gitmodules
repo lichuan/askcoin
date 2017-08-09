@@ -4,3 +4,6 @@
 [submodule "depend/secp256k1"]
 	path = depend/secp256k1
 	url = git@github.com:lichuan/secp256k1.git
+[submodule "depend/leveldb"]
+	path = depend/leveldb
+	url = git@github.com:lichuan/leveldb.git

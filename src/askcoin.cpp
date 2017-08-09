@@ -10,6 +10,10 @@
 #include "support/cleanse.h"
 #include "crypto/sha512.h"
 #include "hash.h"
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include "compat/sanity.h"
 #include <secp256k1.h>
 //#include <secp256k1_recovery.h>
@@ -816,6 +820,11 @@ bool AppInitSanityChecks()
 }
 
 using fly::net::Wsock;
+#include <iostream>
+using namespace std;
+
+
+#include "leveldb/db.h"
 
 class Askcoin : public fly::base::Singleton<Askcoin>
 {
@@ -871,6 +880,48 @@ public:
 
 
         LOG_INFO("sanity check ok");
+        leveldb::DB *db;
+        leveldb::Options options;
+        options.create_if_missing = true;
+        //options.error_if_exists = true;
+
+        std::string tstr = "abcdefg";
+        cout << tstr.c_str() << " size: " << tstr.size() << " length: " << tstr.length() << endl;
+        tstr[3] = '\0';
+        cout << tstr.c_str() << " size: " << tstr.size() << " length: " << tstr.length() << endl;
+        
+        
+        leveldb::Status status = leveldb::DB::Open(options, "./db", &db);
+        std::string res = status.ToString();
+        LOG_INFO("status str: %s", res.c_str());
+
+        std::string val;
+        leveldb::Status s;
+        //s = db->Put(leveldb::WriteOptions(), "block123", "val is 123");
+        
+        // if(s.ok()) s = db->Get(leveldb::ReadOptions(), "block456", &val);
+        // else
+        // {
+        //     LOG_INFO("write first failed: %s", s.ToString().c_str());
+        // }
+        // if(s.ok()) s = db->Put(leveldb::WriteOptions(), "block456", val);
+        // else
+        // {
+        //     LOG_INFO("get failed: %s", s.ToString().c_str());
+        // }
+        
+        if(s.ok()) s = db->Delete(leveldb::WriteOptions(), "block456");
+        else
+        {
+            LOG_INFO("put failed: %s", s.ToString().c_str());
+        }
+
+        if(!s.ok())
+        {
+            LOG_INFO("delete failed: %s", s.ToString().c_str());
+        }
+        
+        assert(status.ok());
 
         return;
         
