@@ -954,4 +954,6 @@ private:
 int main()
 {
     Askcoin::instance()->main();
+
+    return 0;
 }
