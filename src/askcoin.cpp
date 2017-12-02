@@ -877,8 +877,7 @@ public:
             LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
-
-
+        
         LOG_INFO("sanity check ok");
         leveldb::DB *db;
         leveldb::Options options;
@@ -887,9 +886,9 @@ public:
 
         std::string tstr = "abcdefg";
         cout << tstr.c_str() << " size: " << tstr.size() << " length: " << tstr.length() << endl;
-        tstr[3] = '\0';
-        cout << tstr.c_str() << " size: " << tstr.size() << " length: " << tstr.length() << endl;
-        
+        tstr[3] = 0;
+        cout << tstr.c_str() << " [3]=0 size: " << tstr.size() << " length: " << tstr.length() << endl;
+        cout << "tstr[3] = " << tstr[3] << endl;
         
         leveldb::Status status = leveldb::DB::Open(options, "./db", &db);
         std::string res = status.ToString();
@@ -897,31 +896,40 @@ public:
 
         std::string val;
         leveldb::Status s;
-        //s = db->Put(leveldb::WriteOptions(), "block123", "val is 123");
-        
-        // if(s.ok()) s = db->Get(leveldb::ReadOptions(), "block456", &val);
-        // else
-        // {
-        //     LOG_INFO("write first failed: %s", s.ToString().c_str());
-        // }
-        // if(s.ok()) s = db->Put(leveldb::WriteOptions(), "block456", val);
-        // else
-        // {
-        //     LOG_INFO("get failed: %s", s.ToString().c_str());
-        // }
-        
-        if(s.ok()) s = db->Delete(leveldb::WriteOptions(), "block456");
-        else
-        {
-            LOG_INFO("put failed: %s", s.ToString().c_str());
-        }
 
-        if(!s.ok())
+        for(int i = 0; i < 100; ++i)
         {
-            LOG_INFO("delete failed: %s", s.ToString().c_str());
+            std::string vv = fly::base::to_string(i);
+            
+            cout << "vv: " << vv << endl;
+            
+            s = db->Put(leveldb::WriteOptions(), std::string("block") + vv, "val is 123");
+        
+            if(s.ok()) s = db->Get(leveldb::ReadOptions(), "block456", &val);
+            else
+            {
+                LOG_INFO("write first failed: %s", s.ToString().c_str());
+            }
+            if(s.ok()) s = db->Put(leveldb::WriteOptions(), "block456", val);
+            else
+            {
+                LOG_INFO("get failed: %s", s.ToString().c_str());
+            }
+        
+            if(s.ok()) s = db->Delete(leveldb::WriteOptions(), "block456");
+            else
+            {
+                LOG_INFO("put failed: %s", s.ToString().c_str());
+            }
+
+            if(!s.ok())
+            {
+                LOG_INFO("delete failed: %s", s.ToString().c_str());
+            }
+        
+            assert(s.ok());
         }
         
-        assert(status.ok());
 
         return;
         
