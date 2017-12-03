@@ -9,26 +9,30 @@ def get_shared_library_name(node):
     return os.path.basename(str(node)[:-2])[3:-3]
 
 # depend library
-fly = File('#depend/fly/build/bin/libfly.a')
-crypto_algorithms = File('#depend/fly/build/bin/libcrypto-algorithms.a')
-secp256k1 = File('#depend/secp256k1/.libs/libsecp256k1.a')
-
-libs = [
-    crypto_algorithms,
-    fly,
-    secp256k1,
-    "crypto",
-    "leveldb"
-]
-
-lib_path = [
-    "#depend/leveldb/out-static"
-]
 
 env = Environment(CCFLAGS='-g -O2 -Wall -std=c++11', LINKFLAGS='-pthread', CPPPATH=[
     "#src", "#depend/fly/src",
     "#depend/leveldb/include",
-    "#depend/fly/depend/rapidjson/include",])
+    "#depend/fly/depend/rapidjson/include"])
+
+fly = File('#depend/fly/build/bin/libfly.a')
+cryptopp = File('#depend/fly/depend/cryptopp/libcryptopp.a')
+secp256k1 = File('#depend/secp256k1/.libs/libsecp256k1.a')
+leveldb = File('#depend/leveldb/out-static/libleveldb.a')
+env.Command(fly, None, "cd depend/fly && scons")
+env.Command(secp256k1, None, "cd depend/secp256k1 && ./autogen.sh && ./configure && make")
+env.Command(leveldb, None, "cd depend/leveldb && make")
+
+libs = [
+    cryptopp,
+    fly,
+    secp256k1,
+    leveldb,
+    "crypto",
+]
+
+lib_path = [
+]
 
 env.Replace(LIBS=libs, LIBPATH=lib_path)
 
