@@ -13,7 +13,9 @@ def get_shared_library_name(node):
 env = Environment(CCFLAGS='-g -O2 -Wall -std=c++11', LINKFLAGS='-pthread', CPPPATH=[
     "#src", "#depend/fly/src",
     "#depend/leveldb/include",
-    "#depend/fly/depend/rapidjson/include"])
+    "#depend/fly/depend/rapidjson/include",
+    "#depend/secp256k1/include"
+    ])
 
 fly = File('#depend/fly/build/bin/libfly.a')
 cryptopp = File('#depend/fly/depend/cryptopp/libcryptopp.a')
