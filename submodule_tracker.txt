@@ -1,7 +1,8 @@
 
   when any of the submodules have been changed, please execute
 this shell script to regenerate submodule_tracker.txt to track
-their commit ids in the root repo(askcoin)'s commit history
+their commit ids in the root repo(askcoin)'s commit history,
+this is useful one day when we want to reset root repo.
 
 正在进入 'depend/fly'
 commit 9dd98357530dddd26e34e3bed999c7091553f491
