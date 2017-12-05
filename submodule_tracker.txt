@@ -1,33 +1,33 @@
 
-正在进入 'depend/fly'
+Entering 'depend/fly'
 commit 9dd98357530dddd26e34e3bed999c7091553f491
-正在进入 'depend/fly/depend/cryptopp'
+Entering 'depend/fly/depend/cryptopp'
 commit 18ccd89965acb3fe6f67e6cdb2ded613868112ed
-正在进入 'depend/fly/depend/rapidjson'
+Entering 'depend/fly/depend/rapidjson'
 commit 17ae6ffa857173c25708e61610121bc908c0a6cd
-正在进入 'depend/fly/depend/rapidjson/thirdparty/gtest'
+Entering 'depend/fly/depend/rapidjson/thirdparty/gtest'
 commit 0a439623f75c029912728d80cb7f1b8b48739ca4
-正在进入 'depend/leveldb'
+Entering 'depend/leveldb'
 commit 47cb9e2a211e1d7157078ba7bab536beb29e56dc
-正在进入 'depend/secp256k1'
+Entering 'depend/secp256k1'
 commit 6ad5cdb42a1a8257289a0423d644dcbdeab0f83c
 
-正在进入 'depend/fly'
+Entering 'depend/fly'
 origin	git@github.com:lichuan/fly.git (fetch)
 origin	git@github.com:lichuan/fly.git (push)
-正在进入 'depend/fly/depend/cryptopp'
+Entering 'depend/fly/depend/cryptopp'
 origin	git@github.com:lichuan/cryptopp.git (fetch)
 origin	git@github.com:lichuan/cryptopp.git (push)
-正在进入 'depend/fly/depend/rapidjson'
+Entering 'depend/fly/depend/rapidjson'
 origin	git@github.com:lichuan/rapidjson.git (fetch)
 origin	git@github.com:lichuan/rapidjson.git (push)
-正在进入 'depend/fly/depend/rapidjson/thirdparty/gtest'
+Entering 'depend/fly/depend/rapidjson/thirdparty/gtest'
 origin	https://github.com/google/googletest.git (fetch)
 origin	https://github.com/google/googletest.git (push)
-正在进入 'depend/leveldb'
+Entering 'depend/leveldb'
 origin	git@github.com:lichuan/leveldb.git (fetch)
 origin	git@github.com:lichuan/leveldb.git (push)
-正在进入 'depend/secp256k1'
+Entering 'depend/secp256k1'
 origin	git@github.com:lichuan/secp256k1.git (fetch)
 origin	git@github.com:lichuan/secp256k1.git (push)
 
