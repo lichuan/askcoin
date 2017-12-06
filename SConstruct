@@ -22,7 +22,7 @@ cryptopp = File('#depend/fly/depend/cryptopp/libcryptopp.a')
 secp256k1 = File('#depend/secp256k1/.libs/libsecp256k1.a')
 leveldb = File('#depend/leveldb/out-static/libleveldb.a')
 env.Command([fly, cryptopp], None, "cd depend/fly && scons")
-env.Command(secp256k1, None, "cd depend/secp256k1 && ./autogen.sh && ./configure && make clean && make")
+env.Command(secp256k1, None, "cd depend/secp256k1 && ./autogen.sh && ./configure --enable-module-recovery && make clean && make")
 env.Command(leveldb, None, "cd depend/leveldb && make")
 
 libs = [
