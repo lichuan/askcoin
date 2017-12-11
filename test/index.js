@@ -8,13 +8,17 @@ console.log(privstr, privstr.length);
 console.log(key, typeof privstr);
 
 
-var res = hash.sha256().update('abc').digest('hex');
-console.log('hash:', res, typeof res);
+//var res = hash.sha256().update('a1232323232342342bc').digest('hex');
+var res = hash.ripemd160().update(hash.sha256().update('a1232323232342342bc').digest()).digest();
+var bf = new Buffer(res);
+res = bf.toString('base64');
+console.log('hash:', res, typeof res, res.length);
+return;
 
 var sig = key.sign(res);
 console.log('sig: ', sig, typeof sig);
 sig = sig.toDER();
-//console.log('sig der:', sig, typeof sig, sig.length);
+console.log('sig der:', sig, typeof sig, sig.length);
 console.log(key.verify(res, sig), typeof sig);
 
 var pub = key.getPublic();

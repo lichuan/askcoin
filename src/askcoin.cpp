@@ -14,6 +14,11 @@
 #include "compat/sanity.h"
 #include "random.h"
 #include "key.h"
+#include "leveldb/db.h"
+#include "cryptopp/base64.h"
+#include "cryptopp/sha.h"
+#include "cryptopp/hex.h"
+#include "utilstrencodings.h"
 
 using namespace std::placeholders;
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
@@ -64,6 +69,34 @@ void Shutdown()
 }
 
 
+// std::string Base64::encode(char *input, uint32 length)
+// {
+//     using namespace CryptoPP;
+//     std::string encoded;
+//     StringSource ss(input, length, true, new Base64Encoder(new StringSink(encoded), false));
+
+//     return encoded;
+// }
+
+// uint32 Base64::decode(char *input, uint32 length, char *out, uint32 out_length)
+// {
+//     using namespace CryptoPP;
+//     Base64Decoder decoder;
+//     decoder.Put((CryptoPP::byte*)input, length);
+//     decoder.MessageEnd();
+//     uint32 decoded_length = decoder.MaxRetrievable();
+
+//     if(decoded_length > out_length)
+//     {
+//         return decoded_length;
+//     }
+
+//     decoder.Get(out, decoded_length);
+
+//     return decoded_length;
+// }
+
+
 // std::vector<unsigned char> vec1 = {0x04,0xa5,0xc1,0x77,0xb9,0xe4,0xb5,0xda,0x15,0xc5,0x0e,0x75,0x35,0xbf,0xdd,0xac,0xe5,0x91,0x88,0x32,0xb6,0x87,0x8d,0xac,0xab,0x53,0x51,0xe3,0x5e,0x90,0x17,0xda,0x80,0x6d,0x08,0x87,0x31,0xba,0x78,0x3d,0x04,0x27,0xbb,0x68,0x94,0x01,0x47,0x92,0xe8,0x4e,0x71,0xe2,0xca,0xd0,0x11,0x26,0x01,0x0c,0x4c,0x87,0x97,0xb4,0x2d,0xb8,0x29};
     
     // CPubKey pub(vec1);
@@ -80,9 +113,6 @@ void Shutdown()
 using fly::net::Wsock;
 #include <iostream>
 using namespace std;
-
-
-#include "leveldb/db.h"
 
 class Askcoin : public fly::base::Singleton<Askcoin>
 {
@@ -128,6 +158,7 @@ public:
         fly::init();
 
         fly::base::Logger::instance()->init(fly::base::DEBUG, "server", "./log/");
+        LOG_INFO("start askcoin.");
         
         if (!AppInitSanityChecks())
         {
@@ -135,19 +166,49 @@ public:
             LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
+
+        std::string tdata = "a1232323232342342bc";
+        uint160 u160 = Hash160(tdata.begin(), tdata.end());
+        std::string b64 = EncodeBase64(u160.begin(), u160.size());
+        std::string b642 = fly::base::base64_encode(u160.begin(), u160.size());
+        std::string hex2 = fly::base::byte2hexstr(u160.begin(), u160.size());
+        
+        cout << "hex: " << u160.GetHex() << endl;
+        cout << "hex2: " << hex2 << endl;
+        cout << "b64: " << b64 << endl;
+        cout << "b642: " << b642 << endl;
+
+        LOG_INFO("sanity check success.");
+
+
+        char arr[10] = {'a','b','c',0xae,'e','f','g','h','a','a'};
+        std::string str = fly::base::byte2hexstr(arr, 10);
+        LOG_INFO("hexstr: %s", str.c_str());
+
+        char arr1[11] = {0};
+        uint32 len = fly::base::hexstr2byte(str.c_str(), str.length(), arr1,10);
+        LOG_INFO("hexstr2byte: len: %d, arr1: %s, %02x.2", len, arr1, arr1[3]);
+
+        std::string str1 = fly::base::base64_encode(arr1, 10);
+        std::string str2 = fly::base::base64_encode(arr, 10);
+        cout << "str1: " << str1 << endl;
+        cout << "str2: " << str2 << endl;
+
+        char arr2[11] = {0};
+        uint32 len2 = fly::base::base64_decode(str1.c_str(), str1.length(), arr2, 10);
+        cout << "len2: " << len2 << " arr2: " << arr2 << endl;
+        
+        Shutdown();
+        
+        return;
         
 
+        
         leveldb::DB *db;
         leveldb::Options options;
         options.create_if_missing = true;
         //options.error_if_exists = true;
 
-        std::string tstr = "abcdefg";
-        cout << tstr.c_str() << " size: " << tstr.size() << " length: " << tstr.length() << endl;
-        tstr[3] = 0;
-        cout << tstr.c_str() << " [3]=0 size: " << tstr.size() << " length: " << tstr.length() << endl;
-        cout << "tstr[3] = " << tstr[3] << endl;
-        
         leveldb::Status status = leveldb::DB::Open(options, "./db", &db);
         std::string res = status.ToString();
         LOG_INFO("status str: %s", res.c_str());

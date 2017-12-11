@@ -10,10 +10,11 @@ def get_shared_library_name(node):
 
 # depend library
 
-env = Environment(CCFLAGS='-g -O2 -Wall -std=c++11', LINKFLAGS='-pthread', CPPPATH=[
+env = Environment(CCFLAGS='-fpermissive -g -O2 -std=c++11', LINKFLAGS='-pthread', CPPPATH=[
     "#src", "#depend/fly/src",
     "#depend/leveldb/include",
     "#depend/fly/depend/rapidjson/include",
+    "#depend/fly/depend",
     "#depend/secp256k1/include"
     ])
 
@@ -26,8 +27,8 @@ env.Command(secp256k1, None, "cd depend/secp256k1 && ./autogen.sh && ./configure
 env.Command(leveldb, None, "cd depend/leveldb && make")
 
 libs = [
-    cryptopp,
     fly,
+    cryptopp,
     secp256k1,
     leveldb,
     "crypto",
