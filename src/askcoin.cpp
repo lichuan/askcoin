@@ -21,6 +21,8 @@
 #include "utilstrencodings.h"
 
 using namespace std::placeholders;
+using namespace CryptoPP;
+
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 
 
@@ -157,7 +159,7 @@ public:
         //init library
         fly::init();
 
-        fly::base::Logger::instance()->init(fly::base::DEBUG, "server", "./log/");
+        fly::base::Logger::instance()->init(fly::base::DEBUG, "askcoin", "./log/");
         LOG_INFO("start askcoin.");
         
         if (!AppInitSanityChecks())
@@ -169,19 +171,38 @@ public:
 
         std::string tdata = "a1232323232342342bc";
         uint160 u160 = Hash160(tdata.begin(), tdata.end());
+        uint256 u256 = Hash(tdata.begin(), tdata.end());
+        
         std::string b64 = EncodeBase64(u160.begin(), u160.size());
         std::string b642 = fly::base::base64_encode(u160.begin(), u160.size());
         std::string hex2 = fly::base::byte2hexstr(u160.begin(), u160.size());
+        std::string hex256_2 = fly::base::byte2hexstr(u256.begin(), u256.size());
+        char buf[SHA256::DIGESTSIZE] = {0};
+        cout << "SHA256::DIGESTSIZE is: " << SHA256::DIGESTSIZE << endl;
+        if(!fly::base::sha256(tdata.data(), tdata.length(), buf, SHA256::DIGESTSIZE))
+        {
+            cout << "fly sha256 failed!" << endl;
+        }
+
+        char s256[CSHA256::OUTPUT_SIZE] = {0};
+        CSHA256().Write(tdata.data(), tdata.size()).Finalize(s256);
+        std::string s256_hex = fly::base::byte2hexstr(s256, CSHA256::OUTPUT_SIZE);
+        
+        std::string hex256_fly = fly::base::byte2hexstr(buf, SHA256::DIGESTSIZE);
         
         cout << "hex: " << u160.GetHex() << endl;
         cout << "hex2: " << hex2 << endl;
+        cout << "hex256: " << u256.GetHex() << endl;
+        cout << "hex256_2: " << hex256_2 << endl;
+        cout << "hex256 fly: " << hex256_fly << endl;
+        cout << "hex256 once: " << s256_hex << endl;
         cout << "b64: " << b64 << endl;
         cout << "b642: " << b642 << endl;
 
         LOG_INFO("sanity check success.");
 
 
-        char arr[10] = {'a','b','c',0xae,'e','f','g','h','a','a'};
+        char arr[10] = {'a','b','c',0x5,'e','f','g','h','a','a'};
         std::string str = fly::base::byte2hexstr(arr, 10);
         LOG_INFO("hexstr: %s", str.c_str());
 
@@ -197,13 +218,48 @@ public:
         char arr2[11] = {0};
         uint32 len2 = fly::base::base64_decode(str1.c_str(), str1.length(), arr2, 10);
         cout << "len2: " << len2 << " arr2: " << arr2 << endl;
+
+        std::string str_hash = "IJ8NTsepqQTKWi9F2xdY+76H5eiJbElFUrEBNkJu7nw=";
+        std::string str_pub = "BIie7a1Jd5JMzka6rEnm5YusF896bsoE2gUfz4HPqJbPCT8RwT/yIHG2pYtRTfkEzgBRDxIyybqULA5CGDJNivw=";
+        std::string str_sig = "MEYCIQCCDPBA2IMRHyNKvsH00LAH7/7bZBmK36AZeBIzSY05CQIhAOepJCA+RRY08JguV5Hx6Ht3fslDYKAc8UymzEwe1Vd7";
         
-        Shutdown();
-        
-        return;
-        
+        char arr_hash[40] = {0};
+        char arr_pub[70] = {0};
+        char arr_sig[80] = {0};
+        uint32 len_hash = fly::base::base64_decode(str_hash.data(), str_hash.length(), arr_hash, 40);
+        cout << "len_hash: " << len_hash << endl;
+        uint32 len_pub = fly::base::base64_decode(str_pub.data(), str_pub.length(), arr_pub, 70);
+        cout << "len_pub: "<< len_pub<<endl;
+        uint32 len_sig = fly::base::base64_decode(str_sig.data(), str_sig.length(), arr_sig, 80);
+        cout << "len_sig: "<< len_sig<<endl;
+
+
+        std::string hex_hash = fly::base::byte2hexstr(arr_hash, 32);
+        std::string hex_sig = fly::base::byte2hexstr(arr_sig, 72);
+        std::string hex_pub = fly::base::byte2hexstr(arr_pub, 65);
 
         
+        cout << "arr_hash: "<< hex_hash<<endl;
+        cout << "arr_pub: "<< hex_pub<<endl;
+        cout <<"arr_sig: "<<hex_sig<<endl;
+
+        CPubKey pkey;
+        pkey.Set(arr_pub, arr_pub + len_pub);
+
+            
+        if(pkey.Verify(uint256(vector<unsigned char>(arr_hash, arr_hash + len_hash)), vector<unsigned char>(arr_sig, arr_sig + len_sig)))
+        {
+            cout << "verify ok..............."<<endl;
+        }
+        else {
+            cout << "verify failed................."<<endl;
+        }
+        
+
+        Shutdown();
+
+        return;
+
         leveldb::DB *db;
         leveldb::Options options;
         options.create_if_missing = true;
