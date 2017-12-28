@@ -1,10 +1,9 @@
 #include <unistd.h>
-#include <unordered_map>
+#include <fstream>
 #include <fcntl.h>
+#include <iostream>
 #include <sys/stat.h>
 #include "fly/init.hpp"
-#include "fly/net/server.hpp"
-#include "fly/base/logger.hpp"
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <sys/types.h>
@@ -19,12 +18,17 @@
 #include "cryptopp/sha.h"
 #include "cryptopp/hex.h"
 #include "utilstrencodings.h"
+#include "rapidjson/istreamwrapper.h"
+#include "rapidjson/error/en.h"
+#include "version.hpp"
+#include "p2p/node.hpp"
+#include "wsock_node.hpp"
 
-using namespace std::placeholders;
 using namespace CryptoPP;
+using namespace rapidjson;
+using namespace std;
 
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
-
 
 /** Sanity checks
  *  Ensure that Bitcoin is running in a usable environment with all
@@ -62,14 +66,11 @@ bool AppInitSanityChecks()
     return true;
 }
 
-
-
 void Shutdown()
 {
     globalVerifyHandle.reset();
     ECC_Stop();
 }
-
 
 // std::string Base64::encode(char *input, uint32 length)
 // {
@@ -112,231 +113,242 @@ void Shutdown()
     // }
     // LOG_ERROR("sign failed............");
     
-using fly::net::Wsock;
-#include <iostream>
-using namespace std;
 
 class Askcoin : public fly::base::Singleton<Askcoin>
 {
 public:
-    bool allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)
-    {
-        return true;
-    }
     
-    void init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
-    {
-        std::lock_guard<std::mutex> guard(m_mutex);
-        m_connections[connection->id()] = connection;
-        LOG_INFO("connection count: %u", m_connections.size());
-    }
-    
-    void dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
-    {
-        std::shared_ptr<fly::net::Connection<Wsock>> connection = message->get_connection();
-        const fly::net::Addr &addr = connection->peer_addr();
-        LOG_INFO("recv message from %s:%d raw_data: %s", addr.m_host.c_str(), addr.m_port, message->raw_data().c_str());
-    }
-    
-    void close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
-    {
-        LOG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
-        std::lock_guard<std::mutex> guard(m_mutex);
-        m_connections.erase(connection->id());
-        LOG_INFO("connection count: %u", m_connections.size());
-    }
-    
-    void be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection)
-    {
-        LOG_INFO("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
-        std::lock_guard<std::mutex> guard(m_mutex);
-        m_connections.erase(connection->id());
-        LOG_INFO("connection count: %u", m_connections.size());
-    }
-    
-    void main()
+    int main()
     {
         //init library
         fly::init();
 
-        fly::base::Logger::instance()->init(fly::base::DEBUG, "askcoin", "./log/");
-        LOG_INFO("start askcoin.");
+        std::ifstream ifs("./config.json");
+        IStreamWrapper isw(ifs);
+        Document doc;
+        doc.ParseStream(isw);
+
+        if(doc.HasParseError())
+        {
+            cout << "parse config.json failed: " << GetParseError_En(doc.GetParseError()) << endl;
+
+            return EXIT_FAILURE;
+        }
+
+        if(!doc.HasMember("log_path"))
+        {
+            cout << "config.json don't contain log_path field!" << endl;
+
+            return EXIT_FAILURE;
+        }
+
+        fly::base::Logger::instance()->init(fly::base::DEBUG, "askcoin", doc["log_path"].GetString());
+        LOG_INFO("start askcoin, version: %s", ASKCOIN_VERSION_NAME);
         
         if (!AppInitSanityChecks())
         {
-            // InitError will have been called with detailed error, which ends up on console
             LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
 
-        std::string tdata = "a1232323232342342bc";
-        uint160 u160 = Hash160(tdata.begin(), tdata.end());
-        uint256 u256 = Hash(tdata.begin(), tdata.end());
+        // std::string tdata = "a1232323232342342bc";
+        // uint160 u160 = Hash160(tdata.begin(), tdata.end());
+        // uint256 u256 = Hash(tdata.begin(), tdata.end());
         
-        std::string b64 = EncodeBase64(u160.begin(), u160.size());
-        std::string b642 = fly::base::base64_encode(u160.begin(), u160.size());
-        std::string hex2 = fly::base::byte2hexstr(u160.begin(), u160.size());
-        std::string hex256_2 = fly::base::byte2hexstr(u256.begin(), u256.size());
-        char buf[SHA256::DIGESTSIZE] = {0};
-        cout << "SHA256::DIGESTSIZE is: " << SHA256::DIGESTSIZE << endl;
-        if(!fly::base::sha256(tdata.data(), tdata.length(), buf, SHA256::DIGESTSIZE))
-        {
-            cout << "fly sha256 failed!" << endl;
-        }
+        // std::string b64 = EncodeBase64(u160.begin(), u160.size());
+        // std::string b642 = fly::base::base64_encode(u160.begin(), u160.size());
+        // std::string hex2 = fly::base::byte2hexstr(u160.begin(), u160.size());
+        // std::string hex256_2 = fly::base::byte2hexstr(u256.begin(), u256.size());
+        // char buf[SHA256::DIGESTSIZE] = {0};
+        // cout << "SHA256::DIGESTSIZE is: " << SHA256::DIGESTSIZE << endl;
+        // if(!fly::base::sha256(tdata.data(), tdata.length(), buf, SHA256::DIGESTSIZE))
+        // {
+        //     cout << "fly sha256 failed!" << endl;
+        // }
 
-        char s256[CSHA256::OUTPUT_SIZE] = {0};
-        CSHA256().Write(tdata.data(), tdata.size()).Finalize(s256);
-        std::string s256_hex = fly::base::byte2hexstr(s256, CSHA256::OUTPUT_SIZE);
+        // char s256[CSHA256::OUTPUT_SIZE] = {0};
+        // CSHA256().Write(tdata.data(), tdata.size()).Finalize(s256);
+        // std::string s256_hex = fly::base::byte2hexstr(s256, CSHA256::OUTPUT_SIZE);
         
-        std::string hex256_fly = fly::base::byte2hexstr(buf, SHA256::DIGESTSIZE);
+        // std::string hex256_fly = fly::base::byte2hexstr(buf, SHA256::DIGESTSIZE);
         
-        cout << "hex: " << u160.GetHex() << endl;
-        cout << "hex2: " << hex2 << endl;
-        cout << "hex256: " << u256.GetHex() << endl;
-        cout << "hex256_2: " << hex256_2 << endl;
-        cout << "hex256 fly: " << hex256_fly << endl;
-        cout << "hex256 once: " << s256_hex << endl;
-        cout << "b64: " << b64 << endl;
-        cout << "b642: " << b642 << endl;
+        // cout << "hex: " << u160.GetHex() << endl;
+        // cout << "hex2: " << hex2 << endl;
+        // cout << "hex256: " << u256.GetHex() << endl;
+        // cout << "hex256_2: " << hex256_2 << endl;
+        // cout << "hex256 fly: " << hex256_fly << endl;
+        // cout << "hex256 once: " << s256_hex << endl;
+        // cout << "b64: " << b64 << endl;
+        // cout << "b642: " << b642 << endl;
 
-        LOG_INFO("sanity check success.");
+        // LOG_INFO("sanity check success.");
 
 
-        char arr[10] = {'a','b','c',0x5,'e','f','g','h','a','a'};
-        std::string str = fly::base::byte2hexstr(arr, 10);
-        LOG_INFO("hexstr: %s", str.c_str());
+        // char arr[10] = {'a','b','c',0x5,'e','f','g','h','a','a'};
+        // std::string str = fly::base::byte2hexstr(arr, 10);
+        // LOG_INFO("hexstr: %s", str.c_str());
 
-        char arr1[11] = {0};
-        uint32 len = fly::base::hexstr2byte(str.c_str(), str.length(), arr1,10);
-        LOG_INFO("hexstr2byte: len: %d, arr1: %s, %02x.2", len, arr1, arr1[3]);
+        // char arr1[11] = {0};
+        // uint32 len = fly::base::hexstr2byte(str.c_str(), str.length(), arr1,10);
+        // LOG_INFO("hexstr2byte: len: %d, arr1: %s, %02x.2", len, arr1, arr1[3]);
 
-        std::string str1 = fly::base::base64_encode(arr1, 10);
-        std::string str2 = fly::base::base64_encode(arr, 10);
-        cout << "str1: " << str1 << endl;
-        cout << "str2: " << str2 << endl;
+        // std::string str1 = fly::base::base64_encode(arr1, 10);
+        // std::string str2 = fly::base::base64_encode(arr, 10);
+        // cout << "str1: " << str1 << endl;
+        // cout << "str2: " << str2 << endl;
 
-        char arr2[11] = {0};
-        uint32 len2 = fly::base::base64_decode(str1.c_str(), str1.length(), arr2, 10);
-        cout << "len2: " << len2 << " arr2: " << arr2 << endl;
+        // char arr2[11] = {0};
+        // uint32 len2 = fly::base::base64_decode(str1.c_str(), str1.length(), arr2, 10);
+        // cout << "len2: " << len2 << " arr2: " << arr2 << endl;
 
-        std::string str_hash = "IJ8NTsepqQTKWi9F2xdY+76H5eiJbElFUrEBNkJu7nw=";
-        std::string str_pub = "BIie7a1Jd5JMzka6rEnm5YusF896bsoE2gUfz4HPqJbPCT8RwT/yIHG2pYtRTfkEzgBRDxIyybqULA5CGDJNivw=";
-        std::string str_sig = "MEYCIQCCDPBA2IMRHyNKvsH00LAH7/7bZBmK36AZeBIzSY05CQIhAOepJCA+RRY08JguV5Hx6Ht3fslDYKAc8UymzEwe1Vd7";
+        // std::string str_hash = "IJ8NTsepqQTKWi9F2xdY+76H5eiJbElFUrEBNkJu7nw=";
+        // std::string str_pub = "BIie7a1Jd5JMzka6rEnm5YusF896bsoE2gUfz4HPqJbPCT8RwT/yIHG2pYtRTfkEzgBRDxIyybqULA5CGDJNivw=";
+        // std::string str_sig = "MEYCIQCCDPBA2IMRHyNKvsH00LAH7/7bZBmK36AZeBIzSY05CQIhAOepJCA+RRY08JguV5Hx6Ht3fslDYKAc8UymzEwe1Vd7";
         
-        char arr_hash[40] = {0};
-        char arr_pub[70] = {0};
-        char arr_sig[80] = {0};
-        uint32 len_hash = fly::base::base64_decode(str_hash.data(), str_hash.length(), arr_hash, 40);
-        cout << "len_hash: " << len_hash << endl;
-        uint32 len_pub = fly::base::base64_decode(str_pub.data(), str_pub.length(), arr_pub, 70);
-        cout << "len_pub: "<< len_pub<<endl;
-        uint32 len_sig = fly::base::base64_decode(str_sig.data(), str_sig.length(), arr_sig, 80);
-        cout << "len_sig: "<< len_sig<<endl;
+        // char arr_hash[40] = {0};
+        // char arr_pub[70] = {0};
+        // char arr_sig[80] = {0};
+        // uint32 len_hash = fly::base::base64_decode(str_hash.data(), str_hash.length(), arr_hash, 40);
+        // cout << "len_hash: " << len_hash << endl;
+        // uint32 len_pub = fly::base::base64_decode(str_pub.data(), str_pub.length(), arr_pub, 70);
+        // cout << "len_pub: "<< len_pub<<endl;
+        // uint32 len_sig = fly::base::base64_decode(str_sig.data(), str_sig.length(), arr_sig, 80);
+        // cout << "len_sig: "<< len_sig<<endl;
 
 
-        std::string hex_hash = fly::base::byte2hexstr(arr_hash, 32);
-        std::string hex_sig = fly::base::byte2hexstr(arr_sig, 72);
-        std::string hex_pub = fly::base::byte2hexstr(arr_pub, 65);
+        // std::string hex_hash = fly::base::byte2hexstr(arr_hash, 32);
+        // std::string hex_sig = fly::base::byte2hexstr(arr_sig, 72);
+        // std::string hex_pub = fly::base::byte2hexstr(arr_pub, 65);
 
         
-        cout << "arr_hash: "<< hex_hash<<endl;
-        cout << "arr_pub: "<< hex_pub<<endl;
-        cout <<"arr_sig: "<<hex_sig<<endl;
+        // cout << "arr_hash: "<< hex_hash<<endl;
+        // cout << "arr_pub: "<< hex_pub<<endl;
+        // cout <<"arr_sig: "<<hex_sig<<endl;
 
-        CPubKey pkey;
-        pkey.Set(arr_pub, arr_pub + len_pub);
+        // CPubKey pkey;
+        // pkey.Set(arr_pub, arr_pub + len_pub);
 
             
-        if(pkey.Verify(uint256(vector<unsigned char>(arr_hash, arr_hash + len_hash)), vector<unsigned char>(arr_sig, arr_sig + len_sig)))
+        // if(pkey.Verify(uint256(vector<unsigned char>(arr_hash, arr_hash + len_hash)), vector<unsigned char>(arr_sig, arr_sig + len_sig)))
+        // {
+        //     cout << "verify ok..............."<<endl;
+        // }
+        // else {
+        //     cout << "verify failed................."<<endl;
+        // }
+        
+        if(!doc.HasMember("db_path"))
         {
-            cout << "verify ok..............."<<endl;
-        }
-        else {
-            cout << "verify failed................."<<endl;
+            LOG_FATAL("config.json don't contain db_path field!");
+
+            return EXIT_FAILURE;
         }
         
-
-        Shutdown();
-
-        return;
-
         leveldb::DB *db;
         leveldb::Options options;
         options.create_if_missing = true;
-        //options.error_if_exists = true;
+        leveldb::Status db_status = leveldb::DB::Open(options, doc["db_path"].GetString(), &db);
 
-        leveldb::Status status = leveldb::DB::Open(options, "./db", &db);
-        std::string res = status.ToString();
-        LOG_INFO("status str: %s", res.c_str());
+        if(!db_status.ok())
+        {
+            LOG_FATAL("open leveldb failed: %s", db_status.ToString().c_str());
 
+            return EXIT_FAILURE;
+        }
+        
         std::string val;
         leveldb::Status s;
 
-        for(int i = 0; i < 100; ++i)
-        {
-            std::string vv = fly::base::to_string(i);
+        // for(int i = 0; i < 100; ++i)
+        // {
+        //     std::string vv = fly::base::to_string(i);
             
-            cout << "vv: " << vv << endl;
+        //     cout << "vv: " << vv << endl;
             
-            s = db->Put(leveldb::WriteOptions(), std::string("block") + vv, "val is 123");
+        //     s = db->Put(leveldb::WriteOptions(), std::string("block456") + vv, "val is 123");
         
-            if(s.ok()) s = db->Get(leveldb::ReadOptions(), "block456", &val);
-            else
-            {
-                LOG_INFO("write first failed: %s", s.ToString().c_str());
-            }
-            if(s.ok()) s = db->Put(leveldb::WriteOptions(), "block456", val);
-            else
-            {
-                LOG_INFO("get failed: %s", s.ToString().c_str());
-            }
-        
-            if(s.ok()) s = db->Delete(leveldb::WriteOptions(), "block456");
-            else
-            {
-                LOG_INFO("put failed: %s", s.ToString().c_str());
-            }
+        //     if(s.ok()) s = db->Get(leveldb::ReadOptions(), "block456", &val);
+        //     else
+        //     {
+        //         LOG_INFO("write first failed: %s", s.ToString().c_str());
+        //     }
 
-            if(!s.ok())
-            {
-                LOG_INFO("delete failed: %s", s.ToString().c_str());
-            }
-        
-            assert(s.ok());
-        }
-        
+        //     s = db->Put(leveldb::WriteOptions(), "block456", val);
 
-        return;
-        
-        
-        
-        //test tcp server
-        std::unique_ptr<fly::net::Server<Wsock>> server(new fly::net::Server<Wsock>(fly::net::Addr("127.0.0.1", 8899),
-                                                                      std::bind(&Askcoin::allow, this, _1),
-                                                                      std::bind(&Askcoin::init, this, _1),
-                                                                      std::bind(&Askcoin::dispatch, this, _1),
-                                                                      std::bind(&Askcoin::close, this, _1),
-                                                                      std::bind(&Askcoin::be_closed, this, _1)));
+        //     if(!s.ok()) {
+        //         LOG_INFO("put failed 11111111: %s", s.ToString().c_str());
+        //     }
 
-        if(server->start())
+        //     // if(s.ok()) s = db->Delete(leveldb::WriteOptions(), "block456");
+        //     // else
+        //     // {
+        //     //     LOG_INFO("put failed: %s", s.ToString().c_str());
+        //     // }
+
+        //     if(!s.ok())
+        //     {
+        //         LOG_INFO("put failed 22: %s", s.ToString().c_str());
+        //     }
+        
+        //     assert(s.ok());
+        // }
+        
+        if(!doc.HasMember("network"))
         {
-            LOG_INFO("start server ok!");
-            server->wait();
+            LOG_FATAL("config.json don't contain network field!");
+
+            return EXIT_FAILURE;
         }
-        else
+
+        std::string host = doc["network"]["host"].GetString();
+        std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
+        uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
+        uint32 p2p_max_passive_conn = doc["network"]["p2p"]["max_passive_conn"].GetUint();
+        uint32 p2p_max_active_conn = doc["network"]["p2p"]["max_active_conn"].GetUint();
+        uint32 websocket_max_passive_conn = doc["network"]["websocket"]["max_passive_conn"].GetUint();
+        uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
+        std::shared_ptr<Wsock_Node> wsock_node(new Wsock_Node);
+        std::shared_ptr<p2p::Node> p2p_node(new p2p::Node);
+
+        if(!wsock_node->start(websocket_port))
         {
-            LOG_FATAL("start server failed");
+            return EXIT_FAILURE;
         }
+
+        if(!p2p_node->start(p2p_port))
+        {
+            return EXIT_FAILURE;
+        }
+
+        cout << "Congratulations, start askcoin success!!!" << endl;
+        
+        std::thread cmd_thread([&]() {
+            while(true) {
+                std::string cmd;
+                cout << "if you want to stop askcoin, please input 'stop' command:" << endl << ">";
+                cin >> cmd;
+
+                if(cmd == "stop")
+                {
+                    wsock_node->stop();
+                    p2p_node->stop();
+                    
+                    break;
+                }
+            }
+        });
+        
+        wsock_node->wait();
+        p2p_node->wait();
+        cout << "stop askcoin success" << endl;
+        cmd_thread.join();
+        Shutdown();
+
+        return EXIT_SUCCESS;
     }
-    
-private:
-    std::unordered_map<uint64, std::shared_ptr<fly::net::Connection<Wsock>>> m_connections;
-    std::mutex m_mutex;
 };
 
 int main()
 {
-    Askcoin::instance()->main();
-
-    return 0;
+    return Askcoin::instance()->main();
 }

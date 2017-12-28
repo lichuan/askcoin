@@ -1,0 +1,17 @@
+{
+    "log_path": "./log",
+    "db_path": "./db",
+    "network": {
+        "host": "here should be your host (domain or ip address)",
+        "p2p": {
+            "peer_file": "./peers.json",
+            "port": 10000,
+            "max_passive_conn": 1000,
+            "max_active_conn": 1000
+        },
+        "websocket": {
+            "port": 20000,
+            "max_passive_conn": 5000
+        }
+    }
+}
