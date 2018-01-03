@@ -1,3 +1,5 @@
+#include <unistd.h>
+#include "fly/base/logger.hpp"
 #include "wsock_node.hpp"
 
 using namespace std::placeholders;
@@ -12,12 +14,15 @@ Wsock_Node::~Wsock_Node()
 
 bool Wsock_Node::start(uint32 port)
 {
+    int32 cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
+    cpu_num = cpu_num < 4 ? 4 : cpu_num;
     std::unique_ptr<fly::net::Server<Wsock>> server(new fly::net::Server<Wsock>(fly::net::Addr("0.0.0.0", port),
                                                                                 std::bind(&Wsock_Node::allow, this, _1),
                                                                                 std::bind(&Wsock_Node::init, this, _1),
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
-                                                                                std::bind(&Wsock_Node::be_closed, this, _1)));
+                                                                                std::bind(&Wsock_Node::be_closed, this, _1),
+                                                                                cpu_num, cpu_num));
     if(server->start())
     {
         LOG_INFO("start websocket node success");
@@ -34,6 +39,7 @@ bool Wsock_Node::start(uint32 port)
 void Wsock_Node::stop()
 {
     m_server->stop();
+    LOG_INFO("stop websocket node success");
 }
 
 void Wsock_Node::wait()
@@ -41,9 +47,9 @@ void Wsock_Node::wait()
     m_server->wait();
 }
 
-void Wsock_Node::set_max_conn(uint32 num)
+void Wsock_Node::set_max_passive_conn(uint32 num)
 {
-    m_max_conn = num > 300 ? num : 300;
+    m_max_passive_conn = num > 300 ? num : 300;
 }
 
 bool Wsock_Node::allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)

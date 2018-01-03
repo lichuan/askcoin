@@ -1,16 +1,20 @@
 {
     "log_path": "./log",
     "db_path": "./db",
+    "run_as_witness": false,
+
+    "private_key": "here should be your private key if the run_as_witness field is true, if this private key is seen by someone else, you may lost all your money in it!!! so, after running, you'd better delete this field in config.json, but remember, you should save your private key in other places.",
+
     "network": {
         "host": "here should be your host (domain or ip address)",
         "p2p": {
             "peer_file": "./peers.json",
-            "port": 10000,
-            "max_passive_conn": 1000,
-            "max_active_conn": 1000
+            "port": 10001,
+            "max_passive_conn": 5000,
+            "max_active_conn": 5000
         },
         "websocket": {
-            "port": 20000,
+            "port": 10002,
             "max_passive_conn": 5000
         }
     }
