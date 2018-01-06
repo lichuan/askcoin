@@ -37,7 +37,7 @@ static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 bool InitSanityCheck(void)
 {
     if(!ECC_InitSanityCheck()) {
-        LOG_FATAL("Elliptic curve cryptography sanity check failure. Aborting.");
+        CONSOLE_LOG_FATAL("Elliptic curve cryptography sanity check failure. Aborting.");
         return false;
     }
 
@@ -45,7 +45,7 @@ bool InitSanityCheck(void)
         return false;
 
     if (!Random_SanityCheck()) {
-        LOG_FATAL("OS cryptographic RNG sanity check failure. Aborting.");
+        CONSOLE_LOG_FATAL("OS cryptographic RNG sanity check failure. Aborting.");
         return false;
     }
 
@@ -55,7 +55,7 @@ bool InitSanityCheck(void)
 bool AppInitSanityChecks()
 {
     std::string sha256_algo = SHA256AutoDetect();
-    LOG_INFO("Using the '%s' SHA256 implementation", sha256_algo.c_str());
+    CONSOLE_LOG_INFO("Using the '%s' SHA256 implementation", sha256_algo.c_str());
     RandomInit();
     ECC_Start();
     globalVerifyHandle.reset(new ECCVerifyHandle());
@@ -71,7 +71,6 @@ void Shutdown()
     globalVerifyHandle.reset();
     ECC_Stop();
 }
-    
 
 class Askcoin : public fly::base::Singleton<Askcoin>
 {
@@ -102,16 +101,16 @@ public:
         }
 
         fly::base::Logger::instance()->init(fly::base::DEBUG, "askcoin", doc["log_path"].GetString());
-        LOG_INFO("start askcoin, version: %s, verno: %u", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
+        CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
         
         if (!AppInitSanityChecks())
         {
-            LOG_FATAL("sanity check failed");
+            CONSOLE_LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
         if(!doc.HasMember("db_path"))
         {
-            LOG_FATAL("config.json don't contain db_path field!");
+            CONSOLE_LOG_FATAL("config.json don't contain db_path field!");
 
             return EXIT_FAILURE;
         }
@@ -123,11 +122,19 @@ public:
         
         if(!doc.HasMember("network"))
         {
-            LOG_FATAL("config.json don't contain network field!");
+            CONSOLE_LOG_FATAL("config.json don't contain network field!");
 
             return EXIT_FAILURE;
         }
 
+        if(!doc.HasMember("run_as_witness"))
+        {
+            CONSOLE_LOG_FATAL("config.json don't contain run_as_witness field!");
+
+            return EXIT_FAILURE;
+        }
+
+        bool run_as_witness = doc["run_as_witness"].GetBool();
         std::string host = doc["network"]["host"].GetString();
         std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
         uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
@@ -135,33 +142,57 @@ public:
         uint32 p2p_max_active_conn = doc["network"]["p2p"]["max_active_conn"].GetUint();
         uint32 websocket_max_passive_conn = doc["network"]["websocket"]["max_passive_conn"].GetUint();
         uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
+        bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
         Wsock_Node::instance()->set_max_passive_conn(websocket_max_passive_conn);
         p2p::Node::instance()->set_max_active_conn(p2p_max_active_conn);
         p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
         p2p::Node::instance()->set_peer_file(peer_file);
+        p2p::Node::instance()->set_as_witness(run_as_witness);
         p2p::Node::instance()->set_host(host);
-
+        
         if(!p2p::Node::instance()->start(p2p_port))
         {
             return EXIT_FAILURE;
         }
 
-        if(!Wsock_Node::instance()->start(websocket_port))
-        {
-            return EXIT_FAILURE;
+        if(open_websocket)
+        {            
+            if(!Wsock_Node::instance()->start(websocket_port))
+            {
+                return EXIT_FAILURE;
+            }
         }
-
-        cout << endl;
-        CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!");
-
+        
+        CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!\n\n"
+                         "the following commands are available:\n"
+                         ">stop\n"
+                         ">register_account\n"
+                         ">register_account_fund_sign\n"
+                         ">request_as_witness\n"
+                         ">send_money\n"
+                         "\nfor example, if you want to stop askcoin, yout can input 'stop' command:");
+        
         std::thread cmd_thread([&]() {
             while(true) {
-                std::string cmd;
-                CONSOLE_LOG_INFO("if you want to stop askcoin, please input 'stop' command:");
                 cout << ">";
-                cin >> cmd;
+                std::string cmd_string;
+                getline(cin, cmd_string);
 
-                if(cmd == "stop")
+                if(cmd_string.empty())
+                {
+                    continue;
+                }
+
+                char *p = NULL;
+                vector<string> vec;
+                fly::base::split_string(cmd_string, " \t", vec, &p);
+
+                for(auto token : vec)
+                {
+                    cout << "token: " << token << endl;
+                }
+                
+                if(cmd_string == "stop")
                 {
                     Wsock_Node::instance()->stop();
                     p2p::Node::instance()->stop();
@@ -170,8 +201,12 @@ public:
                 }
             }
         });
-        
-        Wsock_Node::instance()->wait();
+
+        if(open_websocket)
+        {
+            Wsock_Node::instance()->wait();
+        }
+
         p2p::Node::instance()->wait();
         cmd_thread.join();
         Shutdown();

@@ -15,7 +15,8 @@
         },
         "websocket": {
             "port": 10002,
-            "max_passive_conn": 5000
+            "max_passive_conn": 5000,
+            "open": true
         }
     }
 }

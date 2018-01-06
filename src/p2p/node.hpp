@@ -25,9 +25,11 @@ public:
     void close(std::shared_ptr<fly::net::Connection<Json>> connection);
     void be_closed(std::shared_ptr<fly::net::Connection<Json>> connection);
     void set_peer_file(std::string peer_file);
+    void set_as_witness(bool as_witness);
     void set_host(std::string host);
 
 private:
+    bool m_as_witness = false;
     uint32 m_max_active_conn = 0;
     uint32 m_max_passive_conn = 0;
     std::unordered_map<uint64, std::shared_ptr<fly::net::Connection<Json>>> m_connections;

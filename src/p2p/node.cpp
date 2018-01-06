@@ -27,21 +27,22 @@ bool Node::start(uint32 port)
                                                                                 std::bind(&Node::be_closed, this, _1)));
     if(server->start())
     {
-        LOG_INFO("start p2p node success");
+        CONSOLE_LOG_INFO("start p2p node success");
         m_server = std::move(server);
 
         return true;
     }
 
-    LOG_FATAL("start p2p node failed!");
+    CONSOLE_LOG_FATAL("start p2p node failed!");
 
     return false;
 }
 
+    
 void Node::stop()
 {
     m_server->stop();
-    LOG_INFO("stop p2p node success");
+    CONSOLE_LOG_INFO("stop p2p node success");
 }
 
 void Node::wait()
@@ -52,6 +53,11 @@ void Node::wait()
 void Node::set_peer_file(std::string peer_file)
 {
     m_peer_file = peer_file;
+}
+
+void Node::set_as_witness(bool as_witness)
+{
+    m_as_witness = as_witness;
 }
 
 void Node::set_host(std::string host)

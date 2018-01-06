@@ -25,13 +25,13 @@ bool Wsock_Node::start(uint32 port)
                                                                                 cpu_num, cpu_num));
     if(server->start())
     {
-        LOG_INFO("start websocket node success");
+        CONSOLE_LOG_INFO("start websocket node success");
         m_server = std::move(server);
 
         return true;
     }
 
-    LOG_FATAL("start websocket node failed!");
+    CONSOLE_LOG_FATAL("start websocket node failed!");
 
     return false;
 }
@@ -39,7 +39,7 @@ bool Wsock_Node::start(uint32 port)
 void Wsock_Node::stop()
 {
     m_server->stop();
-    LOG_INFO("stop websocket node success");
+    CONSOLE_LOG_INFO("stop websocket node success");
 }
 
 void Wsock_Node::wait()
