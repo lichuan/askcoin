@@ -75,7 +75,6 @@ void Shutdown()
 class Askcoin : public fly::base::Singleton<Askcoin>
 {
 public:
-    
     int main()
     {
         //init library
@@ -162,15 +161,19 @@ public:
                 return EXIT_FAILURE;
             }
         }
-        
-        CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!\n\n"
-                         "the following commands are available:\n"
-                         ">stop\n"
-                         ">register_account\n"
-                         ">register_account_fund_sign\n"
-                         ">request_as_witness\n"
-                         ">send_money\n"
-                         "\nfor example, if you want to stop askcoin, yout can input 'stop' command:");
+
+        string cmd_tips = "\nthe following commands are available:\n"
+            ">stop\n"
+            ">register_account\n"
+            ">import_private_key\n"
+            ">register_account_fund_sign\n"
+            ">request_as_witness\n"
+            ">send_money\n"
+            ">help\n"
+            "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
+
+        CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!");
+        cout << cmd_tips << endl;
         
         std::thread cmd_thread([&]() {
             while(true) {
@@ -189,19 +192,27 @@ public:
 
                 for(auto token : vec)
                 {
-                    cout << "token: " << token << endl;
+                    //cout << "token: " << token << endl;
                 }
                 
                 if(cmd_string == "stop")
                 {
                     Wsock_Node::instance()->stop();
                     p2p::Node::instance()->stop();
-                    
+
                     break;
+                }
+                else if(cmd_string == "help")
+                {
+                    cout << cmd_tips << endl;
+                }
+                else
+                {
+                    cout << "invalid command: " << cmd_string << endl;
                 }
             }
         });
-
+        
         if(open_websocket)
         {
             Wsock_Node::instance()->wait();
