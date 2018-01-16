@@ -3,6 +3,7 @@
 
 #include <string>
 #include "fly/base/singleton.hpp"
+#include "block.hpp"
 
 class Blockchain : public fly::base::Singleton<Blockchain>
 {

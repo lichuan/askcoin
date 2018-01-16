@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include "fly/base/common.hpp"
 
 #define BEGIN(a)            ((char*)&(a))
 #define END(a)              ((char*)&((&(a))[1]))
@@ -187,5 +188,8 @@ bool TimingResistantEqual(const T& a, const T& b)
  * @note The result must be in the range (-10^18,10^18), otherwise an overflow error will trigger.
  */
 bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out);
+
+std::string coin_hash(const char *data, uint32 size);
+std::string coin_addr(const char *pubkey, uint32 size);
 
 #endif // BITCOIN_UTILSTRENCODINGS_H

@@ -836,3 +836,19 @@ bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out)
     return true;
 }
 
+std::string coin_hash(const char *data, uint32 size)
+{
+    char h_256[CSHA256::OUTPUT_SIZE];
+    CSHA256().Write(data, size).Finalize(h_256);
+    std::string b64 = fly::base::base64_encode(h_256, CSHA256::OUTPUT_SIZE);
+    
+    return b64;
+}
+
+std::string coin_addr(const char *pubkey, uint32 size)
+{
+    uint160 u160 = Hash160(pubkey, pubkey + size);
+    std::string b64 = fly::base::base64_encode(u160.begin(), u160.size());
+    
+    return b64;
+}

@@ -13,10 +13,6 @@
 #include "compat/sanity.h"
 #include "random.h"
 #include "key.h"
-#include "cryptopp/base64.h"
-#include "cryptopp/sha.h"
-#include "cryptopp/hex.h"
-#include "utilstrencodings.h"
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/error/en.h"
 #include "version.hpp"
@@ -24,7 +20,6 @@
 #include "wsock_node.hpp"
 #include "blockchain.hpp"
 
-using namespace CryptoPP;
 using namespace rapidjson;
 using namespace std;
 
@@ -107,9 +102,17 @@ public:
             CONSOLE_LOG_FATAL("sanity check failed");
             exit(EXIT_FAILURE);
         }
+
         if(!doc.HasMember("db_path"))
         {
             CONSOLE_LOG_FATAL("config.json don't contain db_path field!");
+
+            return EXIT_FAILURE;
+        }
+
+        if(!doc.HasMember("network"))
+        {
+            CONSOLE_LOG_FATAL("config.json don't contain network field!");
 
             return EXIT_FAILURE;
         }
@@ -118,22 +121,7 @@ public:
         {
             return EXIT_FAILURE;
         }
-        
-        if(!doc.HasMember("network"))
-        {
-            CONSOLE_LOG_FATAL("config.json don't contain network field!");
 
-            return EXIT_FAILURE;
-        }
-
-        if(!doc.HasMember("run_as_witness"))
-        {
-            CONSOLE_LOG_FATAL("config.json don't contain run_as_witness field!");
-
-            return EXIT_FAILURE;
-        }
-
-        bool run_as_witness = doc["run_as_witness"].GetBool();
         std::string host = doc["network"]["host"].GetString();
         std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
         uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
@@ -146,7 +134,6 @@ public:
         p2p::Node::instance()->set_max_active_conn(p2p_max_active_conn);
         p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
         p2p::Node::instance()->set_peer_file(peer_file);
-        p2p::Node::instance()->set_as_witness(run_as_witness);
         p2p::Node::instance()->set_host(host);
         
         if(!p2p::Node::instance()->start(p2p_port))
@@ -165,16 +152,16 @@ public:
         string cmd_tips = "\nthe following commands are available:\n"
             ">stop\n"
             ">register_account\n"
-            ">import_private_key\n"
+            ">import_account\n"
             ">register_account_fund_sign\n"
-            ">request_as_witness\n"
-            ">send_money\n"
+            ">apply_witness\n"
+            ">send_coin\n"
             ">help\n"
             "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
 
         CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!");
         cout << cmd_tips << endl;
-        
+
         std::thread cmd_thread([&]() {
             while(true) {
                 cout << ">";
@@ -189,7 +176,7 @@ public:
                 char *p = NULL;
                 vector<string> vec;
                 fly::base::split_string(cmd_string, " \t", vec, &p);
-
+                
                 for(auto token : vec)
                 {
                     //cout << "token: " << token << endl;
@@ -197,22 +184,27 @@ public:
                 
                 if(cmd_string == "stop")
                 {
-                    Wsock_Node::instance()->stop();
-                    p2p::Node::instance()->stop();
+                    if(open_websocket)
+                    {
+                        Wsock_Node::instance()->stop();
+                    }
 
+                    p2p::Node::instance()->stop();
+                    
                     break;
                 }
-                else if(cmd_string == "help")
+
+                if(cmd_string == "help")
                 {
                     cout << cmd_tips << endl;
                 }
                 else
                 {
-                    cout << "invalid command: " << cmd_string << endl;
+                    cout << "invalid command: " << vec[0] << endl;
                 }
             }
         });
-        
+
         if(open_websocket)
         {
             Wsock_Node::instance()->wait();

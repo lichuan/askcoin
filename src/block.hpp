@@ -1,12 +1,14 @@
 #ifndef BLOCK
 #define BLOCK
 
-#include "fly/base/common.hpp"
+#include "transaction.hpp"
 
 class Block
 {
 public:
     Block();
+    std::string get_save_string();
+    void restore_from_string(std::string data);
 };
 
 #endif
