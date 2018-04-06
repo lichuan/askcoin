@@ -27,9 +27,9 @@ public:
     void set_peer_file(std::string peer_file);
     void set_as_witness(bool as_witness);
     void set_host(std::string host);
+    void add_init_peer(const fly::net::Addr &addr);
 
 private:
-    bool m_as_witness = false;
     uint32 m_max_active_conn = 0;
     uint32 m_max_passive_conn = 0;
     std::unordered_map<uint64, std::shared_ptr<fly::net::Connection<Json>>> m_connections;
@@ -39,6 +39,7 @@ private:
     std::unique_ptr<fly::net::Server<Json>> m_server;
     std::shared_ptr<fly::net::Poller<Json>> m_poller;
     std::shared_ptr<fly::net::Parser<Json>> m_parser;
+    std::vector<fly::net::Addr> m_init_peer;
 };
 
 }

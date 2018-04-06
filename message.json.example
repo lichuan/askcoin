@@ -1,0 +1,221 @@
+//only example! only example !!!
+
+//genesis block data structure
+{
+    "hash": ["hash..hash", "sign of hash"],
+    "id": 0,
+    "utc":992323223,
+    "version": 1000,
+    "zero_bits":25,
+    "intro": "This coin is a gift for those who love freedom.",
+    "init_account": {
+        "account": "lichuan",
+        "id": 1,
+        "avatar":1,
+        "address": "t6n0Ob0iZmfoiHv0V5RobIwSlM4="
+    },
+    "const_param":{
+        "total": 10000000000,
+        "decimal": 8,
+        "block_interval":10,
+        "last_irreversible_block_confirmed_times":10,
+        "pow_adjust_block_num": 1000,
+        "vote_activate_block_num":1000,
+        "vote_activate_min_coin_num":100000000000000000,
+        "topic_expired_block_num":100000,
+        "reserve_fund_account": "reserve_fund",
+        "account_max_length":16,
+        "topic_message_max_length":250,
+        "fee_max":100000000000000
+    },
+    "var_param":{
+        "fee_register_sign":2333,
+        "fee_register":99,
+        "fee_sendcoin":9999,
+        "fee_proposal":223232323,
+        "fee_vote":999,
+        "fee_cancel_vote":222222222,
+        "fee_topic":99999992,
+        "fee_topic_message":22233,
+        "fee_reward":8899
+    },
+    "author": {
+        "name": "Chuan Li",
+        "country": "China",
+        "github": "https://github.com/lichuan",
+        "mail": "308831759@qq.com",
+        "belief": "In the beginning, God created the heavens and the earth."
+    }
+}
+
+//miner generated block
+{
+    "hash":"002fbcdefgaa99232bcd",
+    "id": 1,
+    "utc": 2938293,
+    "version": 1000,
+    "zero_bits": 25,
+    "pre_hash": "eeewfwefwf",
+    "miner": "22223",
+    "tx_ids":["wfe","e22","2232323"]
+    "nonce1": 8298392839283293892,
+    "nonce2": 0,
+    "nonce3": 0,
+    "nonce4": 0
+}
+
+//tx register account
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "pubkey":"eeeeeeeeeee",
+    "data":{
+        "type":1,
+        "utc":9988888,
+        "avatar":22,
+        "sign":"awfwewewdffff",
+        "sign_data": {
+            "live_block": 332,
+            "name":"b64(iijjjj中文)",
+            "referrer":"8777",
+        }
+    }
+}
+
+//tx sendcoin
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":2,
+        "utc": 2989883883,
+        "live_block": 339,
+        "sender":"234432",
+        "amount": 100000000000000,
+        "memo":"this is my memo msg",
+        "receiver":"lcabcdefg"
+    }
+}
+
+//tx commit proposal
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":3,
+        "proposal_type":1,
+        "utc":9988888,
+        "live_block": 339,
+        "sender":"999222",
+        "value": 1000000000
+    }
+}
+
+//tx vote proposal
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":4,
+        "utc":9988888,
+        "live_block": 339,
+        "sender":"922233",
+        "proposal_hash":"fffffffffffff"
+    }
+}
+
+//tx new topic
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":5,
+        "utc":9988888,
+        "live_block": 339,
+        "sender":"882223334",
+        "topic_hash":"abceffabbbb323233232323"
+    },
+    "topic":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}
+
+//tx topic reply message
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":6,
+        "utc":9988888,
+        "live_block": 339,
+        "sender":"123423",
+        "topic_hash":"lllllllllllllllllllllllllllllllll",
+        "message_hash":"abceffabbbb323233232323"
+    },
+    "message":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}
+
+//tx give reward
+{
+    "hash":"woiiiiiiiiiiiiiiiiiwfe",
+    "sign":"oijowwwwwwwww",
+    "data":{
+        "type":7,
+        "utc":9988888,
+        "live_block": 339,
+        "sender":"56777",
+        "topic_hash":"lllllllllllllllllllllllllllllllll",
+        "message_hash":"abceffabbbb323233232323"
+    },
+    "message":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+}
+
+
+//other block
+{
+  "hash": "002fbcdefgaa99232bcd",
+  "sign": "wewoeisign.fdfdsfd",
+  "data": {
+    "id": 1,
+    "utc": 2938293,
+    "version": 1000,
+    "zero_bits": 25,
+    "pre_hash": "eeewfwefwf",
+    "miner": "22223",
+    "tx_ids": [
+      "wfe",
+      "e22",
+      "2232323"
+    ],
+    "nonce1": 8298392839283293892,
+    "nonce2": 0,
+    "nonce3": 0,
+    "nonce4": 0
+  },
+  "tx": [
+    {
+      "hash": "woiiiiiiiiiiiiiiiiiwfe",
+      "sign": "oijowwwwwwwww",
+      "data": {
+        "type": 2,
+        "utc": 2989883883,
+        "live_block": 339,
+        "sender": "234432",
+        "amount": 100000000000000,
+        "memo": "this is my memo msg",
+        "receiver": "2222"
+      }
+    },
+    {
+      "hash": "woiiiiiiiiiiiiiiiiiwfe",
+      "sign": "oijowwwwwwwww",
+      "data": {
+        "type": 2,
+        "utc": 2989883883,
+        "live_block": 339,
+        "sender": "234432",
+        "amount": 100000000000000,
+        "memo": "this is my memo msg",
+        "receiver": "99998"
+      }
+    }
+  ]
+}

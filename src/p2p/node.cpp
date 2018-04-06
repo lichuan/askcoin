@@ -55,11 +55,6 @@ void Node::set_peer_file(std::string peer_file)
     m_peer_file = peer_file;
 }
 
-void Node::set_as_witness(bool as_witness)
-{
-    m_as_witness = as_witness;
-}
-
 void Node::set_host(std::string host)
 {
     m_host = host;
@@ -73,6 +68,11 @@ void Node::set_max_active_conn(uint32 num)
 void Node::set_max_passive_conn(uint32 num)
 {
     m_max_passive_conn = num > 300 ? num : 300;
+}
+
+void Node::add_init_peer(const fly::net::Addr &addr)
+{
+    m_init_peer.push_back(addr);
 }
 
 bool Node::allow(std::shared_ptr<fly::net::Connection<Json>> connection)

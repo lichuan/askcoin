@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include "hash.h"
 #include "fly/base/common.hpp"
 
 #define BEGIN(a)            ((char*)&(a))
@@ -189,7 +190,8 @@ bool TimingResistantEqual(const T& a, const T& b)
  */
 bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out);
 
-std::string coin_hash(const char *data, uint32 size);
+void coin_hash(const char *data, uint32 size, char h_256[CSHA256::OUTPUT_SIZE]);
+std::string coin_hash_b64(const char *data, uint32 size);
 std::string coin_addr(const char *pubkey, uint32 size);
 
 #endif // BITCOIN_UTILSTRENCODINGS_H

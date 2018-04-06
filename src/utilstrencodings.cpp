@@ -3,15 +3,13 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "utilstrencodings.h"
-
-#include "tinyformat.h"
-#include "hash.h"
-
 #include <cstdlib>
 #include <cstring>
 #include <errno.h>
 #include <limits>
+
+#include "tinyformat.h"
+#include "utilstrencodings.h"
 
 static const std::string CHARS_ALPHA_NUM = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
@@ -836,10 +834,15 @@ bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out)
     return true;
 }
 
-std::string coin_hash(const char *data, uint32 size)
+void coin_hash(const char *data, uint32 size, char h_256[CSHA256::OUTPUT_SIZE])
+{
+    CHash256().Write(data, size).Finalize(h_256);
+}
+
+std::string coin_hash_b64(const char *data, uint32 size)
 {
     char h_256[CSHA256::OUTPUT_SIZE];
-    CSHA256().Write(data, size).Finalize(h_256);
+    CHash256().Write(data, size).Finalize(h_256);
     std::string b64 = fly::base::base64_encode(h_256, CSHA256::OUTPUT_SIZE);
     
     return b64;

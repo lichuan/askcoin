@@ -1,17 +1,33 @@
 {
     "log_path": "./log",
     "db_path": "./db",
-
     "network": {
         "host": "here should be your host (domain or ip address)",
         "p2p": {
-            "peer_file": "./peers.json",
             "port": 10001,
             "max_passive_conn": 5000,
-            "max_active_conn": 5000
+            "max_active_conn": 5000,
+            "init_peer": [
+                {
+                    "host": "node1.askcoin.me",
+                    "port": 10001
+                },
+                {
+                    "host": "112.25.77.101",
+                    "port": 10001
+                },
+                {
+                    "host": "node2.askcoin.me",
+                    "port": 10001
+                },
+                {
+                    "host": "node3.askcoin.me",
+                    "port": 10001
+                }
+            ]
         },
         "websocket": {
-            "port": 10002,
+            "port": 20001,
             "max_passive_conn": 5000,
             "open": true
         }

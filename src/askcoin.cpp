@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include "fly/init.hpp"
 #include "fly/base/logger.hpp"
+#include "fly/net/addr.hpp"
 #include "compat/sanity.h"
 #include "random.h"
 #include "key.h"
@@ -19,9 +20,7 @@
 #include "p2p/node.hpp"
 #include "wsock_node.hpp"
 #include "blockchain.hpp"
-
-using namespace rapidjson;
-using namespace std;
+#include "utilstrencodings.h"
 
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 
@@ -76,20 +75,20 @@ public:
         fly::init();
 
         std::ifstream ifs("./config.json");
-        IStreamWrapper isw(ifs);
-        Document doc;
+        rapidjson::IStreamWrapper isw(ifs);
+        rapidjson::Document doc;
         doc.ParseStream(isw);
 
         if(doc.HasParseError())
         {
-            cout << "parse config.json failed: " << GetParseError_En(doc.GetParseError()) << endl;
+            std::cout << "parse config.json failed: " << GetParseError_En(doc.GetParseError()) << std::endl;
 
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("log_path"))
         {
-            cout << "config.json don't contain log_path field!" << endl;
+            std::cout << "config.json don't contain log_path field!" << std::endl;
 
             return EXIT_FAILURE;
         }
@@ -123,17 +122,27 @@ public:
         }
 
         std::string host = doc["network"]["host"].GetString();
-        std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
+        //std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
         uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
         uint32 p2p_max_passive_conn = doc["network"]["p2p"]["max_passive_conn"].GetUint();
         uint32 p2p_max_active_conn = doc["network"]["p2p"]["max_active_conn"].GetUint();
+        const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
+
+        for(int32 i = 0; i < init_peer.Size(); ++i)
+        {
+            std::string host = init_peer[i]["host"].GetString();
+            uint16 port = init_peer[i]["port"].GetUint();
+            fly::net::Addr addr(host, port);
+            p2p::Node::instance()->add_init_peer(addr);
+        }
+        
         uint32 websocket_max_passive_conn = doc["network"]["websocket"]["max_passive_conn"].GetUint();
         uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
         bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
         Wsock_Node::instance()->set_max_passive_conn(websocket_max_passive_conn);
         p2p::Node::instance()->set_max_active_conn(p2p_max_active_conn);
         p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
-        p2p::Node::instance()->set_peer_file(peer_file);
+        //p2p::Node::instance()->set_peer_file(peer_file);
         p2p::Node::instance()->set_host(host);
         
         if(!p2p::Node::instance()->start(p2p_port))
@@ -149,24 +158,23 @@ public:
             }
         }
 
-        string cmd_tips = "\nthe following commands are available:\n"
+        std::string cmd_tips = "\nthe following commands are available:\n"
             ">stop\n"
             ">register_account\n"
             ">import_account\n"
             ">register_account_fund_sign\n"
-            ">apply_witness\n"
             ">send_coin\n"
             ">help\n"
             "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
 
         CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!");
-        cout << cmd_tips << endl;
+        std::cout << cmd_tips << std::endl;
 
         std::thread cmd_thread([&]() {
             while(true) {
-                cout << ">";
+                std::cout << ">";
                 std::string cmd_string;
-                getline(cin, cmd_string);
+                getline(std::cin, cmd_string);
 
                 if(cmd_string.empty())
                 {
@@ -174,7 +182,7 @@ public:
                 }
 
                 char *p = NULL;
-                vector<string> vec;
+                std::vector<std::string> vec;
                 fly::base::split_string(cmd_string, " \t", vec, &p);
                 
                 for(auto token : vec)
@@ -196,11 +204,11 @@ public:
 
                 if(cmd_string == "help")
                 {
-                    cout << cmd_tips << endl;
+                    std::cout << cmd_tips << std::endl;
                 }
                 else
                 {
-                    cout << "invalid command: " << vec[0] << endl;
+                    std::cout << "invalid command: " << vec[0] << std::endl;
                 }
             }
         });
