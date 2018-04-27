@@ -28,3 +28,12 @@ std::string Block::hash()
 {
     return m_hash;
 }
+
+Pending_Block::Pending_Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash)
+    : Block(id, utc, version, zero_bits, hash)
+{
+} 
+
+Pending_Block::~Pending_Block()
+{
+}

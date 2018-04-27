@@ -18,7 +18,6 @@ public:
 
 private:
     std::list<History*> m_history;
-    std::vector<uint64> m_referees;
     std::string m_name;
     uint64 m_id;
     std::string m_pubkey;

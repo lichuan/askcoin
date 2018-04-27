@@ -3,12 +3,14 @@
 #include "fly/base/logger.hpp"
 #include "blockchain.hpp"
 #include "key.h"
+#include "version.hpp"
 #include "utilstrencodings.h"
 #include "cryptopp/sha.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include <unistd.h>
 
 Blockchain::Blockchain()
 {
@@ -78,7 +80,7 @@ bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
             return false;
         }
     }
-
+    
     uint32 zero_remain_bit = zero_bits % 8;
 
     if(zero_remain_bit == 0)
@@ -86,7 +88,7 @@ bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
         return true;
     }
     
-    return hash_arr[zero_char_num] % (1 << zero_remain_bit) == 0;
+    return hash_arr[zero_char_num] < 1 << 8 - zero_remain_bit;
 }
 
 std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
@@ -123,6 +125,18 @@ bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::st
     return cpk.Verify(uint256(std::vector<unsigned char>(hash, hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
 }
 
+bool Blockchain::get_account(uint64 id, std::shared_ptr<Account> &account)
+{
+    auto iter = m_account_by_id.find(id);
+
+    if(iter == m_account_by_id.end())
+    {
+        return false;
+    }
+
+    account = iter->second;
+}
+
 bool Blockchain::load(std::string db_path)
 {
     leveldb::DB *db;
@@ -151,8 +165,8 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
         
-        std::string genesis_block_data = "{\"data\":{\"id\":0,\"utc\":1522406088,\"version\":1000,\"zero_bits\":1,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"const_param\":{\"total\":1000000000000000000,\"decimal\":8,\"block_interval\":10,\"last_irreversible_block\":10,\"vote_activate_check_interval\":10000,\"vote_activate_min_coin_num\":100000000000000000,\"topic_expired_block_num\":100000,\"tx_live_block_lifetime\":100,\"referrer_reward\":50,\"reserve_fund_account\":\"reserve_fund\",\"account_max_length\":15,\"topic_max_length\":200,\"topic_message_max_length\":300,\"fee_max\":100000000000000},\"var_param\":{\"fee_register\":10000000000,\"fee_sendcoin\":100000000,\"fee_proposal\":1000000000000,\"fee_vote\":10000000000,\"fee_cancel_vote\":10000000000,\"fee_topic\":100000000,\"fee_topic_message\":100000000,\"fee_reward\":100000000,\"miner_reward\":1000000},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}}}";
-        
+        std::string genesis_block_data = "{\"data\":{\"id\":0,\"utc\":1518926400,\"version\":10000,\"zero_bits\":1,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"const_param\":{\"total\":1000000000000000000,\"decimal\":8,\"block_interval\":10,\"last_irreversible_block\":10,\"vote_activate_check_interval\":1000,\"vote_activate_min_coin_num\":100000000000000000,\"topic_lifetime\":100000,\"tx_lifetime\":100,\"proposal_lifetime\":100000,\"referrer_reward\":50,\"reserve_fund_account\":\"reserve_fund\",\"account_max_length\":15,\"topic_max_length\":200,\"reply_max_length\":300,\"memo_max_length\":100,\"tx_max_one_block\":10000,\"max_miner\":100,\"fee_max\":100000000000000},\"var_param\":{\"fee_register\":100000000,\"fee_sendcoin\":100000000,\"fee_proposal\":1000000000000,\"fee_vote\":100000000,\"fee_cancel_vote\":100000000,\"fee_topic\":100000000,\"fee_reply\":100000000,\"fee_reward\":100000000,\"miner_reward\":100000000,\"miner_deposit\":10000000000000,\"fee_miner_quit\":10000000000},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}}}";
+
         rapidjson::Document doc;
         doc.Parse(genesis_block_data.c_str());
 
@@ -170,7 +184,7 @@ bool Blockchain::load(std::string db_path)
         data.Accept(writer_1);
         
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEUCIQCQWWknwZMB6QMUNmuqRO1qEtvtdwaZd/YmK+esN1EMxQIgMwXyCAQ/yz9KwfK8IgF6oJ0ZUi1REt1GhFQATKAsPng=";
+        std::string sign_b64 = "MEUCIQCDFfznw1lqeCjZldwxPtfm+ZHuRpHAhAxDpuE4bJg8SQIgY/dPgQI96ZQqljFkNG77EpuWpXk7ATL56912GoF0amo=";
         //sign_b64 = sign("=", genesis_block_hash);
         
         doc.AddMember("hash", rapidjson::StringRef(genesis_block_hash.c_str()), allocator);
@@ -180,7 +194,7 @@ bool Blockchain::load(std::string db_path)
         rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
         doc.Accept(writer_2);
         s = db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
-        
+
         if(!s.ok())
         {
             return false;
@@ -193,29 +207,6 @@ bool Blockchain::load(std::string db_path)
         {
             return false;
         }
-
-        //s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
-        //s = db->Get(leveldb::ReadOptions(), "block_count", &val);
-        //s = db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
-        
-        // CKey key;
-        // key.MakeNewKey(false);
-        // CPubKey pubkey = key.GetPubKey();
-        // std::string key_b64 = fly::base::base64_encode(key.begin(), key.size());
-        // std::string pubkey_b64 = fly::base::base64_encode(pubkey.begin(), pubkey.size());
-        // std::string addr = coin_addr(pubkey.begin(), pubkey.size());
-        // CONSOLE_LOG_INFO("key: %s, pubkey: %s, addr: %s", key_b64.c_str(), pubkey_b64.c_str(), addr.c_str());
-
-        // std::string k1 = "fHIT5NNDgMCYC4Yyieu+NOGRaxG8MMX9qAzchPPZ8lc";
-        // char privk[32];
-        // fly::base::base64_decode(k1.c_str(), k1.size(), privk, 32);
-        // CKey ck1;
-        // ck1.Set(privk, privk + 32, false);
-        // CPubKey pubk1 = ck1.GetPubKey();
-        // std::string addr1 = coin_addr(pubk1.begin(), pubk1.size());
-        // std::string pubk_64 = fly::base::base64_encode(pubk1.begin(), pubk1.size());
-        // CONSOLE_LOG_INFO("new pubkey: %s, addr: %s", pubk_64.c_str(), addr1.c_str());
-
     }
     
     const char *block_0_str = block_0.c_str();
@@ -323,7 +314,7 @@ bool Blockchain::load(std::string db_path)
     }
 
     m_decimal = const_param["decimal"].GetUint();
-
+    
     if(m_decimal != 8)
     {
         CONSOLE_LOG_FATAL("verify leveldb block 0 failed, decimal is not 8");
@@ -331,24 +322,197 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
-    m_block_interval = const_param["block_interval"].GetUint(); 
-    m_last_irreversible_block = const_param["last_irreversible_block"].GetUint();
-    m_vote_activate_check_interval = const_param["vote_activate_check_interval"].GetUint();
-    m_vote_activate_min_coin_num = const_param["vote_activate_min_coin_num"].GetUint64();
-    m_topic_expired_block_num = const_param["topic_expired_block_num"].GetUint();
-    m_account_max_length = const_param["account_max_length"].GetUint();
-    m_topic_max_length = const_param["topic_max_length"].GetUint();
-    m_topic_message_max_length = const_param["topic_message_max_length"].GetUint();
-    m_fee_max = const_param["fee_max"].GetUint64();
-    m_tx_live_block_lifetime = const_param["tx_live_block_lifetime"].GetUint();
+    m_block_interval = const_param["block_interval"].GetUint();
 
+    if(m_block_interval != 10)
+    {
+        return false;
+    }
+    
+    m_last_irreversible_block = const_param["last_irreversible_block"].GetUint();
+
+    if(m_last_irreversible_block != 10)
+    {
+        return false;
+    }
+    
+    m_vote_activate_check_interval = const_param["vote_activate_check_interval"].GetUint();
+
+    if(m_vote_activate_check_interval != 1000)
+    {
+        return false;
+    }
+    
+    m_vote_activate_min_coin_num = const_param["vote_activate_min_coin_num"].GetUint64();
+
+    if(m_vote_activate_min_coin_num != (uint64)100000000000000000)
+    {
+        return false;
+    }
+    
+    m_topic_lifetime = const_param["topic_lifetime"].GetUint();
+    
+    if(m_topic_lifetime != 100000)
+    {
+        return false;
+    }
+
+    m_tx_lifetime = const_param["tx_lifetime"].GetUint();
+
+    if(m_tx_lifetime != 100)
+    {
+        return false;
+    }
+
+    m_proposal_lifetime = const_param["proposal_lifetime"].GetUint();
+
+    if(m_proposal_lifetime != 100000)
+    {
+        return false;
+    }
+
+    m_referrer_reward = const_param["referrer_reward"].GetUint();
+
+    if(m_referrer_reward != 50)
+    {
+        return false;
+    }
+
+    m_account_max_length = const_param["account_max_length"].GetUint();
+
+    if(m_account_max_length != 15)
+    {
+        return false;
+    }
+    
+    m_topic_max_length = const_param["topic_max_length"].GetUint();
+
+    if(m_topic_max_length != 200)
+    {
+        return false;
+    }
+    
+    m_reply_max_length = const_param["reply_max_length"].GetUint();
+
+    if(m_reply_max_length != 300)
+    {
+        return false;
+    }
+
+    m_memo_max_length = const_param["memo_max_length"].GetUint();
+
+    if(m_memo_max_length != 100)
+    {
+        return false;
+    }
+
+    m_tx_max_one_block = const_param["tx_max_one_block"].GetUint();
+
+    if(m_tx_max_one_block != 10000)
+    {
+        return false;
+    }
+
+    m_max_miner = const_param["max_miner"].GetUint();
+
+    if(m_max_miner != 100)
+    {
+        return false;
+    }
+
+    m_fee_max = const_param["fee_max"].GetUint64();
+
+    if(m_fee_max != (uint64)100000000000000)
+    {
+        return false;
+    }
+
+    m_fee_register = var_param["fee_register"].GetUint64();
+
+    if(m_fee_register != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_sendcoin = var_param["fee_sendcoin"].GetUint64();
+
+    if(m_fee_sendcoin != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_proposal = var_param["fee_proposal"].GetUint64();
+
+    if(m_fee_proposal != (uint64)1000000000000)
+    {
+        return false;
+    }
+
+    m_fee_vote = var_param["fee_vote"].GetUint64();
+
+    if(m_fee_vote != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_cancel_vote = var_param["fee_cancel_vote"].GetUint64();
+
+    if(m_fee_cancel_vote != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_topic = var_param["fee_topic"].GetUint64();
+
+    if(m_fee_topic != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_reply = var_param["fee_reply"].GetUint64();
+
+    if(m_fee_reply != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_fee_reward = var_param["fee_reward"].GetUint64();
+
+    if(m_fee_reward != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_miner_reward = var_param["miner_reward"].GetUint64();
+
+    if(m_miner_reward != (uint64)100000000)
+    {
+        return false;
+    }
+
+    m_miner_deposit = var_param["miner_deposit"].GetUint64();
+
+    if(m_miner_deposit != (uint64)10000000000000)
+    {
+        return false;
+    }
+
+    m_fee_miner_quit = var_param["fee_miner_quit"].GetUint64();
+
+    if(m_fee_miner_quit != (uint64)10000000000)
+    {
+        return false;
+    }
+    
     const rapidjson::Value &init_account = data["init_account"];
     std::string account = init_account["account"].GetString();
     std::string pubkey = init_account["pubkey"].GetString();
     uint64 account_id = init_account["id"].GetUint64();
     uint32 avatar = init_account["avatar"].GetUint();
 
-    if(account != "lichuan" || pubkey != "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=" || account_id != 1)
+    if(account != "lichuan" || pubkey != "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=" \
+       || account_id != 1 \
+       || avatar != 1)
     {
         return false;
     }
@@ -369,104 +533,174 @@ bool Blockchain::load(std::string db_path)
 
     std::string account_b64 = fly::base::base64_encode(account.data(), account.size());
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.size());
-    std::shared_ptr<Account> reserve_fund_account(new Account(0, reserve_fund_b64, "", 1));
-    std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 1));
+    uint64 reserve_fund_account_id = 0;
+    std::shared_ptr<Account> reserve_fund_account(new Account(reserve_fund_account_id, reserve_fund_b64, "", 1));
+    uint64 author_account_id = 1;
+    std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 1));
+    uint64 init_miner = author_account_id;
+    m_miners.insert(init_miner);
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
     author_account->set_balance(m_total);
     m_account_by_id.insert(std::make_pair(0, reserve_fund_account));
     m_account_by_id.insert(std::make_pair(1, author_account));
+
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
     uint32 version = data["version"].GetUint();
     uint32 zero_bits = data["zero_bits"].GetUint();
-    
+
     if(block_id != 0)
     {
         return false;
     }
 
+    if(utc != (uint32)1518926400)
+    {
+        return false;
+    }
+
+    if(version != 10000)
+    {
+        return false;
+    }
+
+    if(zero_bits != 1)
+    {
+        return false;
+    }
+    
     std::shared_ptr<Block> block(new Block(block_id, utc, version, zero_bits, block_hash));
     m_blocks.insert(std::make_pair(block_id, block));
     uint64 prev_block_id = 0;
     std::string prev_block_hash = block_hash;
-    uint32 pre_zero_bits = zero_bits;
+    uint32 prev_zero_bits = zero_bits;
+    uint32 prev_utc = utc;
+    uint32 block_utc_diff = 10;
     leveldb::Iterator *it = db->NewIterator(leveldb::ReadOptions());
     CONSOLE_LOG_INFO("start load block from leveldb......");
-    
+
     for(it->Seek("1"); it->Valid(); it->Next())
     {
         std::string k = it->key().ToString();
         fly::base::string_to(k.c_str(), block_id);
-        std::string data = it->value().ToString();
+        std::string content = it->value().ToString();
         rapidjson::Document doc;
-        doc.Parse(data.c_str());
+        doc.Parse(content.c_str());
         
         if(doc.HasParseError())
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, data: %s, reason: %s", block_id, data.c_str(), GetParseError_En(doc.GetParseError()));
+            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, reason: %s", block_id, GetParseError_En(doc.GetParseError()));
             
             return false;
         }
-        
+
         if(!doc.HasMember("hash"))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't hash field, data: %s", block_id, data.c_str());
-            
             return false;
         }
 
-        if(!doc.HasMember("prev_hash"))
+        if(!doc.HasMember("sign"))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't prev_hash field, data: %s", block_id, data.c_str());
+            return false;
+        }
 
+        if(!doc.HasMember("data"))
+        {
             return false;
         }
         
         std::string block_hash = doc["hash"].GetString();
-    
-        if(!doc.RemoveMember("hash"))
+        std::string block_sign = doc["sign"].GetString();
+        const rapidjson::Value &data = doc["data"];
+
+        if(!data.HasMember("id"))
+        {
+            return false;
+        }
+
+        if(!data.HasMember("utc"))
         {
             return false;
         }
         
-        if(!doc.HasMember("id"))
+        if(!data.HasMember("version"))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't id field, data: %s", block_id, data.c_str());
-            
+            return false;
+        }
+
+        uint32 block_version = data["version"].GetUint();
+
+        //here should be changed when new version released.
+        if(!version_compatible(block_version, ASKCOIN_VERSION))
+        {
+            CONSOLE_LOG_FATAL("block %lu version not compatible, block_version: %u, askcoin_version: %u", block_id, block_version, ASKCOIN_VERSION);
+
             return false;
         }
         
-        if(!doc.HasMember("utc"))
+        if(!data.HasMember("zero_bits"))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't utc field, data: %s", block_id, data.c_str());
-            
+            return false;
+        }
+
+        if(!data.HasMember("prev_hash"))
+        {
+            return false;
+        }
+
+        if(!data.HasMember("miner"))
+        {
+            return false;
+        }
+
+        if(!data.HasMember("tx"))
+        {
+            return false;
+        }
+
+        if(!data.HasMember("nonce1"))
+        {
             return false;
         }
         
-        if(!doc.HasMember("version"))
+        if(!data.HasMember("nonce2"))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't version field, data: %s", block_id, data.c_str());
-            
+            return false;
+        }
+        
+        if(!data.HasMember("nonce3"))
+        {
+            return false;
+        }
+        
+        if(!data.HasMember("nonce4"))
+        {
             return false;
         }
 
-        if(!doc.HasMember("miner"))
+        if(!data["nonce1"].IsUint64())
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't utc field, data: %s", block_id, data.c_str());
-            
             return false;
         }
 
-        if(!doc.HasMember("zero_bits"))
+        if(!data["nonce2"].IsUint64())
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, block haven't zero_bits field, data: %s", block_id, data.c_str());
-            
             return false;
         }
 
-        uint64 block_id_from_db = doc["id"].GetUint64();
+        if(!data["nonce3"].IsUint64())
+        {
+            return false;
+        }
 
+        if(!data["nonce4"].IsUint64())
+        {
+            return false;
+        }
+
+        uint64 block_id_from_db = data["id"].GetUint64();
+        
         if(block_id_from_db != block_id)
         {
             CONSOLE_LOG_FATAL("leveldb block id doesn't match, block_id: %lu, block_id_from_db: %lu", block_id, block_id_from_db);
@@ -481,28 +715,75 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
         
+        uint32 utc = data["utc"].GetUint();
+        uint32 zero_bits = data["zero_bits"].GetUint();
+
+        if(block_utc_diff < 8)
+        {
+            if(zero_bits != prev_zero_bits + 1)
+            {
+                return false;
+            }
+        }
+        else if(block_utc_diff > 17)
+        {
+            if(prev_zero_bits > 1)
+            {
+                if(zero_bits != prev_zero_bits - 1)
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                if(zero_bits != 1)
+                {
+                    return false;
+                }
+            }
+        }
+        else if(zero_bits != prev_zero_bits)
+        {
+            return false;
+        }
+        
+        if(utc <= prev_utc)
+        {
+            return false;
+        }
+        
+        uint32 now = time(NULL);
+        
+        if(utc > now + 2)
+        {
+            CONSOLE_LOG_FATAL("check leveldb block %lu utc failed, please check your system time", block_id);
+            
+            return false;
+        }
+        
+        block_utc_diff = utc - prev_utc;
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        doc.Accept(writer);
+        data.Accept(writer);
     
         //base64 44 bytes length
         if(block_hash.length() != 44)
         {
-            CONSOLE_LOG_FATAL("parse leveldb block 0 failed, hash length is not 44 bytes");
-
+            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, hash length is not 44 bytes", block_id);
+            
             return false;
         }
-
+        
         std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
     
         if(block_hash != block_hash_verify)
         {
             CONSOLE_LOG_FATAL("verify leveldb block %lu failed, hash doesn't match", block_id);
-        
+
             return false;
         }
-        
-        std::string prev_hash = doc["prev_hash"].GetString();
+
+        std::string prev_hash = data["prev_hash"].GetString();
 
         if(prev_hash != prev_block_hash)
         {
@@ -511,13 +792,106 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
 
+        uint64 miner_id = data["miner"].GetUint64();
+
+        if(miner_id == 0) // reserve_fund_account can't be miner !!!
+        {
+            return false;
+        }
+        
+        std::shared_ptr<Account> miner;
+        
+        if(!get_account(miner_id, miner))
+        {
+            return false;
+        }
+        
+        char block_raw_hash[32];
+        uint32 len = fly::base::base64_decode(block_hash.c_str(), block_hash.size(), block_raw_hash, 32);
+        
+        if(len != 32)
+        {
+            return false;
+        }
+        
+        if(!hash_pow(block_raw_hash, zero_bits))
+        {
+            return false;
+        }
+        
+        if(!verify_sign(miner->pubkey(), block_hash, block_sign))
+        {
+            CONSOLE_LOG_FATAL("verify block %lu hash sign from leveldb failed", block_id);
+            
+            return false;
+        }
+
+        const rapidjson::Value &tx = data["tx"];
+
+        if(!tx.IsArray())
+        {
+            return false;
+        }
+        
         prev_block_id = block_id;
         prev_block_hash = block_hash;
+        prev_utc = utc;
+        prev_zero_bits = zero_bits;
     }
     
     CONSOLE_LOG_INFO("load block from leveldb finished, last block: %lu", block_id);
     m_cur_db_block_id = block_id;
     m_cur_db_block_hash = block_hash;
+
+    extern std::vector<uint32> __asic_resistant_data__;
+    
+    const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
+
+    if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
+    {
+        return false;
+    }
+    
+    uint32 val_sum = 0, val_mult = 0, val_xor = 0;
+
+    for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM; ++i)
+    {
+        val_sum += __asic_resistant_data__[i];
+        val_mult = (val_mult + __asic_resistant_data__[i]) * (val_mult ^ __asic_resistant_data__[i]);
+        val_xor ^= __asic_resistant_data__[i];
+    }
+
+    if(val_sum != (uint32)278601749 || val_mult != (uint32)3863002825 || val_xor != 394700363)
+    {
+        CONSOLE_LOG_FATAL("verify __asic_resistant_data__ failed!");
+
+        return false;
+    }
+
+    CONSOLE_LOG_INFO("__asic_resistant_data__ verify ok");
+    
+    //s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
+    //s = db->Get(leveldb::ReadOptions(), "block_count", &val);
+    //s = db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
+        
+    // CKey key;
+    // key.MakeNewKey(false);
+    // CPubKey pubkey = key.GetPubKey();
+    // std::string key_b64 = fly::base::base64_encode(key.begin(), key.size());
+    // std::string pubkey_b64 = fly::base::base64_encode(pubkey.begin(), pubkey.size());
+    // std::string addr = coin_addr(pubkey.begin(), pubkey.size());
+    // CONSOLE_LOG_INFO("key: %s, pubkey: %s, addr: %s", key_b64.c_str(), pubkey_b64.c_str(), addr.c_str());
+
+    // std::string k1 = "fHIT5NNDgMCYC4Yyieu+NOGRaxG8MMX9qAzchPPZ8lc";
+    // char privk[32];
+    // fly::base::base64_decode(k1.c_str(), k1.size(), privk, 32);
+    // CKey ck1;
+    // ck1.Set(privk, privk + 32, false);
+    // CPubKey pubk1 = ck1.GetPubKey();
+    // std::string addr1 = coin_addr(pubk1.begin(), pubk1.size());
+    // std::string pubk_64 = fly::base::base64_encode(pubk1.begin(), pubk1.size());
+    // CONSOLE_LOG_INFO("new pubkey: %s, addr: %s", pubk_64.c_str(), addr1.c_str());
+
 
     // std::vector<unsigned char> vec1 = {0x04,0xa5,0xc1,0x77,0xb9,0xe4,0xb5,0xda,0x15,0xc5,0x0e,0x75,0x35,0xbf,0xdd,0xac,0xe5,0x91,0x88,0x32,0xb6,0x87,0x8d,0xac,0xab,0x53,0x51,0xe3,0x5e,0x90,0x17,0xda,0x80,0x6d,0x08,0x87,0x31,0xba,0x78,0x3d,0x04,0x27,0xbb,0x68,0x94,0x01,0x47,0x92,0xe8,0x4e,0x71,0xe2,0xca,0xd0,0x11,0x26,0x01,0x0c,0x4c,0x87,0x97,0xb4,0x2d,0xb8,0x29};
     

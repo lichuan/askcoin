@@ -21,4 +21,13 @@ private:
     std::string m_hash;
 };
 
+class Pending_Block : public Block
+{
+public:
+    Pending_Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash);
+    ~Pending_Block();
+    void exec();
+    void exec_reverse();
+};
+
 #endif
