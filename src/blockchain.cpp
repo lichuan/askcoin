@@ -139,10 +139,39 @@ bool Blockchain::get_account(uint64 id, std::shared_ptr<Account> &account)
 
 bool Blockchain::load(std::string db_path)
 {
+    // firstly, we need verify __asic_resistant_data__
+    extern std::vector<uint32> __asic_resistant_data__;
+    const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
+
+    if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
+    {
+        CONSOLE_LOG_FATAL("verify __asic_resistant_data__ failed, length is not 5 * 1024 * 1024");
+        
+        return false;
+    }
+    
+    uint32 val_sum = 0, val_mult = 0, val_xor = 0;
+
+    for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM; ++i)
+    {
+        val_sum += __asic_resistant_data__[i];
+        val_mult = (val_mult + __asic_resistant_data__[i]) * (val_mult ^ __asic_resistant_data__[i]);
+        val_xor ^= __asic_resistant_data__[i];
+    }
+
+    if(val_sum != (uint32)278601749 || val_mult != (uint32)3863002825 || val_xor != (uint32)394700363)
+    {
+        CONSOLE_LOG_FATAL("verify __asic_resistant_data__ failed, invalid data");
+
+        return false;
+    }
+    
+    CONSOLE_LOG_INFO("verify __asic_resistant_data__ ok");
+
     leveldb::DB *db;
-    Key_Comp comp;
     leveldb::Options options;
-    options.comparator = &comp;
+    // Key_Comp comp;
+    // options.comparator = &comp;
     options.create_if_missing = true;
     leveldb::Status s = leveldb::DB::Open(options, db_path, &db);
     
@@ -165,7 +194,7 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
         
-        std::string genesis_block_data = "{\"data\":{\"id\":0,\"utc\":1518926400,\"version\":10000,\"zero_bits\":1,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"const_param\":{\"total\":1000000000000000000,\"decimal\":8,\"block_interval\":10,\"last_irreversible_block\":10,\"vote_activate_check_interval\":1000,\"vote_activate_min_coin_num\":100000000000000000,\"topic_lifetime\":100000,\"tx_lifetime\":100,\"proposal_lifetime\":100000,\"referrer_reward\":50,\"reserve_fund_account\":\"reserve_fund\",\"account_max_length\":15,\"topic_max_length\":200,\"reply_max_length\":300,\"memo_max_length\":100,\"tx_max_one_block\":10000,\"max_miner\":100,\"fee_max\":100000000000000},\"var_param\":{\"fee_register\":100000000,\"fee_sendcoin\":100000000,\"fee_proposal\":1000000000000,\"fee_vote\":100000000,\"fee_cancel_vote\":100000000,\"fee_topic\":100000000,\"fee_reply\":100000000,\"fee_reward\":100000000,\"miner_reward\":100000000,\"miner_deposit\":10000000000000,\"fee_miner_quit\":10000000000},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}}}";
+        std::string genesis_block_data = "{\"data\":{\"id\":0,\"utc\":1518926400,\"version\":10000,\"zero_bits\":0,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
 
         rapidjson::Document doc;
         doc.Parse(genesis_block_data.c_str());
@@ -184,9 +213,14 @@ bool Blockchain::load(std::string db_path)
         data.Accept(writer_1);
         
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEUCIQCDFfznw1lqeCjZldwxPtfm+ZHuRpHAhAxDpuE4bJg8SQIgY/dPgQI96ZQqljFkNG77EpuWpXk7ATL56912GoF0amo=";
-        //sign_b64 = sign("=", genesis_block_hash);
+        std::string sign_b64 = "MEQCIAtl9A36GVH3/JEKywWnb1qL14o+Hto7qyIt67rGyBbwAiAiZKzMQfPe+juW8sz48P1SFN4Vt0QrYO9qzv+qCY4Uow==";
         
+        // sign_b64 = sign("", genesis_block_hash);
+        // if(sign_b64.empty())
+        // {
+        //     return false;
+        // }
+
         doc.AddMember("hash", rapidjson::StringRef(genesis_block_hash.c_str()), allocator);
         doc.AddMember("sign", rapidjson::StringRef(sign_b64.c_str()), allocator);
         
@@ -238,8 +272,14 @@ bool Blockchain::load(std::string db_path)
 
     std::string block_hash = doc["hash"].GetString();
     std::string block_sign = doc["sign"].GetString();
-    const rapidjson::Value &data = doc["data"];
 
+    if(block_hash != "QKQzeV/UzpDNQDWZGVVU5vyKdTw9MmrTbOD/wfa480Y=")
+    {
+        return false;
+    }
+
+    const rapidjson::Value &data = doc["data"];
+    
     if(!data.HasMember("id"))
     {
         return false;
@@ -265,16 +305,6 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
-    if(!data.HasMember("const_param"))
-    {
-        return false;
-    }
-
-    if(!data.HasMember("var_param"))
-    {
-        return false;
-    }
-    
     if(!data.HasMember("author"))
     {
         return false;
@@ -300,209 +330,6 @@ bool Blockchain::load(std::string db_path)
         
         return false;
     }
-
-    const rapidjson::Value &const_param = data["const_param"];
-    const rapidjson::Value &var_param = data["var_param"];
-
-    m_total = const_param["total"].GetUint64();
-    
-    if(m_total != (uint64)1000000000000000000)
-    {
-        CONSOLE_LOG_FATAL("verify leveldb block 0 failed, total coin is not 1000000000000000000");
-
-        return false;
-    }
-
-    m_decimal = const_param["decimal"].GetUint();
-    
-    if(m_decimal != 8)
-    {
-        CONSOLE_LOG_FATAL("verify leveldb block 0 failed, decimal is not 8");
-
-        return false;
-    }
-
-    m_block_interval = const_param["block_interval"].GetUint();
-
-    if(m_block_interval != 10)
-    {
-        return false;
-    }
-    
-    m_last_irreversible_block = const_param["last_irreversible_block"].GetUint();
-
-    if(m_last_irreversible_block != 10)
-    {
-        return false;
-    }
-    
-    m_vote_activate_check_interval = const_param["vote_activate_check_interval"].GetUint();
-
-    if(m_vote_activate_check_interval != 1000)
-    {
-        return false;
-    }
-    
-    m_vote_activate_min_coin_num = const_param["vote_activate_min_coin_num"].GetUint64();
-
-    if(m_vote_activate_min_coin_num != (uint64)100000000000000000)
-    {
-        return false;
-    }
-    
-    m_topic_lifetime = const_param["topic_lifetime"].GetUint();
-    
-    if(m_topic_lifetime != 100000)
-    {
-        return false;
-    }
-
-    m_tx_lifetime = const_param["tx_lifetime"].GetUint();
-
-    if(m_tx_lifetime != 100)
-    {
-        return false;
-    }
-
-    m_proposal_lifetime = const_param["proposal_lifetime"].GetUint();
-
-    if(m_proposal_lifetime != 100000)
-    {
-        return false;
-    }
-
-    m_referrer_reward = const_param["referrer_reward"].GetUint();
-
-    if(m_referrer_reward != 50)
-    {
-        return false;
-    }
-
-    m_account_max_length = const_param["account_max_length"].GetUint();
-
-    if(m_account_max_length != 15)
-    {
-        return false;
-    }
-    
-    m_topic_max_length = const_param["topic_max_length"].GetUint();
-
-    if(m_topic_max_length != 200)
-    {
-        return false;
-    }
-    
-    m_reply_max_length = const_param["reply_max_length"].GetUint();
-
-    if(m_reply_max_length != 300)
-    {
-        return false;
-    }
-
-    m_memo_max_length = const_param["memo_max_length"].GetUint();
-
-    if(m_memo_max_length != 100)
-    {
-        return false;
-    }
-
-    m_tx_max_one_block = const_param["tx_max_one_block"].GetUint();
-
-    if(m_tx_max_one_block != 10000)
-    {
-        return false;
-    }
-
-    m_max_miner = const_param["max_miner"].GetUint();
-
-    if(m_max_miner != 100)
-    {
-        return false;
-    }
-
-    m_fee_max = const_param["fee_max"].GetUint64();
-
-    if(m_fee_max != (uint64)100000000000000)
-    {
-        return false;
-    }
-
-    m_fee_register = var_param["fee_register"].GetUint64();
-
-    if(m_fee_register != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_sendcoin = var_param["fee_sendcoin"].GetUint64();
-
-    if(m_fee_sendcoin != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_proposal = var_param["fee_proposal"].GetUint64();
-
-    if(m_fee_proposal != (uint64)1000000000000)
-    {
-        return false;
-    }
-
-    m_fee_vote = var_param["fee_vote"].GetUint64();
-
-    if(m_fee_vote != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_cancel_vote = var_param["fee_cancel_vote"].GetUint64();
-
-    if(m_fee_cancel_vote != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_topic = var_param["fee_topic"].GetUint64();
-
-    if(m_fee_topic != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_reply = var_param["fee_reply"].GetUint64();
-
-    if(m_fee_reply != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_fee_reward = var_param["fee_reward"].GetUint64();
-
-    if(m_fee_reward != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_miner_reward = var_param["miner_reward"].GetUint64();
-
-    if(m_miner_reward != (uint64)100000000)
-    {
-        return false;
-    }
-
-    m_miner_deposit = var_param["miner_deposit"].GetUint64();
-
-    if(m_miner_deposit != (uint64)10000000000000)
-    {
-        return false;
-    }
-
-    m_fee_miner_quit = var_param["fee_miner_quit"].GetUint64();
-
-    if(m_fee_miner_quit != (uint64)10000000000)
-    {
-        return false;
-    }
     
     const rapidjson::Value &init_account = data["init_account"];
     std::string account = init_account["account"].GetString();
@@ -523,28 +350,21 @@ bool Blockchain::load(std::string db_path)
         
         return false;
     }
-    
-    std::string reserve_fund = const_param["reserve_fund_account"].GetString();
-
-    if(reserve_fund != "reserve_fund")
-    {
-        return false;
-    }
 
     std::string account_b64 = fly::base::base64_encode(account.data(), account.size());
+    std::string reserve_fund = "reserve_fund";
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.size());
     uint64 reserve_fund_account_id = 0;
     std::shared_ptr<Account> reserve_fund_account(new Account(reserve_fund_account_id, reserve_fund_b64, "", 1));
     uint64 author_account_id = 1;
     std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 1));
-    uint64 init_miner = author_account_id;
-    m_miners.insert(init_miner);
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
-    author_account->set_balance(m_total);
+    uint64 total = 1000000000000000000;
+    author_account->set_balance(total / 2);
+    reserve_fund_account->set_balance(total / 2);
     m_account_by_id.insert(std::make_pair(0, reserve_fund_account));
     m_account_by_id.insert(std::make_pair(1, author_account));
-
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
     uint32 version = data["version"].GetUint();
@@ -555,7 +375,7 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
-    if(utc != (uint32)1518926400)
+    if(utc != 1518926400)
     {
         return false;
     }
@@ -565,7 +385,7 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
-    if(zero_bits != 1)
+    if(zero_bits != 0)
     {
         return false;
     }
@@ -576,7 +396,7 @@ bool Blockchain::load(std::string db_path)
     std::string prev_block_hash = block_hash;
     uint32 prev_zero_bits = zero_bits;
     uint32 prev_utc = utc;
-    uint32 block_utc_diff = 10;
+    uint32 block_utc_diff = 15;
     leveldb::Iterator *it = db->NewIterator(leveldb::ReadOptions());
     CONSOLE_LOG_INFO("start load block from leveldb......");
 
@@ -842,33 +662,6 @@ bool Blockchain::load(std::string db_path)
     CONSOLE_LOG_INFO("load block from leveldb finished, last block: %lu", block_id);
     m_cur_db_block_id = block_id;
     m_cur_db_block_hash = block_hash;
-
-    extern std::vector<uint32> __asic_resistant_data__;
-    
-    const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
-
-    if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
-    {
-        return false;
-    }
-    
-    uint32 val_sum = 0, val_mult = 0, val_xor = 0;
-
-    for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM; ++i)
-    {
-        val_sum += __asic_resistant_data__[i];
-        val_mult = (val_mult + __asic_resistant_data__[i]) * (val_mult ^ __asic_resistant_data__[i]);
-        val_xor ^= __asic_resistant_data__[i];
-    }
-
-    if(val_sum != (uint32)278601749 || val_mult != (uint32)3863002825 || val_xor != 394700363)
-    {
-        CONSOLE_LOG_FATAL("verify __asic_resistant_data__ failed!");
-
-        return false;
-    }
-
-    CONSOLE_LOG_INFO("__asic_resistant_data__ verify ok");
     
     //s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
     //s = db->Get(leveldb::ReadOptions(), "block_count", &val);

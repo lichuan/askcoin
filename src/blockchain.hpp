@@ -28,39 +28,20 @@ private:
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::map<uint64, std::shared_ptr<Block>> m_blocks;
-    std::set<uint64> m_miners;
     
-    //const
-    uint64 m_total;
-    uint32 m_decimal;
-    uint32 m_block_interval;
-    uint32 m_last_irreversible_block;
-    uint32 m_vote_activate_check_interval;
-    uint64 m_vote_activate_min_coin_num;
-    uint32 m_topic_lifetime;
-    uint32 m_account_max_length;
-    uint32 m_topic_max_length;
-    uint32 m_reply_max_length;
-    uint32 m_memo_max_length;
-    uint64 m_fee_max;
-    uint32 m_tx_lifetime;
-    uint32 m_tx_max_one_block;
-    uint32 m_proposal_lifetime;
-    uint32 m_referrer_reward;
-    uint32 m_max_miner;
-    
-    //var
-    uint64 m_fee_register;
-    uint64 m_fee_sendcoin;
-    uint64 m_fee_proposal;
-    uint64 m_fee_vote;
-    uint64 m_fee_cancel_vote;
-    uint64 m_fee_topic;
-    uint64 m_fee_reply;
-    uint64 m_fee_reward;
-    uint64 m_miner_reward;
-    uint64 m_miner_deposit;
-    uint64 m_fee_miner_quit;
+    // "total": 1000000000000000000,
+    // "decimal": 8,
+    // "block_interval": 15,
+    // "topic_lifetime": 60000,
+    // "tx_lifetime": 100,
+    // "referrer_reward": 50,
+    // "reserve_fund_account": "reserve_fund",
+    // "account_max_length": 15,
+    // "topic_max_length": 200,
+    // "reply_max_length": 300,
+    // "memo_max_length": 100,
+    // "tx_max_one_block": 1500
+
 };
 
 #endif
