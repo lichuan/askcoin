@@ -25,9 +25,11 @@ public:
 private:
     uint64 m_cur_db_block_id;
     std::string m_cur_db_block_hash;
+    uint64 m_cur_account_id;
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
-    std::map<uint64, std::shared_ptr<Block>> m_blocks;
+    std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
+    std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     
     // "total": 1000000000000000000,
     // "decimal": 8,

@@ -1,3 +1,4 @@
+#include <queue>
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
 #include "fly/base/logger.hpp"
@@ -270,6 +271,11 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
+    if(!doc.HasMember("children"))
+    {
+        return false;
+    }
+    
     std::string block_hash = doc["hash"].GetString();
     std::string block_sign = doc["sign"].GetString();
 
@@ -360,11 +366,12 @@ bool Blockchain::load(std::string db_path)
     std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 1));
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
-    uint64 total = 1000000000000000000;
+    uint64 total = (uint64)1000000000000000000;
     author_account->set_balance(total / 2);
     reserve_fund_account->set_balance(total / 2);
     m_account_by_id.insert(std::make_pair(0, reserve_fund_account));
     m_account_by_id.insert(std::make_pair(1, author_account));
+    m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
     uint32 version = data["version"].GetUint();
@@ -389,9 +396,56 @@ bool Blockchain::load(std::string db_path)
     {
         return false;
     }
+
+    const rapidjson::Value &children = doc["children"];
+
+    if(!children.IsArray())
+    {
+        return false;
+    }
+
+    std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
+    m_blocks.insert(std::make_pair(block_hash, genesis_block));
+
+    struct Child_Block
+    {
+        std::shared_ptr<Block> m_parent;
+        std::string m_hash;
+        
+        Child_Block(std::shared_ptr<Block> parent, std::string hash)
+        {
+            m_parent = parent;
+            m_hash = hash;
+        }
+    };
     
-    std::shared_ptr<Block> block(new Block(block_id, utc, version, zero_bits, block_hash));
-    m_blocks.insert(std::make_pair(block_id, block));
+    std::queue<Child_Block> block_queue;
+    
+    for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
+    {
+        Child_Block child_block(genesis_block, iter->GetString());
+        block_queue.push(child_block);
+    }
+
+    while(!block_queue.empty())
+    {
+        const Child_Block &child_block = block_queue.front();
+    }
+
+
+    // for(uint64 i = 0; i < block_queue.size(); ++i)
+    // {
+    //     std::string block_str;
+    //     s = db->Get(leveldb::ReadOptions(), block_hash_vec[i], &block_str);
+
+    //     if(!s.ok())
+    //     {
+    //         CONSOLE_LOG_FATAL("read block from leveldb failed! hash: %s", block_hash_vec[i].c_str());
+
+    //         return false;
+    //     }
+    // }    
+    
     uint64 prev_block_id = 0;
     std::string prev_block_hash = block_hash;
     uint32 prev_zero_bits = zero_bits;
