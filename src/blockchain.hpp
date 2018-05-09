@@ -20,6 +20,7 @@ public:
     bool get_account(uint64 id, std::shared_ptr<Account> &account);
     std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
+    bool verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits);
     bool hash_pow(char hash_arr[32], uint32 zero_bits);
     
 private:
@@ -30,20 +31,6 @@ private:
     std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
-    
-    // "total": 1000000000000000000,
-    // "decimal": 8,
-    // "block_interval": 15,
-    // "topic_lifetime": 60000,
-    // "tx_lifetime": 100,
-    // "referrer_reward": 50,
-    // "reserve_fund_account": "reserve_fund",
-    // "account_max_length": 15,
-    // "topic_max_length": 200,
-    // "reply_max_length": 300,
-    // "memo_max_length": 100,
-    // "tx_max_one_block": 1500
-
 };
 
 #endif

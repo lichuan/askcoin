@@ -25,87 +25,87 @@ void Accum_Pow::add_pow(uint32 zero_bits)
     }
 }
 
-bool Accum_Pow::operator<(const Accum_Pow &other)
+bool Accum_Pow::operator>(const Accum_Pow &other)
 {
-    if(m_n32[8] < other.m_n32[8])
-    {
-        return true;
-    }
-
     if(m_n32[8] > other.m_n32[8])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[7] < other.m_n32[7])
+    if(m_n32[8] < other.m_n32[8])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[7] > other.m_n32[7])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[6] < other.m_n32[6])
+    if(m_n32[7] < other.m_n32[7])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[6] > other.m_n32[6])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[5] < other.m_n32[5])
+    if(m_n32[6] < other.m_n32[6])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[5] > other.m_n32[5])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[4] < other.m_n32[4])
+    if(m_n32[5] < other.m_n32[5])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[4] > other.m_n32[4])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[3] < other.m_n32[3])
+    if(m_n32[4] < other.m_n32[4])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[3] > other.m_n32[3])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[2] < other.m_n32[2])
+    if(m_n32[3] < other.m_n32[3])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[2] > other.m_n32[2])
     {
-        return false;
+        return true;
     }
 
-    if(m_n32[1] < other.m_n32[1])
+    if(m_n32[2] < other.m_n32[2])
     {
-        return true;
+        return false;
     }
 
     if(m_n32[1] > other.m_n32[1])
     {
-        return false;
+        return true;
     }
 
-    return m_n32[0] < other.m_n32[0];
+    if(m_n32[1] < other.m_n32[1])
+    {
+        return false;
+    }
+    
+    return m_n32[0] > other.m_n32[0];
 }

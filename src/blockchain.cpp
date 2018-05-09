@@ -1,4 +1,5 @@
 #include <queue>
+#include <netinet/in.h>
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
 #include "fly/base/logger.hpp"
@@ -70,6 +71,9 @@ public:
     void FindShortSuccessor(std::string* key) const {}
 };
 
+const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
+extern std::vector<uint32> __asic_resistant_data__;
+
 bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
 {
     uint32 zero_char_num = zero_bits / 8;
@@ -90,6 +94,54 @@ bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
     }
     
     return hash_arr[zero_char_num] < 1 << 8 - zero_remain_bit;
+}
+
+bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits)
+{
+    char hash_raw[32];
+    uint32 len = fly::base::base64_decode(block_hash.c_str(), block_hash.size(), hash_raw, 32);
+
+    if(len != 32)
+    {
+        return false;
+    }
+
+    uint32 buf[16] = {0};
+    char *p = (char*)buf;
+    coin_hash(block_data.c_str(), block_data.size(), p);
+    block_data += "another_32_bytes";
+    coin_hash(block_data.c_str(), block_data.size(), p + 32);
+    uint32 arr_16[16] = {0};
+
+    for(uint32 i = 0; i < 16; ++i)
+    {
+        arr_16[i] = ntohl(buf[i]);
+    }
+
+    for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM;)
+    {
+        for(int j = 0; j < 16; ++j)
+        {
+            arr_16[j] = (arr_16[j] + __asic_resistant_data__[i + j]) * (arr_16[j] ^ __asic_resistant_data__[i + j]);
+        }
+        
+        i += 16;
+    }
+    
+    for(uint32 i = 0; i < 16; ++i)
+    {
+        buf[i] = htonl(arr_16[i]);
+    }
+
+    std::string hash_data = block_data + fly::base::base64_encode(p, 64);
+    std::string block_hash_verify = coin_hash_b64(hash_data.c_str(), hash_data.size());
+
+    if(block_hash != block_hash_verify)
+    {
+        return false;
+    }
+    
+    return hash_pow(hash_raw, zero_bits);
 }
 
 std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
@@ -136,14 +188,13 @@ bool Blockchain::get_account(uint64 id, std::shared_ptr<Account> &account)
     }
 
     account = iter->second;
+
+    return true;
 }
 
 bool Blockchain::load(std::string db_path)
 {
     // firstly, we need verify __asic_resistant_data__
-    extern std::vector<uint32> __asic_resistant_data__;
-    const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
-
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
     {
         CONSOLE_LOG_FATAL("verify __asic_resistant_data__ failed, length is not 5 * 1024 * 1024");
@@ -315,6 +366,11 @@ bool Blockchain::load(std::string db_path)
     {
         return false;
     }
+
+    if(!data.HasMember("init_account"))
+    {
+        return false;
+    }
     
     rapidjson::StringBuffer buffer;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -356,7 +412,7 @@ bool Blockchain::load(std::string db_path)
         
         return false;
     }
-
+    
     std::string account_b64 = fly::base::base64_encode(account.data(), account.size());
     std::string reserve_fund = "reserve_fund";
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.size());
@@ -406,6 +462,7 @@ bool Blockchain::load(std::string db_path)
 
     std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
     m_blocks.insert(std::make_pair(block_hash, genesis_block));
+    std::shared_ptr<Block> the_most_difficult_block = genesis_block;
 
     struct Child_Block
     {
@@ -418,7 +475,7 @@ bool Blockchain::load(std::string db_path)
             m_hash = hash;
         }
     };
-    
+
     std::queue<Child_Block> block_queue;
     
     for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
@@ -426,49 +483,39 @@ bool Blockchain::load(std::string db_path)
         Child_Block child_block(genesis_block, iter->GetString());
         block_queue.push(child_block);
     }
-
+    
     while(!block_queue.empty())
     {
         const Child_Block &child_block = block_queue.front();
-    }
+        std::string block_data;
+        s = db->Get(leveldb::ReadOptions(), child_block.m_hash, &block_data);
 
-
-    // for(uint64 i = 0; i < block_queue.size(); ++i)
-    // {
-    //     std::string block_str;
-    //     s = db->Get(leveldb::ReadOptions(), block_hash_vec[i], &block_str);
-
-    //     if(!s.ok())
-    //     {
-    //         CONSOLE_LOG_FATAL("read block from leveldb failed! hash: %s", block_hash_vec[i].c_str());
-
-    //         return false;
-    //     }
-    // }    
-    
-    uint64 prev_block_id = 0;
-    std::string prev_block_hash = block_hash;
-    uint32 prev_zero_bits = zero_bits;
-    uint32 prev_utc = utc;
-    uint32 block_utc_diff = 15;
-    leveldb::Iterator *it = db->NewIterator(leveldb::ReadOptions());
-    CONSOLE_LOG_INFO("start load block from leveldb......");
-
-    for(it->Seek("1"); it->Valid(); it->Next())
-    {
-        std::string k = it->key().ToString();
-        fly::base::string_to(k.c_str(), block_id);
-        std::string content = it->value().ToString();
-        rapidjson::Document doc;
-        doc.Parse(content.c_str());
-        
-        if(doc.HasParseError())
+        if(!s.ok())
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, reason: %s", block_id, GetParseError_En(doc.GetParseError()));
+            CONSOLE_LOG_FATAL("read block data from leveldb failed, hash: %s", child_block.m_hash.c_str());
             
             return false;
         }
+        
+        // todo? 1500 tx size?, only txid so not 500?
+        const uint32 MAX_BLOCK_SIZE_IN_LEVELDB = 1500 * 44;
 
+        if(block_data.length() > MAX_BLOCK_SIZE_IN_LEVELDB)
+        {
+            return false;
+        }
+        
+        rapidjson::Document doc;
+        const char *block_data_str = block_data.c_str();
+        doc.Parse(block_data_str);
+        
+        if(doc.HasParseError())
+        {
+            CONSOLE_LOG_FATAL("parse block data from leveldb failed, data: %s, hash: %s, reason: %s", block_data_str, child_block.m_hash.c_str(), \
+                              GetParseError_En(doc.GetParseError()));
+            return false;
+        }
+        
         if(!doc.HasMember("hash"))
         {
             return false;
@@ -483,11 +530,16 @@ bool Blockchain::load(std::string db_path)
         {
             return false;
         }
-        
+
+        if(!doc.HasMember("children"))
+        {
+            return false;
+        }
+    
         std::string block_hash = doc["hash"].GetString();
         std::string block_sign = doc["sign"].GetString();
         const rapidjson::Value &data = doc["data"];
-
+    
         if(!data.HasMember("id"))
         {
             return false;
@@ -497,229 +549,216 @@ bool Blockchain::load(std::string db_path)
         {
             return false;
         }
-        
+
         if(!data.HasMember("version"))
         {
             return false;
         }
-
-        uint32 block_version = data["version"].GetUint();
-
-        //here should be changed when new version released.
-        if(!version_compatible(block_version, ASKCOIN_VERSION))
-        {
-            CONSOLE_LOG_FATAL("block %lu version not compatible, block_version: %u, askcoin_version: %u", block_id, block_version, ASKCOIN_VERSION);
-
-            return false;
-        }
-        
+    
         if(!data.HasMember("zero_bits"))
         {
             return false;
         }
 
-        if(!data.HasMember("prev_hash"))
+        if(!data.HasMember("pre_hash"))
         {
             return false;
         }
-
+        
         if(!data.HasMember("miner"))
         {
             return false;
         }
 
-        if(!data.HasMember("tx"))
+        if(!data.HasMember("tx_ids"))
         {
             return false;
         }
 
-        if(!data.HasMember("nonce1"))
+        if(!data.HasMember("nonce"))
         {
             return false;
         }
         
-        if(!data.HasMember("nonce2"))
-        {
-            return false;
-        }
-        
-        if(!data.HasMember("nonce3"))
-        {
-            return false;
-        }
-        
-        if(!data.HasMember("nonce4"))
-        {
-            return false;
-        }
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        data.Accept(writer);
 
-        if(!data["nonce1"].IsUint64())
+        //base64 44 bytes length
+        if(block_hash.length() != 44)
         {
-            return false;
-        }
-
-        if(!data["nonce2"].IsUint64())
-        {
-            return false;
-        }
-
-        if(!data["nonce3"].IsUint64())
-        {
-            return false;
-        }
-
-        if(!data["nonce4"].IsUint64())
-        {
-            return false;
-        }
-
-        uint64 block_id_from_db = data["id"].GetUint64();
-        
-        if(block_id_from_db != block_id)
-        {
-            CONSOLE_LOG_FATAL("leveldb block id doesn't match, block_id: %lu, block_id_from_db: %lu", block_id, block_id_from_db);
+            CONSOLE_LOG_FATAL("parse block data from leveldb failed, hash: %s, hash length is not 44 bytes", child_block.m_hash.c_str());
             
             return false;
         }
 
-        if(block_id != prev_block_id + 1)
+        std::string data_str(buffer.GetString(), buffer.GetSize());
+        std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+        
+        if(block_hash != block_hash_verify)
         {
-            CONSOLE_LOG_FATAL("leveldb block id doesn't continuously, block_id: %lu, prev_block_id: %lu", block_id, prev_block_id);
-            
+            CONSOLE_LOG_FATAL("verify block data from leveldb failed, hash: %s, hash doesn't match", child_block.m_hash.c_str());
+
             return false;
         }
-        
+
+        std::string miner_pubkey = data["miner"].GetString();
+
+        if(!verify_sign(miner_pubkey, block_hash, block_sign))
+        {
+            CONSOLE_LOG_FATAL("verify block sign from leveldb failed, hash: %s", child_block.m_hash.c_str());
+
+            return false;
+        }
+
+        uint64 block_id = data["id"].GetUint64();
         uint32 utc = data["utc"].GetUint();
+        uint32 version = data["version"].GetUint();
         uint32 zero_bits = data["zero_bits"].GetUint();
+        std::string pre_hash = data["pre_hash"].GetString();
+        const rapidjson::Value &nonce = data["nonce"];
 
-        if(block_utc_diff < 8)
+        if(!version_compatible(version, ASKCOIN_VERSION))
         {
-            if(zero_bits != prev_zero_bits + 1)
+            CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                              child_block.m_hash.c_str(), version, ASKCOIN_VERSION);
+            return false;
+        }
+        
+        if(!nonce.IsArray())
+        {
+            return false;
+        }
+        
+        if(nonce.Size() != 4)
+        {
+            return false;
+        }
+        
+        for(uint32 i = 0; i < 4; ++i)
+        {
+            if(!nonce[i].IsUint64())
             {
                 return false;
             }
         }
-        else if(block_utc_diff > 17)
+        
+        std::shared_ptr<Block> parent = child_block.m_parent;
+        uint64 parent_block_id = parent->id();
+        uint32 parent_utc = parent->utc();
+        std::string parent_hash = parent->hash();
+        uint32 parent_zero_bits = parent->zero_bits();
+        uint32 utc_diff = parent->utc_diff();
+        
+        if(block_id != parent_block_id + 1)
         {
-            if(prev_zero_bits > 1)
-            {
-                if(zero_bits != prev_zero_bits - 1)
-                {
-                    return false;
-                }
-            }
-            else
-            {
-                if(zero_bits != 1)
-                {
-                    return false;
-                }
-            }
+            return false;
         }
-        else if(zero_bits != prev_zero_bits)
+
+        if(pre_hash != parent_hash)
         {
             return false;
         }
         
-        if(utc <= prev_utc)
+        if(utc_diff < 11)
+        {
+            if(zero_bits != parent_zero_bits + 1)
+            {
+                return false;
+            }
+        }
+        else if(utc_diff > 25)
+        {
+            if(parent_zero_bits >= 1)
+            {
+                if(zero_bits != parent_zero_bits - 1)
+                {
+                    return false;
+                }
+            }
+            else if(zero_bits != 0)
+            {
+                return false;
+            }
+        }
+        else if(zero_bits != parent_zero_bits)
         {
             return false;
         }
         
+        if(utc <= parent_utc)
+        {
+            return false;
+        }
+
         uint32 now = time(NULL);
         
         if(utc > now + 2)
         {
-            CONSOLE_LOG_FATAL("check leveldb block %lu utc failed, please check your system time", block_id);
+            CONSOLE_LOG_FATAL("verify block utc from leveldb failed, hash: %s, please check your system time", child_block.m_hash.c_str(), block_id);
             
             return false;
         }
         
-        block_utc_diff = utc - prev_utc;
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-        data.Accept(writer);
-    
-        //base64 44 bytes length
-        if(block_hash.length() != 44)
+        if(!verify_hash(block_hash, data_str, zero_bits))
         {
-            CONSOLE_LOG_FATAL("parse leveldb block %lu failed, hash length is not 44 bytes", block_id);
-            
+            CONSOLE_LOG_FATAL("verify block hash and zero_bits failed, hash: %s", child_block.m_hash.c_str());
+
             return false;
         }
         
-        std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-    
-        if(block_hash != block_hash_verify)
+        std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
+        cur_block->set_parent(parent);
+        parent->add_my_difficulty_to(cur_block);
+        
+        if(m_blocks.find(block_hash) != m_blocks.end())
         {
-            CONSOLE_LOG_FATAL("verify leveldb block %lu failed, hash doesn't match", block_id);
-
             return false;
         }
 
-        std::string prev_hash = data["prev_hash"].GetString();
-
-        if(prev_hash != prev_block_hash)
-        {
-            CONSOLE_LOG_FATAL("verify leveldb block %lu failed, prev_hash doesn't match", block_id);
-
-            return false;
-        }
-
-        uint64 miner_id = data["miner"].GetUint64();
-
-        if(miner_id == 0) // reserve_fund_account can't be miner !!!
+        m_blocks.insert(std::make_pair(block_hash, cur_block));
+        const rapidjson::Value &children = doc["children"];
+        
+        if(!children.IsArray())
         {
             return false;
         }
         
-        std::shared_ptr<Account> miner;
-        
-        if(!get_account(miner_id, miner))
+        for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
         {
-            return false;
+            Child_Block child_block(cur_block, iter->GetString());
+            block_queue.push(child_block);
         }
         
-        char block_raw_hash[32];
-        uint32 len = fly::base::base64_decode(block_hash.c_str(), block_hash.size(), block_raw_hash, 32);
-        
-        if(len != 32)
+        if(cur_block->difficult_than(the_most_difficult_block))
         {
-            return false;
+            the_most_difficult_block = cur_block;
         }
         
-        if(!hash_pow(block_raw_hash, zero_bits))
-        {
-            return false;
-        }
-        
-        if(!verify_sign(miner->pubkey(), block_hash, block_sign))
-        {
-            CONSOLE_LOG_FATAL("verify block %lu hash sign from leveldb failed", block_id);
-            
-            return false;
-        }
-
-        const rapidjson::Value &tx = data["tx"];
-
-        if(!tx.IsArray())
-        {
-            return false;
-        }
-        
-        prev_block_id = block_id;
-        prev_block_hash = block_hash;
-        prev_utc = utc;
-        prev_zero_bits = zero_bits;
+        block_queue.pop();
     }
     
-    CONSOLE_LOG_INFO("load block from leveldb finished, last block: %lu", block_id);
-    m_cur_db_block_id = block_id;
-    m_cur_db_block_hash = block_hash;
+    // std::string val;
+    // s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
+    // if(!s.ok())
+    // {
+    //     CONSOLE_LOG_INFO("get bliiock22_count error");
+
+    // }
     
-    //s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
-    //s = db->Get(leveldb::ReadOptions(), "block_count", &val);
-    //s = db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
+    // //s = db->Get(leveldb::ReadOptions(), "block_count", &val);
+
+    
+    // s = db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
+
+    // if(!s.ok())
+    // {
+    //     CONSOLE_LOG_INFO("delete block_couniiwwwwwwwwwwwwt error");
+    //     return false;
+    // }
+
+    // CONSOLE_LOG_INFO("delete key not exist success");
+    
         
     // CKey key;
     // key.MakeNewKey(false);
@@ -768,7 +807,7 @@ bool Blockchain::load(std::string db_path)
     
     // if(!fly::base::sha256(tdata.c_str(), tdata.length(), buf, CryptoPP::SHA256::DIGESTSIZE))
     // {
-    //     CONSOLE_LOG_FATAL("fly sha256 failed!");
+    //     CONSOLE_LOG_FATAL("fly sha256 failed");
     // }
 
     // char s256[CSHA256::OUTPUT_SIZE] = {0};
