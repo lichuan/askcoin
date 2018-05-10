@@ -16,6 +16,28 @@
 
 Blockchain::Blockchain()
 {
+    m_b64_table.fill(0);
+
+    for(char i = 'a'; i <= 'z'; ++i)
+    {
+        m_b64_table[i] = 64;
+    }
+    
+    for(char i = 'A'; i <= 'Z'; ++i)
+    {
+        m_b64_table[i] = 64;
+    }
+
+    for(char i = '0'; i <= '9'; ++i)
+    {
+        m_b64_table[i] = 64;
+    }
+    
+    m_b64_table['+'] = 64;
+    m_b64_table['/'] = 64;
+    m_b64_table['='] = 64;
+    m_cur_block_id = 0;
+    m_cur_account_id = 0;
 }
 
 Blockchain::~Blockchain()
@@ -99,18 +121,18 @@ bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
 bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits)
 {
     char hash_raw[32];
-    uint32 len = fly::base::base64_decode(block_hash.c_str(), block_hash.size(), hash_raw, 32);
+    uint32 len = fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
 
     if(len != 32)
     {
         return false;
     }
-
+    
     uint32 buf[16] = {0};
     char *p = (char*)buf;
-    coin_hash(block_data.c_str(), block_data.size(), p);
+    coin_hash(block_data.c_str(), block_data.length(), p);
     block_data += "another_32_bytes";
-    coin_hash(block_data.c_str(), block_data.size(), p + 32);
+    coin_hash(block_data.c_str(), block_data.length(), p + 32);
     uint32 arr_16[16] = {0};
 
     for(uint32 i = 0; i < 16; ++i)
@@ -134,7 +156,7 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     }
 
     std::string hash_data = block_data + fly::base::base64_encode(p, 64);
-    std::string block_hash_verify = coin_hash_b64(hash_data.c_str(), hash_data.size());
+    std::string block_hash_verify = coin_hash_b64(hash_data.c_str(), hash_data.length());
 
     if(block_hash != block_hash_verify)
     {
@@ -147,9 +169,9 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
 std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
 {
     char privk[32];
-    fly::base::base64_decode(privk_b64.c_str(), privk_b64.size(), privk, 32);
+    fly::base::base64_decode(privk_b64.c_str(), privk_b64.length(), privk, 32);
     char hash[32];
-    fly::base::base64_decode(hash_b64.c_str(), hash_b64.size(), hash, 32);
+    fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
     CKey ck;
     ck.Set(privk, privk + 32, false);
     std::vector<unsigned char> sign_vec;
@@ -167,22 +189,42 @@ std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
 bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64)
 {
     char sign[80];
-    uint32 len_sign = fly::base::base64_decode(sign_b64.c_str(), sign_b64.size(), sign, 80);
+    uint32 len_sign = fly::base::base64_decode(sign_b64.c_str(), sign_b64.length(), sign, 80);
     char hash[32];
-    fly::base::base64_decode(hash_b64.c_str(), hash_b64.size(), hash, 32);
+    fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
     CPubKey cpk;
     char pubk[65];
-    fly::base::base64_decode(pubk_b64.c_str(), pubk_b64.size(), pubk, 65);
+    fly::base::base64_decode(pubk_b64.c_str(), pubk_b64.length(), pubk, 65);
     cpk.Set(pubk, pubk + 65);
 
     return cpk.Verify(uint256(std::vector<unsigned char>(hash, hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
 }
 
-bool Blockchain::get_account(uint64 id, std::shared_ptr<Account> &account)
+bool Blockchain::is_base64_char(std::string b64)
 {
-    auto iter = m_account_by_id.find(id);
+    if(b64.empty())
+    {
+        return false;
+    }
 
-    if(iter == m_account_by_id.end())
+    for(uint32 i = 0; i < b64.length(); ++i)
+    {
+        unsigned char c = b64[i];
+        
+        if(m_b64_table[c] != 64)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool Blockchain::get_account(std::string pubkey, std::shared_ptr<Account> &account)
+{
+    auto iter = m_account_by_pubkey.find(pubkey);
+
+    if(iter == m_account_by_pubkey.end())
     {
         return false;
     }
@@ -190,6 +232,11 @@ bool Blockchain::get_account(uint64 id, std::shared_ptr<Account> &account)
     account = iter->second;
 
     return true;
+}
+
+bool Blockchain::account_name_exist(std::string name)
+{
+    return m_account_names.find(name) != m_account_names.end();
 }
 
 bool Blockchain::load(std::string db_path)
@@ -266,13 +313,8 @@ bool Blockchain::load(std::string db_path)
         
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
         std::string sign_b64 = "MEQCIAtl9A36GVH3/JEKywWnb1qL14o+Hto7qyIt67rGyBbwAiAiZKzMQfPe+juW8sz48P1SFN4Vt0QrYO9qzv+qCY4Uow==";
-        
         // sign_b64 = sign("", genesis_block_hash);
-        // if(sign_b64.empty())
-        // {
-        //     return false;
-        // }
-
+        
         doc.AddMember("hash", rapidjson::StringRef(genesis_block_hash.c_str()), allocator);
         doc.AddMember("sign", rapidjson::StringRef(sign_b64.c_str()), allocator);
         
@@ -280,7 +322,7 @@ bool Blockchain::load(std::string db_path)
         rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
         doc.Accept(writer_2);
         s = db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
-
+        
         if(!s.ok())
         {
             return false;
@@ -296,7 +338,7 @@ bool Blockchain::load(std::string db_path)
     }
     
     const char *block_0_str = block_0.c_str();
-    CONSOLE_LOG_INFO("block0: %s", block_0_str);
+    CONSOLE_LOG_INFO("genesis block: %s", block_0_str);
     rapidjson::Document doc;
     doc.Parse(block_0_str);
     
@@ -335,6 +377,11 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
 
+    if(!is_base64_char(block_sign))
+    {
+        return false;
+    }
+    
     const rapidjson::Value &data = doc["data"];
     
     if(!data.HasMember("id"))
@@ -413,20 +460,19 @@ bool Blockchain::load(std::string db_path)
         return false;
     }
     
-    std::string account_b64 = fly::base::base64_encode(account.data(), account.size());
+    std::string account_b64 = fly::base::base64_encode(account.data(), account.length());
     std::string reserve_fund = "reserve_fund";
-    std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.size());
+    std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
     uint64 reserve_fund_account_id = 0;
-    std::shared_ptr<Account> reserve_fund_account(new Account(reserve_fund_account_id, reserve_fund_b64, "", 1));
+    std::shared_ptr<Account> reserve_fund_account(new Account(reserve_fund_account_id, reserve_fund_b64, "", 0));
     uint64 author_account_id = 1;
-    std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 1));
+    m_cur_account_id = 1;
+    std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 0));
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
     uint64 total = (uint64)1000000000000000000;
     author_account->set_balance(total / 2);
     reserve_fund_account->set_balance(total / 2);
-    m_account_by_id.insert(std::make_pair(0, reserve_fund_account));
-    m_account_by_id.insert(std::make_pair(1, author_account));
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
@@ -538,6 +584,17 @@ bool Blockchain::load(std::string db_path)
     
         std::string block_hash = doc["hash"].GetString();
         std::string block_sign = doc["sign"].GetString();
+
+        if(!is_base64_char(block_hash))
+        {
+            return false;
+        }
+
+        if(!is_base64_char(block_sign))
+        {
+            return false;
+        }
+        
         const rapidjson::Value &data = doc["data"];
     
         if(!data.HasMember("id"))
@@ -575,6 +632,13 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
 
+        const rapidjson::Value &tx_ids = data["tx_ids"];
+
+        if(!tx_ids.IsArray())
+        {
+            return false;
+        }
+        
         if(!data.HasMember("nonce"))
         {
             return false;
@@ -604,6 +668,16 @@ bool Blockchain::load(std::string db_path)
 
         std::string miner_pubkey = data["miner"].GetString();
 
+        if(miner_pubkey.length() != 88)
+        {
+            return false;
+        }
+
+        if(!is_base64_char(miner_pubkey))
+        {
+            return false;
+        }
+        
         if(!verify_sign(miner_pubkey, block_hash, block_sign))
         {
             CONSOLE_LOG_FATAL("verify block sign from leveldb failed, hash: %s", child_block.m_hash.c_str());
@@ -660,23 +734,23 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
         
-        if(utc_diff < 11)
+        if(utc_diff < 15)
         {
             if(zero_bits != parent_zero_bits + 1)
             {
                 return false;
             }
         }
-        else if(utc_diff > 25)
+        else if(utc_diff > 35)
         {
-            if(parent_zero_bits >= 1)
+            if(parent_zero_bits > 1)
             {
                 if(zero_bits != parent_zero_bits - 1)
                 {
                     return false;
                 }
             }
-            else if(zero_bits != 0)
+            else if(zero_bits != 1)
             {
                 return false;
             }
@@ -729,6 +803,11 @@ bool Blockchain::load(std::string db_path)
             Child_Block child_block(cur_block, iter->GetString());
             block_queue.push(child_block);
         }
+
+        for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
+        {
+            cur_block->m_tx_ids.push_back(iter->GetString());
+        }
         
         if(cur_block->difficult_than(the_most_difficult_block))
         {
@@ -737,6 +816,323 @@ bool Blockchain::load(std::string db_path)
         
         block_queue.pop();
     }
+    
+    std::deque<std::shared_ptr<Block>> block_chain;
+    std::shared_ptr<Block> iter_block = the_most_difficult_block;
+    m_cur_block_id = the_most_difficult_block->id();
+    
+    while(iter_block->id() != 0)
+    {
+        block_chain.push_front(iter_block);
+        iter_block = iter_block->get_parent();
+    }
+    
+    // now, load tx in every block in order
+    while(!block_chain.empty())
+    {
+        iter_block = block_chain.front();
+        uint64 cur_block_id = iter_block->id();
+        const std::vector<std::string> &tx_ids = iter_block->m_tx_ids;
+        
+        for(auto &tx_id : tx_ids)
+        {
+            std::string tx_data;
+            s = db->Get(leveldb::ReadOptions(), tx_id, &tx_data);
+
+            if(!s.ok())
+            {
+                CONSOLE_LOG_FATAL("read tx data from leveldb failed, tx_id: %s", tx_id.c_str());
+                
+                return false;
+            }
+            
+            // todo? max tx size?
+            const uint32 MAX_TX_SIZE_IN_LEVELDB = 500;
+            
+            if(tx_data.length() > MAX_TX_SIZE_IN_LEVELDB)
+            {
+                return false;
+            }
+
+            rapidjson::Document doc;
+            const char *tx_data_str = tx_data.c_str();
+            doc.Parse(tx_data_str);
+        
+            if(doc.HasParseError())
+            {
+                CONSOLE_LOG_FATAL("parse tx data from leveldb failed, data: %s, tx_id: %s, reason: %s", tx_data_str, tx_id.c_str(), \
+                                  GetParseError_En(doc.GetParseError()));
+                return false;
+            }
+            
+            if(!doc.HasMember("sign"))
+            {
+                return false;
+            }
+
+            if(!doc.HasMember("data"))
+            {
+                return false;
+            }
+
+            std::string tx_sign = doc["sign"].GetString();
+            const rapidjson::Value &data = doc["data"];
+
+            if(!is_base64_char(tx_sign))
+            {
+                return false;
+            }
+            
+            if(!data.HasMember("pubkey"))
+            {
+                return false;
+            }
+
+            if(!data.HasMember("type"))
+            {
+                return false;
+            }
+            
+            if(!data.HasMember("utc"))
+            {
+                return false;
+            }
+
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            
+            //base64 44 bytes length
+            if(tx_id.length() != 44)
+            {
+                return false;
+            }
+
+            std::string data_str(buffer.GetString(), buffer.GetSize());
+            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+        
+            if(tx_id != tx_id_verify)
+            {
+                CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
+                
+                return false;
+            }
+
+            std::string pubkey = data["pubkey"].GetString();
+            
+            if(pubkey.length() != 88)
+            {
+                return false;
+            }
+
+            if(!is_base64_char(pubkey))
+            {
+                return false;
+            }
+            
+            if(!verify_sign(pubkey, tx_id, tx_sign))
+            {
+                CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
+                
+                return false;
+            }
+            
+            uint32 tx_type = data["type"].GetUint();
+            
+            // register account
+            if(tx_type == 1)
+            {
+                std::shared_ptr<Account> account;
+                
+                if(get_account(pubkey, account))
+                {
+                    return false;
+                }
+                
+                if(!data.HasMember("avatar"))
+                {
+                    return false;
+                }
+                
+                if(!data.HasMember("sign"))
+                {
+                    return false;
+                }
+                
+                if(!data.HasMember("sign_data"))
+                {
+                    return false;
+                }
+
+                std::string reg_sign = data["sign"].GetString();
+
+                if(!is_base64_char(reg_sign))
+                {
+                    return false;
+                }
+                
+                const rapidjson::Value &sign_data = data["sign_data"];
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                sign_data.Accept(writer);
+                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                
+                if(!sign_data.HasMember("block_id"))
+                {
+                    return false;
+                }
+
+                if(!sign_data.HasMember("name"))
+                {
+                    return false;
+                }
+
+                if(!sign_data.HasMember("referrer"))
+                {
+                    return false;
+                }
+
+                if(!sign_data.HasMember("fee"))
+                {
+                    return false;
+                }
+
+                uint64 block_id = sign_data["block_id"].GetUint64();
+                std::string register_name = sign_data["name"].GetString();
+                std::string referrer_pubkey = sign_data["referrer"].GetString();
+                uint64 fee = sign_data["fee"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    return false;
+                }
+                
+                if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
+                {
+                    return false;
+                }
+
+                if(fee == 0)
+                {
+                    return false;
+                }
+
+                if(referrer_pubkey.length() != 88)
+                {
+                    return false;
+                }
+
+                if(!is_base64_char(referrer_pubkey))
+                {
+                    return false;
+                }
+                
+                std::shared_ptr<Account> referrer_account;
+                
+                if(!get_account(referrer_pubkey, referrer_account))
+                {
+                    return false;
+                }
+                
+                if(referrer_account->get_balance() < fee)
+                {
+                    return false;
+                }
+                
+                if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
+                {
+                    return false;
+                }
+
+                referrer_account->sub_balance(fee);
+
+                if(register_name.length() > 20 || register_name.empty())
+                {
+                    return false;
+                }
+
+                if(!is_base64_char(register_name))
+                {
+                    return false;
+                }
+
+                if(account_name_exist(register_name))
+                {
+                    return false;
+                }
+                
+                char raw_name[15] = {0};
+                uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
+                
+                if(len > 15 || len == 0)
+                {
+                    return false;
+                }
+                
+                for(uint32 i = 0; i < len; ++i)
+                {
+                    if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+                    {
+                        return false;
+                    }
+                }
+                
+                uint32 avatar = data["avatar"].GetUint();
+                
+                if(avatar >= 8)
+                {
+                    return false;
+                }
+                
+                std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
+                m_account_names.insert(register_name);
+                m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+            }
+            else
+            {
+                if(!data.HasMember("fee"))
+                {
+                    return false;
+                }
+
+                if(!data.HasMember("block_id"))
+                {
+                    return false;
+                }
+
+                uint64 block_id = data["block_id"].GetUint64();
+
+                if(block_id == 0)
+                {
+                    return false;
+                }
+
+                if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
+                {
+                    return false;
+                }
+                
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    return false;
+                }
+                
+                if(tx_type == 2)
+                {
+                }
+                else if(tx_type == 3)
+                {
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+    }
+    
     
     // std::string val;
     // s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
@@ -770,7 +1166,7 @@ bool Blockchain::load(std::string db_path)
 
     // std::string k1 = "fHIT5NNDgMCYC4Yyieu+NOGRaxG8MMX9qAzchPPZ8lc";
     // char privk[32];
-    // fly::base::base64_decode(k1.c_str(), k1.size(), privk, 32);
+    // fly::base::base64_decode(k1.c_str(), k1.length(), privk, 32);
     // CKey ck1;
     // ck1.Set(privk, privk + 32, false);
     // CPubKey pubk1 = ck1.GetPubKey();
@@ -811,7 +1207,7 @@ bool Blockchain::load(std::string db_path)
     // }
 
     // char s256[CSHA256::OUTPUT_SIZE] = {0};
-    // CSHA256().Write(tdata.c_str(), tdata.size()).Finalize(s256);
+    // CSHA256().Write(tdata.c_str(), tdata.length()).Finalize(s256);
     // std::string s256_hex = fly::base::byte2hexstr(s256, CSHA256::OUTPUT_SIZE);
         
     // std::string hex256_fly = fly::base::byte2hexstr(buf, CryptoPP::SHA256::DIGESTSIZE);

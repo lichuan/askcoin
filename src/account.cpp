@@ -24,6 +24,11 @@ void Account::add_balance(uint64 value)
     m_balance += value;
 }
 
+void Account::sub_balance(uint64 value)
+{
+    m_balance -= value;
+}
+
 void Account::set_balance(uint64 value)
 {
     m_balance = value;

@@ -15,20 +15,6 @@
       "avatar": 1,
       "pubkey": "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM="
     },
-    "const_param": {
-      "total": 1000000000000000000,
-      "decimal": 8,
-      "block_interval": 15,
-      "topic_lifetime": 60000,
-      "tx_lifetime": 100,
-      "referrer_reward": 50,
-      "reserve_fund_account": "reserve_fund",
-      "account_max_length": 15,
-      "topic_max_length": 200,
-      "reply_max_length": 300,
-      "memo_max_length": 100,
-      "tx_max_one_block": 1500
-    },
     "author": {
       "name": "Chuan Li",
       "country": "China",
@@ -58,10 +44,7 @@
       "e22",
       "2232323"
     ],
-    "nonce1": 8298392839283293892,
-    "nonce2": 0,
-    "nonce3": 0,
-    "nonce4": 0
+    "nonce": [8298392839283293892,0,0,0]
   },
   "tx": [
     {
@@ -69,13 +52,13 @@
       "sign": "oijowwwwwwwww",
       "data": {
         "type": 2,
+        "pubkey":"efweffwf",
         "utc": 2989883883,
-        "version": 1000,
-        "live_block": 339,
-        "sender": "234432",
+        "block_id": 339,
+        "fee":92832,
         "amount": 100000000000000,
         "memo": "this is my memo msg",
-        "receiver": "2222"
+        "receiver": "pubkey..."
       }
     },
     {
@@ -83,40 +66,32 @@
       "sign": "oijowwwwwwwww",
       "data": {
         "type": 2,
+        "pubkey":"efweffwf",
         "utc": 2989883883,
-        "version": 1000,
-        "live_block": 339,
-        "sender": "234432",
+        "block_id": 339,
         "amount": 100000000000000,
+        "fee":22232323,
         "memo": "this is my memo msg",
-        "receiver": "99998"
+        "receiver": "pubkey..."
       }
     }
-  ],
-  "topic": {
-    "hash1": "data1...................",
-    "hash2": "data2.............data2"
-  },
-  "reply": {
-    "hash1": "reply111111111111111111",
-    "hash2": "reply222............."
-  }
+  ]
 }
 
 //tx register account
 {
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
     "sign":"oijowwwwwwwww",
-    "pubkey":"eeeeeeeeeee",
     "data":{
+        "pubkey":"eeeeeeeeeee",
         "type":1,
         "utc":9988888,
         "avatar":22,
         "sign":"awfwewewdffff",
         "sign_data": {
-            "live_block": 332,
+            "block_id":9283,
             "name":"b64(iijjjj中文)",
-            "referrer":"8777",
+            "referrer":"pubkey.......",
+            "fee":100000000
         }
     }
 }
@@ -128,38 +103,11 @@
     "data":{
         "type":2,
         "utc": 2989883883,
-        "live_block": 339,
-        "sender":"234432",
+        "block_id": 339,
+        "fee":2000022,
         "amount": 100000000000000,
         "memo":"this is my memo msg",
-        "receiver":"lcabcdefg"
-    }
-}
-
-//tx commit proposal
-{
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
-    "sign":"oijowwwwwwwww",
-    "data":{
-        "type":3,
-        "proposal_type":1,
-        "utc":9988888,
-        "live_block": 339,
-        "sender":"999222",
-        "value": 1000000000
-    }
-}
-
-//tx vote proposal
-{
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
-    "sign":"oijowwwwwwwww",
-    "data":{
-        "type":4,
-        "utc":9988888,
-        "live_block": 339,
-        "sender":"922233",
-        "proposal_hash":"fffffffffffff"
+        "receiver":"pubkey........"
     }
 }
 
@@ -169,9 +117,9 @@
     "sign":"oijowwwwwwwww",
     "data":{
         "type":5,
+        "pubkey":"oikkkkkkkkkk",
         "utc":9988888,
-        "live_block": 339,
-        "sender":"882223334",
+        "block_id": 339,
         "topic_hash":"abceffabbbb323233232323"
     },
     "topic":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -183,9 +131,9 @@
     "sign":"oijowwwwwwwww",
     "data":{
         "type":6,
+        "pubkey":"eeeeeeeeee",
         "utc":9988888,
-        "live_block": 339,
-        "sender":"123423",
+        "block_id": 339,
         "topic_hash":"lllllllllllllllllllllllllllllllll",
         "reply_hash":"abceffabbbb323233232323"
     },
@@ -199,8 +147,8 @@
     "data":{
         "type":7,
         "utc":9988888,
-        "live_block": 339,
-        "sender":"56777",
+        "pubkey":"2fwfewefef",
+        "block_id": 339,
         "topic_hash":"lllllllllllllllllllllllllllllllll",
         "reply_hash":"abceffabbbb323233232323"
     },

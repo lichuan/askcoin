@@ -62,6 +62,11 @@ void Block::set_parent(std::shared_ptr<Block> parent)
     m_utc_diff = m_utc - parent->m_utc;
 }
 
+std::shared_ptr<Block> Block::get_parent()
+{
+    return m_parent;
+}
+
 void Block::add_child(std::shared_ptr<Block> child)
 {
     m_children.push_back(child);

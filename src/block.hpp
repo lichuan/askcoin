@@ -16,10 +16,12 @@ public:
     uint32 zero_bits();
     uint32 utc_diff();
     void set_parent(std::shared_ptr<Block> parent);
+    std::shared_ptr<Block> get_parent();
     void add_child(std::shared_ptr<Block> child);
     bool difficult_than(std::shared_ptr<Block> other);
     void add_my_difficulty_to(std::shared_ptr<Block> other);
-
+    std::vector<std::string> m_tx_ids;
+    
 private:
     uint64 m_id;
     uint32 m_utc;

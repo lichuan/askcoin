@@ -13,6 +13,7 @@ public:
     std::string pubkey();
     void set_balance(uint64 value);
     void add_balance(uint64 value);
+    void sub_balance(uint64 value);
     uint64 get_balance();
     void add_history(History *history);
 
@@ -22,7 +23,7 @@ private:
     uint64 m_id;
     std::string m_pubkey;
     uint64 m_balance;
-    uint64 m_referrer;
+    std::string m_referrer;
     uint32 m_avatar;
 };
 
