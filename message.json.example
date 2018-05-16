@@ -3,79 +3,79 @@
 
 //genesis block
 {
-  "data": {
-    "id": 0,
-    "utc": 1518926400,
-    "version": 10000,
-    "zero_bits": 0,
-    "intro": "This coin is a gift for those who love freedom.",
-    "init_account": {
-      "account": "lichuan",
-      "id": 1,
-      "avatar": 1,
-      "pubkey": "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM="
+    "data": {
+        "id": 0,
+        "utc": 1518926400,
+        "version": 10000,
+        "zero_bits": 0,
+        "intro": "This coin is a gift for those who love freedom.",
+        "init_account": {
+            "account": "lichuan",
+            "id": 1,
+            "avatar": 1,
+            "pubkey": "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM="
+        },
+        "author": {
+            "name": "Chuan Li",
+            "country": "China",
+            "github": "https://github.com/lichuan",
+            "mail": "308831759@qq.com",
+            "belief": "In the beginning, God created the heavens and the earth."
+        }
     },
-    "author": {
-      "name": "Chuan Li",
-      "country": "China",
-      "github": "https://github.com/lichuan",
-      "mail": "308831759@qq.com",
-      "belief": "In the beginning, God created the heavens and the earth."
-    }
-  },
-  "children": [
-    
-  ]
+    "children": [
+        
+    ]
 }
 
 //other block
 {
-  "hash": "002fbcdefgaa99232bcd",
-  "sign": "wewoeisign.fdfdsfd",
-  "data": {
-    "id": 1,
-    "utc": 2938293,
-    "version": 1000,
-    "zero_bits": 25,
-    "pre_hash": "eeewfwefwf",
-    "miner": "22223",
-    "tx_ids": [
-      "wfe",
-      "e22",
-      "2232323"
-    ],
-    "nonce": [8298392839283293892,0,0,0]
-  },
-  "tx": [
-    {
-      "hash": "woiiiiiiiiiiiiiiiiiwfe",
-      "sign": "oijowwwwwwwww",
-      "data": {
-        "type": 2,
-        "pubkey":"efweffwf",
-        "utc": 2989883883,
-        "block_id": 339,
-        "fee":92832,
-        "amount": 100000000000000,
-        "memo": "this is my memo msg",
-        "receiver": "pubkey..."
-      }
+    "hash": "002fbcdefgaa99232bcd",
+    "sign": "wewoeisign.fdfdsfd",
+    "data": {
+        "id": 1,
+        "utc": 2938293,
+        "version": 1000,
+        "zero_bits": 25,
+        "pre_hash": "eeewfwefwf",
+        "miner": "22223",
+        "tx_ids": [
+            "wfe",
+            "e22",
+            "2232323"
+        ],
+        "nonce": [8298392839283293892,0,0,0]
     },
-    {
-      "hash": "woiiiiiiiiiiiiiiiiiwfe",
-      "sign": "oijowwwwwwwww",
-      "data": {
-        "type": 2,
-        "pubkey":"efweffwf",
-        "utc": 2989883883,
-        "block_id": 339,
-        "amount": 100000000000000,
-        "fee":22232323,
-        "memo": "this is my memo msg",
-        "receiver": "pubkey..."
-      }
-    }
-  ]
+    "tx": [
+        {
+            "hash": "woiiiiiiiiiiiiiiiiiwfe",
+            "sign": "oijowwwwwwwww",
+            "data": {
+                "type": 2,
+                "pubkey":"efweffwf",
+                "utc": 2989883883,
+                "block_id": 339,
+                "fee":92832,
+                "amount": 100000000000000,
+                "memo": "this is my memo msg",
+                "receiver": "pubkey..."
+            }
+        },
+        {
+            "hash": "woiiiiiiiiiiiiiiiiiwfe",
+            "sign": "oijowwwwwwwww",
+            "data": {
+                "type": 2,
+                "pubkey":"efweffwf",
+                "utc": 2989883883,
+                "block_id": 339,
+                "amount": 100000000000000,
+                "fee":22232323,
+                "memo": "this is my memo msg",
+                "receiver": "pubkey..."
+            }
+        }
+    ]
 }
 
 //tx register account
@@ -98,14 +98,13 @@
 
 //tx sendcoin
 {
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
     "sign":"oijowwwwwwwww",
     "data":{
         "type":2,
         "utc": 2989883883,
         "block_id": 339,
         "fee":2000022,
-        "amount": 100000000000000,
+        "amount": 10000000,
         "memo":"this is my memo msg",
         "receiver":"pubkey........"
     }
@@ -119,10 +118,11 @@
         "type":5,
         "pubkey":"oikkkkkkkkkk",
         "utc":9988888,
+        "fee":2222,
+        "reward":9999,
         "block_id": 339,
-        "topic_hash":"abceffabbbb323233232323"
-    },
-    "topic":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "topic":"abceffabbbb323233232323"
+    }
 }
 
 //tx topic reply
@@ -133,11 +133,12 @@
         "type":6,
         "pubkey":"eeeeeeeeee",
         "utc":9988888,
+        "fee":332,
         "block_id": 339,
-        "topic_hash":"lllllllllllllllllllllllllllllllll",
-        "reply_hash":"abceffabbbb323233232323"
-    },
-    "reply":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "topic_key":"lllllllllllllllllllllllllllllllll",
+        "reply":"abceffabbbb323233232323",
+        "reply_to":"to key..."
+    }
 }
 
 //tx give reward
@@ -148,9 +149,10 @@
         "type":7,
         "utc":9988888,
         "pubkey":"2fwfewefef",
+        "fee":98,
         "block_id": 339,
-        "topic_hash":"lllllllllllllllllllllllllllllllll",
-        "reply_hash":"abceffabbbb323233232323"
-    },
-    "reply":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        "topic_key":"lllllllllllllllllllllllllllllllll",
+        "reply_to":"ooooooooooiwiieiweo",
+        "amount":9222
+    }
 }

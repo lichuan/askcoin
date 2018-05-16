@@ -34,6 +34,16 @@ void Account::set_balance(uint64 value)
     m_balance = value;
 }
 
+uint64 Account::id()
+{
+    return m_id;
+}
+
+std::string Account::name()
+{
+    return m_name;
+}
+
 void Account::add_history(History *history)
 {
     m_history.push_back(history);
@@ -42,4 +52,27 @@ void Account::add_history(History *history)
 std::string Account::pubkey()
 {
     return m_pubkey;
+}
+
+void Account::set_referrer(std::shared_ptr<Account> account)
+{
+    m_referrer = account;
+}
+
+std::shared_ptr<Account> Account::get_referrer()
+{
+    return m_referrer;
+}
+
+bool Account::join_topic(std::shared_ptr<Topic> topic)
+{
+    for(auto t : m_joined_topic_list)
+    {
+        if(t == topic)
+        {
+            return false;
+        }
+    }
+
+    m_joined_topic_list.push_back(topic);
 }

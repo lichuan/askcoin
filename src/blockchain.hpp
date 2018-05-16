@@ -24,6 +24,8 @@ public:
     bool hash_pow(char hash_arr[32], uint32 zero_bits);
     bool is_base64_char(std::string b64);
     bool account_name_exist(std::string name);
+    bool get_topic(std::string key, std::shared_ptr<Topic> &topic);
+    bool check_topic_expired(uint64 cur_block_id);
     
 private:
     uint64 m_cur_block_id = 0;
@@ -31,7 +33,10 @@ private:
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
+    std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
+    std::list<std::shared_ptr<Topic>> m_topic_list;
     std::array<char, 255> m_b64_table;
+    std::shared_ptr<Account> m_reserve_fund_account;
 };
 
 #endif

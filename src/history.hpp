@@ -2,28 +2,15 @@
 #define HISTORY
 
 #include "fly/base/common.hpp"
-#include "transaction.hpp"
 
 class History
 {
 public:
-    enum TYPE
-    {
-        INVALID = 0,
-        VOTE_PARAMS = Transaction::VOTE_PARAMS,
-        BLOCK_REWARD = Transaction::BLOCK_REWARD,
-        REG_ACCOUNT = Transaction::REG_ACCOUNT,
-        SEND_COIN = Transaction::SEND_COIN,
-        RECV_COIN,
-        GENESIS_COIN,
-        MAX
-    };
-
-    History(TYPE type);
+    History(uint32 type);
     virtual ~History();
 
 protected:
-    TYPE m_type;
+    uint32 m_type;
     uint64 m_change;
     uint64 m_balance;
 };

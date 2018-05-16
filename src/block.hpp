@@ -2,6 +2,7 @@
 #define BLOCK
 
 #include <memory>
+#include "account.hpp"
 #include "accum_pow.hpp"
 
 class Block
@@ -20,6 +21,8 @@ public:
     void add_child(std::shared_ptr<Block> child);
     bool difficult_than(std::shared_ptr<Block> other);
     void add_my_difficulty_to(std::shared_ptr<Block> other);
+    void set_miner(std::shared_ptr<Account> miner);
+    std::shared_ptr<Account> get_miner();
     std::vector<std::string> m_tx_ids;
     
 private:
@@ -30,6 +33,7 @@ private:
     uint32 m_utc_diff;
     std::string m_hash;
     std::shared_ptr<Block> m_parent;
+    std::shared_ptr<Account> m_miner;
     std::vector<std::shared_ptr<Block>> m_children;
     Accum_Pow m_accum_pow;
 };

@@ -1,4 +1,3 @@
-#include <queue>
 #include <netinet/in.h>
 #include "leveldb/db.h"
 #include "leveldb/comparator.h"
@@ -239,6 +238,60 @@ bool Blockchain::account_name_exist(std::string name)
     return m_account_names.find(name) != m_account_names.end();
 }
 
+bool Blockchain::get_topic(std::string key, std::shared_ptr<Topic> &topic)
+{
+    auto iter = m_topics.find(key);
+
+    if(iter == m_topics.end())
+    {
+        return false;
+    }
+
+    topic = iter->second;
+
+    return true;
+}
+
+bool Blockchain::check_topic_expired(uint64 cur_block_id)
+{
+    while(!m_topic_list.empty())
+    {
+        std::shared_ptr<Topic> topic = m_topic_list.front();
+
+        if(topic->block_id() + 50000 <= cur_block_id)
+        {
+            m_topics.erase(topic->key());
+            std::shared_ptr<Account> owner = topic->get_owner();
+
+            if(!owner)
+            {
+                return false;
+            }
+
+            if(owner->m_topic_list.empty())
+            {
+                return false;
+            }
+
+            std::shared_ptr<Topic> topic_in_owner = owner->m_topic_list.front();
+
+            if(topic != topic_in_owner)
+            {
+                return false;
+            }
+            
+            owner->m_topic_list.pop_front();
+            m_topic_list.pop_front();
+        }
+        else
+        {
+            break;
+        }
+    }
+    
+    return true;
+}
+
 bool Blockchain::load(std::string db_path)
 {
     // firstly, we need verify __asic_resistant_data__
@@ -266,7 +319,7 @@ bool Blockchain::load(std::string db_path)
     }
     
     CONSOLE_LOG_INFO("verify __asic_resistant_data__ ok");
-
+    
     leveldb::DB *db;
     leveldb::Options options;
     // Key_Comp comp;
@@ -463,16 +516,14 @@ bool Blockchain::load(std::string db_path)
     std::string account_b64 = fly::base::base64_encode(account.data(), account.length());
     std::string reserve_fund = "reserve_fund";
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
-    uint64 reserve_fund_account_id = 0;
-    std::shared_ptr<Account> reserve_fund_account(new Account(reserve_fund_account_id, reserve_fund_b64, "", 0));
-    uint64 author_account_id = 1;
+    m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 0);
+    std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 0));
     m_cur_account_id = 1;
-    std::shared_ptr<Account> author_account(new Account(author_account_id, account_b64, pubkey, 0));
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
-    uint64 total = (uint64)1000000000000000000;
+    uint64 total = (uint64)1000000000000;
     author_account->set_balance(total / 2);
-    reserve_fund_account->set_balance(total / 2);
+    m_reserve_fund_account->set_balance(total / 2);
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
@@ -522,17 +573,17 @@ bool Blockchain::load(std::string db_path)
         }
     };
 
-    std::queue<Child_Block> block_queue;
+    std::list<Child_Block> block_list;
     
     for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
     {
         Child_Block child_block(genesis_block, iter->GetString());
-        block_queue.push(child_block);
+        block_list.push_back(child_block);
     }
     
-    while(!block_queue.empty())
+    while(!block_list.empty())
     {
-        const Child_Block &child_block = block_queue.front();
+        const Child_Block &child_block = block_list.front();
         std::string block_data;
         s = db->Get(leveldb::ReadOptions(), child_block.m_hash, &block_data);
 
@@ -540,14 +591,6 @@ bool Blockchain::load(std::string db_path)
         {
             CONSOLE_LOG_FATAL("read block data from leveldb failed, hash: %s", child_block.m_hash.c_str());
             
-            return false;
-        }
-        
-        // todo? 1500 tx size?, only txid so not 500?
-        const uint32 MAX_BLOCK_SIZE_IN_LEVELDB = 1500 * 44;
-
-        if(block_data.length() > MAX_BLOCK_SIZE_IN_LEVELDB)
-        {
             return false;
         }
         
@@ -638,6 +681,19 @@ bool Blockchain::load(std::string db_path)
         {
             return false;
         }
+
+        uint32 tx_num = tx_ids.Size();
+
+        if(tx_num > 2000)
+        {
+            return false;
+        }
+        
+        // todo
+        if(block_data.length() > 500 + tx_num * 44)
+        {
+            return false;
+        }
         
         if(!data.HasMember("nonce"))
         {
@@ -677,6 +733,13 @@ bool Blockchain::load(std::string db_path)
         {
             return false;
         }
+
+        std::shared_ptr<Account> miner_account;
+                
+        if(!get_account(miner_pubkey, miner_account))
+        {
+            return false;
+        }
         
         if(!verify_sign(miner_pubkey, block_hash, block_sign))
         {
@@ -684,7 +747,7 @@ bool Blockchain::load(std::string db_path)
 
             return false;
         }
-
+        
         uint64 block_id = data["id"].GetUint64();
         uint32 utc = data["utc"].GetUint();
         uint32 version = data["version"].GetUint();
@@ -783,13 +846,14 @@ bool Blockchain::load(std::string db_path)
         
         std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
         cur_block->set_parent(parent);
+        cur_block->set_miner(miner_account);
         parent->add_my_difficulty_to(cur_block);
         
         if(m_blocks.find(block_hash) != m_blocks.end())
         {
             return false;
         }
-
+        
         m_blocks.insert(std::make_pair(block_hash, cur_block));
         const rapidjson::Value &children = doc["children"];
         
@@ -801,7 +865,7 @@ bool Blockchain::load(std::string db_path)
         for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
         {
             Child_Block child_block(cur_block, iter->GetString());
-            block_queue.push(child_block);
+            block_list.push_back(child_block);
         }
 
         for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
@@ -814,10 +878,10 @@ bool Blockchain::load(std::string db_path)
             the_most_difficult_block = cur_block;
         }
         
-        block_queue.pop();
+        block_list.pop_front();
     }
     
-    std::deque<std::shared_ptr<Block>> block_chain;
+    std::list<std::shared_ptr<Block>> block_chain;
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block_id = the_most_difficult_block->id();
     
@@ -833,7 +897,18 @@ bool Blockchain::load(std::string db_path)
         iter_block = block_chain.front();
         uint64 cur_block_id = iter_block->id();
         const std::vector<std::string> &tx_ids = iter_block->m_tx_ids;
+        std::shared_ptr<Account> miner = iter_block->get_miner();
+
+        if(!miner)
+        {
+            return false;
+        }
         
+        if(!check_topic_expired(cur_block_id))
+        {
+            return false;
+        }
+
         for(auto &tx_id : tx_ids)
         {
             std::string tx_data;
@@ -846,14 +921,6 @@ bool Blockchain::load(std::string db_path)
                 return false;
             }
             
-            // todo? max tx size?
-            const uint32 MAX_TX_SIZE_IN_LEVELDB = 500;
-            
-            if(tx_data.length() > MAX_TX_SIZE_IN_LEVELDB)
-            {
-                return false;
-            }
-
             rapidjson::Document doc;
             const char *tx_data_str = tx_data.c_str();
             doc.Parse(tx_data_str);
@@ -929,7 +996,14 @@ bool Blockchain::load(std::string db_path)
             {
                 return false;
             }
+
+            std::shared_ptr<Account> account;
             
+            if(!get_account(pubkey, account))
+            {
+                return false;
+            }
+
             if(!verify_sign(pubkey, tx_id, tx_sign))
             {
                 CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
@@ -938,13 +1012,11 @@ bool Blockchain::load(std::string db_path)
             }
             
             uint32 tx_type = data["type"].GetUint();
-            
-            // register account
-            if(tx_type == 1)
+
+            if(tx_type == 1) // register account
             {
-                std::shared_ptr<Account> account;
-                
-                if(get_account(pubkey, account))
+                // todo
+                if(tx_data.length() > 500 + 74)
                 {
                     return false;
                 }
@@ -991,12 +1063,12 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
-
+                
                 if(!sign_data.HasMember("fee"))
                 {
                     return false;
                 }
-
+                
                 uint64 block_id = sign_data["block_id"].GetUint64();
                 std::string register_name = sign_data["name"].GetString();
                 std::string referrer_pubkey = sign_data["referrer"].GetString();
@@ -1012,7 +1084,7 @@ bool Blockchain::load(std::string db_path)
                     return false;
                 }
 
-                if(fee == 0)
+                if(fee != 2)
                 {
                     return false;
                 }
@@ -1021,20 +1093,20 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
-
+                
                 if(!is_base64_char(referrer_pubkey))
                 {
                     return false;
                 }
                 
-                std::shared_ptr<Account> referrer_account;
+                std::shared_ptr<Account> referrer;
                 
-                if(!get_account(referrer_pubkey, referrer_account))
+                if(!get_account(referrer_pubkey, referrer))
                 {
                     return false;
                 }
                 
-                if(referrer_account->get_balance() < fee)
+                if(referrer->get_balance() < 2)
                 {
                     return false;
                 }
@@ -1044,23 +1116,39 @@ bool Blockchain::load(std::string db_path)
                     return false;
                 }
 
-                referrer_account->sub_balance(fee);
+                std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                referrer->sub_balance(2);
+                miner->add_balance(1);
 
-                if(register_name.length() > 20 || register_name.empty())
+                if(!referrer_referrer)
                 {
-                    return false;
+                    if(referrer->id() > 1)
+                    {
+                        return false;
+                    }
+
+                    m_reserve_fund_account->add_balance(1);
+                }
+                else
+                {
+                    referrer_referrer->add_balance(1);
                 }
 
-                if(!is_base64_char(register_name))
-                {
-                    return false;
-                }
-
-                if(account_name_exist(register_name))
+                if(register_name.length() > 20 || register_name.length() < 4)
                 {
                     return false;
                 }
                 
+                if(!is_base64_char(register_name))
+                {
+                    return false;
+                }
+                
+                if(account_name_exist(register_name))
+                {
+                    return false;
+                }
+
                 char raw_name[15] = {0};
                 uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
                 
@@ -1087,6 +1175,7 @@ bool Blockchain::load(std::string db_path)
                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                reg_account->set_referrer(referrer);
             }
             else
             {
@@ -1094,14 +1183,15 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
-
+                
                 if(!data.HasMember("block_id"))
                 {
                     return false;
                 }
 
+                uint64 fee = data["fee"].GetUint64();
                 uint64 block_id = data["block_id"].GetUint64();
-
+                
                 if(block_id == 0)
                 {
                     return false;
@@ -1111,19 +1201,236 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
-                
-                std::shared_ptr<Account> account;
-                
-                if(!get_account(pubkey, account))
+
+                if(fee != 2)
+                {
+                    return false;
+                }
+
+                if(account->get_balance() < 2)
                 {
                     return false;
                 }
                 
-                if(tx_type == 2)
+                std::shared_ptr<Account> referrer = account->get_referrer();
+                account->sub_balance(2);
+                miner->add_balance(1);
+                
+                if(!referrer)
                 {
+                    if(account->id() > 1)
+                    {
+                        return false;
+                    }
+
+                    m_reserve_fund_account->add_balance(1);
                 }
-                else if(tx_type == 3)
+                else
                 {
+                    referrer->add_balance(1);
+                }
+                
+                if(tx_type == 2) // send coin
+                {
+                    // todo
+                    if(tx_data.length() > 500 + 74)
+                    {
+                        return false;
+                    }
+
+                    std::string memo = data["memo"].GetString();
+
+                    if(!memo.empty())
+                    {
+                        if(memo.length() > 80 || memo.length() < 4)
+                        {
+                            return false;
+                        }
+
+                        if(!is_base64_char(memo))
+                        {
+                            return false;
+                        }
+                    }
+                    
+                    uint64 amount = data["amount"].GetUint64();
+                    
+                    if(amount == 0)
+                    {
+                        return false;
+                    }
+                    
+                    if(account->get_balance() < amount)
+                    {
+                        return false;
+                    }
+                    
+                    std::string receiver_pubkey = data["receiver"].GetString();
+                    
+                    if(receiver_pubkey.length() != 88)
+                    {
+                        return false;
+                    }
+
+                    if(!is_base64_char(receiver_pubkey))
+                    {
+                        return false;
+                    }
+
+                    std::shared_ptr<Account> receiver;
+                    
+                    if(!get_account(receiver_pubkey, receiver))
+                    {
+                        return false;
+                    }
+
+                    account->sub_balance(amount);
+                    receiver->add_balance(amount);
+                }
+                else if(tx_type == 3) // new topic
+                {
+                    // todo
+                    if(tx_data.length() > 500 + 74)
+                    {
+                        return false;
+                    }
+
+                    if(!data.HasMember("reward"))
+                    {
+                        return false;
+                    }
+
+                    uint64 reward = data["reward"].GetUint64();
+
+                    if(reward == 0)
+                    {
+                        return false;
+                    }
+
+                    if(account->get_balance() < reward)
+                    {
+                        return false;
+                    }
+
+                    std::shared_ptr<Topic> exist_topic;
+
+                    if(get_topic(tx_id, exist_topic))
+                    {
+                        return false;
+                    }
+                    
+                    std::string topic_data = data["topic"].GetString();
+
+                    if(topic_data.length() < 4 || topic_data.length() > 240)
+                    {
+                        return false;
+                    }
+                    
+                    if(!is_base64_char(topic_data))
+                    {
+                        return false;
+                    }
+                    
+                    if(account->m_topic_list.size() >= 10000)
+                    {
+                        return false;
+                    }
+                    
+                    account->sub_balance(reward);
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                    topic->set_owner(account);
+                    account->m_topic_list.push_back(topic);
+                    m_topic_list.push_back(topic);
+                    m_topics.insert(std::make_pair(tx_id, topic));
+                }
+                else if(tx_type == 4) // reply
+                {
+                    // todo
+                    if(tx_data.length() > 500 + 74)
+                    {
+                        return false;
+                    }
+                    
+                    std::string topic_key = data["topic_key"].GetString();
+                    
+                    if(topic_key.length() != 44)
+                    {
+                        return false;
+                    }
+
+                    if(!is_base64_char(topic_key))
+                    {
+                        return false;
+                    }
+                    
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(!get_topic(topic_key, topic))
+                    {
+                        return false;
+                    }
+
+                    std::shared_ptr<Reply> exist_reply;
+
+                    if(topic->get_reply(tx_id, exist_reply))
+                    {
+                        return false;
+                    }
+
+                    std::string reply_data = data["reply"].GetString();
+
+                    if(reply_data.length() < 4 || reply_data.length() > 240)
+                    {
+                        return false;
+                    }
+                    
+                    if(!is_base64_char(reply_data))
+                    {
+                        return false;
+                    }
+                    
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    reply->set_owner(account);
+                    
+                    if(topic->m_replie_list.size() >= 10000)
+                    {
+                        return false;
+                    }
+
+                    topic->add_reply(tx_id, reply);
+                    topic->m_replie_list.push_back(reply);
+                    
+                    if(data.HasMember("reply_to"))
+                    {
+                        std::string reply_to_key = data["reply_to"].GetString();
+
+                        if(reply_to_key.length() != 44)
+                        {
+                            return false;
+                        }
+
+                        if(!is_base64_char(reply_to_key))
+                        {
+                            return false;
+                        }
+                        
+                        std::shared_ptr<Reply> reply_to;
+                        
+                        if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            return false;
+                        }
+                        
+                        reply->set_reply_to(reply_to);
+                    }
+                }
+                else if(tx_type == 5) // reward
+                {
+                    // todo
+                    if(tx_data.length() > 500 + 74)
+                    {
+                        return false;
+                    }
                 }
                 else
                 {
@@ -1131,8 +1438,10 @@ bool Blockchain::load(std::string db_path)
                 }
             }
         }
+        
+        miner->add_balance(5000);
+        block_chain.pop_front();
     }
-    
     
     // std::string val;
     // s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);

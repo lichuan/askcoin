@@ -72,6 +72,16 @@ void Block::add_child(std::shared_ptr<Block> child)
     m_children.push_back(child);
 }
 
+void Block::set_miner(std::shared_ptr<Account> miner)
+{
+    m_miner = miner;
+}
+
+std::shared_ptr<Account> Block::get_miner()
+{
+    return m_miner;
+}
+
 Pending_Block::Pending_Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash)
     : Block(id, utc, version, zero_bits, hash)
 {
