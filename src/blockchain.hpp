@@ -28,11 +28,13 @@ public:
     bool get_topic(std::string key, std::shared_ptr<Topic> &topic);
     bool proc_topic_expired(uint64 cur_block_id);
     bool proc_tx_map(std::shared_ptr<Block> block);
-
+    void update_account_rich(const std::shared_ptr<Account> &account);
+    
 private:
     uint64 m_cur_block_id = 0;
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
+    std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;

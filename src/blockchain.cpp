@@ -198,6 +198,23 @@ bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::st
     return cpk.Verify(uint256(std::vector<unsigned char>(hash, hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
 }
 
+void Blockchain::update_account_rich(const std::shared_ptr<Account> &account)
+{
+    auto iter_end = m_account_by_rich.upper_bound(account);
+    
+    for(auto iter = m_account_by_rich.lower_bound(account); iter != iter_end; ++iter)
+    {
+        if(*iter == account)
+        {
+            m_account_by_rich.erase(iter);
+
+            break;
+        }
+    }
+
+    m_account_by_rich.insert(account);
+}
+
 bool Blockchain::is_base64_char(std::string b64)
 {
     if(b64.empty())
@@ -594,6 +611,8 @@ bool Blockchain::load(std::string db_path)
     author_account->set_balance(total / 2);
     m_reserve_fund_account->set_balance(total / 2);
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
+    update_account_rich(author_account);
+    update_account_rich(m_reserve_fund_account);
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
     uint32 version = data["version"].GetUint();
@@ -1029,7 +1048,8 @@ bool Blockchain::load(std::string db_path)
         for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
         {
             std::string tx_id = iter->GetString();
-
+            
+            // tx can not be replayed.
             if(m_tx_map.find(tx_id) != m_tx_map.end())
             {
                 return false;
@@ -1117,13 +1137,6 @@ bool Blockchain::load(std::string db_path)
             }
 
             if(!is_base64_char(pubkey))
-            {
-                return false;
-            }
-
-            std::shared_ptr<Account> account;
-            
-            if(!get_account(pubkey, account))
             {
                 return false;
             }
@@ -1256,6 +1269,7 @@ bool Blockchain::load(std::string db_path)
                 else
                 {
                     referrer_referrer->add_balance(1);
+                    update_account_rich(referrer_referrer);
                 }
 
                 if(register_name.length() > 20 || register_name.length() < 4)
@@ -1300,6 +1314,7 @@ bool Blockchain::load(std::string db_path)
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                 reg_account->set_referrer(referrer);
+                update_account_rich(referrer);
             }
             else
             {
@@ -1331,6 +1346,13 @@ bool Blockchain::load(std::string db_path)
                     return false;
                 }
 
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    return false;
+                }
+
                 if(account->get_balance() < 2)
                 {
                     return false;
@@ -1352,6 +1374,7 @@ bool Blockchain::load(std::string db_path)
                 else
                 {
                     referrer->add_balance(1);
+                    update_account_rich(referrer);
                 }
                 
                 if(tx_type == 2) // send coin
@@ -1410,6 +1433,7 @@ bool Blockchain::load(std::string db_path)
 
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
+                    update_account_rich(receiver);
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -1560,12 +1584,16 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
+
+                update_account_rich(account);
             }
             
             m_tx_map.insert(std::make_pair(tx_id, iter_block));
+            update_account_rich(m_reserve_fund_account);
         }
         
         miner->add_balance(5000);
+        update_account_rich(miner);
         block_chain.pop_front();
     }
     

@@ -10,6 +10,14 @@
 class Account
 {
 public:
+    struct Rich_Comp
+    {
+        bool operator()(const std::shared_ptr<Account> &a, const std::shared_ptr<Account> &b)
+        {
+            return a->get_balance() > b->get_balance();
+        }
+    };
+    
     Account(uint64 id, std::string name, std::string pubkey, uint32 avatar);
     ~Account();
     std::string pubkey();
