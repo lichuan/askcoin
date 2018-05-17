@@ -1,5 +1,4 @@
 #include <netinet/in.h>
-#include "leveldb/db.h"
 #include "leveldb/comparator.h"
 #include "fly/base/logger.hpp"
 #include "blockchain.hpp"
@@ -252,13 +251,84 @@ bool Blockchain::get_topic(std::string key, std::shared_ptr<Topic> &topic)
     return true;
 }
 
-bool Blockchain::check_topic_expired(uint64 cur_block_id)
+bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
+{
+    std::shared_ptr<Block> iter_block = block;
+    uint32 count = 0;
+    
+    while(iter_block->id() != 0)
+    {
+        iter_block = iter_block->get_parent();
+        
+        if(++count > 4320)
+        {
+            std::string block_data;
+            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+            
+            if(!s.ok())
+            {
+                return false;
+            }
+            
+            rapidjson::Document doc;
+            const char *block_data_str = block_data.c_str();
+            doc.Parse(block_data_str);
+        
+            if(doc.HasParseError())
+            {
+                return false;
+            }
+
+            if(!doc.HasMember("data"))
+            {
+                return false;
+            }
+
+            const rapidjson::Value &data = doc["data"];
+
+            if(!data.HasMember("tx_ids"))
+            {
+                return false;
+            }
+        
+            const rapidjson::Value &tx_ids = data["tx_ids"];
+
+            if(!tx_ids.IsArray())
+            {
+                return false;
+            }
+            
+            uint32 tx_num = tx_ids.Size();
+            
+            if(tx_num > 2000)
+            {
+                return false;
+            }
+
+            for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
+            {
+                std::string tx_id = iter->GetString();
+
+                if(m_tx_map.erase(tx_id) != 1)
+                {
+                    return false;
+                }
+            }
+            
+            break;
+        }
+    }
+    
+    return true;
+}
+
+bool Blockchain::proc_topic_expired(uint64 cur_block_id)
 {
     while(!m_topic_list.empty())
     {
         std::shared_ptr<Topic> topic = m_topic_list.front();
 
-        if(topic->block_id() + 50000 <= cur_block_id)
+        if(topic->block_id() + 43200 < cur_block_id)
         {
             m_topics.erase(topic->key());
             std::shared_ptr<Account> owner = topic->get_owner();
@@ -319,13 +389,12 @@ bool Blockchain::load(std::string db_path)
     }
     
     CONSOLE_LOG_INFO("verify __asic_resistant_data__ ok");
-    
-    leveldb::DB *db;
+
     leveldb::Options options;
     // Key_Comp comp;
     // options.comparator = &comp;
     options.create_if_missing = true;
-    leveldb::Status s = leveldb::DB::Open(options, db_path, &db);
+    leveldb::Status s = leveldb::DB::Open(options, db_path, &m_db);
     
     if(!s.ok())
     {
@@ -335,7 +404,7 @@ bool Blockchain::load(std::string db_path)
     }
 
     std::string block_0;
-    s = db->Get(leveldb::ReadOptions(), "0", &block_0);
+    s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
     
     if(!s.ok())
     {
@@ -374,7 +443,7 @@ bool Blockchain::load(std::string db_path)
         rapidjson::StringBuffer buffer_2;
         rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
         doc.Accept(writer_2);
-        s = db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
+        s = m_db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
         
         if(!s.ok())
         {
@@ -382,7 +451,7 @@ bool Blockchain::load(std::string db_path)
         }
 
         //try get again
-        s = db->Get(leveldb::ReadOptions(), "0", &block_0);
+        s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
 
         if(!s.ok())
         {
@@ -585,7 +654,7 @@ bool Blockchain::load(std::string db_path)
     {
         const Child_Block &child_block = block_list.front();
         std::string block_data;
-        s = db->Get(leveldb::ReadOptions(), child_block.m_hash, &block_data);
+        s = m_db->Get(leveldb::ReadOptions(), child_block.m_hash, &block_data);
 
         if(!s.ok())
         {
@@ -868,10 +937,10 @@ bool Blockchain::load(std::string db_path)
             block_list.push_back(child_block);
         }
 
-        for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
-        {
-            cur_block->m_tx_ids.push_back(iter->GetString());
-        }
+        // for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
+        // {
+        //     cur_block->m_tx_ids.push_back(iter->GetString());
+        // }
         
         if(cur_block->difficult_than(the_most_difficult_block))
         {
@@ -896,24 +965,79 @@ bool Blockchain::load(std::string db_path)
     {
         iter_block = block_chain.front();
         uint64 cur_block_id = iter_block->id();
-        const std::vector<std::string> &tx_ids = iter_block->m_tx_ids;
+        //const std::vector<std::string> &tx_ids = iter_block->m_tx_ids;
+        std::string block_data;
+        s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+        
+        if(!s.ok())
+        {
+            return false;
+        }
+        
+        rapidjson::Document doc;
+        const char *block_data_str = block_data.c_str();
+        doc.Parse(block_data_str);
+        
+        if(doc.HasParseError())
+        {
+            return false;
+        }
+
+        if(!doc.HasMember("data"))
+        {
+            return false;
+        }
+
+        const rapidjson::Value &data = doc["data"];
+
+        if(!data.HasMember("tx_ids"))
+        {
+            return false;
+        }
+        
+        const rapidjson::Value &tx_ids = data["tx_ids"];
+
+        if(!tx_ids.IsArray())
+        {
+            return false;
+        }
+        
+        uint32 tx_num = tx_ids.Size();
+
+        if(tx_num > 2000)
+        {
+            return false;
+        }
+        
         std::shared_ptr<Account> miner = iter_block->get_miner();
 
         if(!miner)
         {
             return false;
         }
-        
-        if(!check_topic_expired(cur_block_id))
+
+        if(!proc_topic_expired(cur_block_id))
         {
             return false;
         }
 
-        for(auto &tx_id : tx_ids)
+        if(!proc_tx_map(iter_block))
         {
-            std::string tx_data;
-            s = db->Get(leveldb::ReadOptions(), tx_id, &tx_data);
+            return false;
+        }
+        
+        for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
+        {
+            std::string tx_id = iter->GetString();
 
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                return false;
+            }
+
+            std::string tx_data;
+            s = m_db->Get(leveldb::ReadOptions(), tx_id, &tx_data);
+            
             if(!s.ok())
             {
                 CONSOLE_LOG_FATAL("read tx data from leveldb failed, tx_id: %s", tx_id.c_str());
@@ -924,7 +1048,7 @@ bool Blockchain::load(std::string db_path)
             rapidjson::Document doc;
             const char *tx_data_str = tx_data.c_str();
             doc.Parse(tx_data_str);
-        
+            
             if(doc.HasParseError())
             {
                 CONSOLE_LOG_FATAL("parse tx data from leveldb failed, data: %s, tx_id: %s, reason: %s", tx_data_str, tx_id.c_str(), \
@@ -1331,7 +1455,7 @@ bool Blockchain::load(std::string db_path)
                         return false;
                     }
                     
-                    if(account->m_topic_list.size() >= 10000)
+                    if(account->m_topic_list.size() >= 1000)
                     {
                         return false;
                     }
@@ -1392,7 +1516,7 @@ bool Blockchain::load(std::string db_path)
                     std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
                     reply->set_owner(account);
                     
-                    if(topic->m_replie_list.size() >= 10000)
+                    if(topic->m_replie_list.size() >= 1000)
                     {
                         return false;
                     }
@@ -1437,6 +1561,8 @@ bool Blockchain::load(std::string db_path)
                     return false;
                 }
             }
+            
+            m_tx_map.insert(std::make_pair(tx_id, iter_block));
         }
         
         miner->add_balance(5000);
@@ -1444,17 +1570,17 @@ bool Blockchain::load(std::string db_path)
     }
     
     // std::string val;
-    // s = db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
+    // s = m_db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
     // if(!s.ok())
     // {
     //     CONSOLE_LOG_INFO("get bliiock22_count error");
 
     // }
     
-    // //s = db->Get(leveldb::ReadOptions(), "block_count", &val);
+    // //s = m_db->Get(leveldb::ReadOptions(), "block_count", &val);
 
     
-    // s = db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
+    // s = m_db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
 
     // if(!s.ok())
     // {

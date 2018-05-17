@@ -23,7 +23,7 @@ public:
     void add_my_difficulty_to(std::shared_ptr<Block> other);
     void set_miner(std::shared_ptr<Account> miner);
     std::shared_ptr<Account> get_miner();
-    std::vector<std::string> m_tx_ids;
+    //std::vector<std::string> m_tx_ids;
     
 private:
     uint64 m_id;
