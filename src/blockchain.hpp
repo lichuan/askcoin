@@ -32,9 +32,9 @@ public:
     void add_account_rich(std::shared_ptr<Account> account);
     
 private:
-    uint64 m_cur_block_id = 0;
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
+    std::shared_ptr<Block> m_cur_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;

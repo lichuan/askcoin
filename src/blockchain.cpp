@@ -34,7 +34,6 @@ Blockchain::Blockchain()
     m_b64_table['+'] = 64;
     m_b64_table['/'] = 64;
     m_b64_table['='] = 64;
-    m_cur_block_id = 0;
     m_cur_account_id = 0;
 }
 
@@ -972,8 +971,8 @@ bool Blockchain::load(std::string db_path)
     
     std::list<std::shared_ptr<Block>> block_chain;
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
-    m_cur_block_id = the_most_difficult_block->id();
-    
+    m_cur_block = the_most_difficult_block;
+
     while(iter_block->id() != 0)
     {
         block_chain.push_front(iter_block);
@@ -1660,29 +1659,7 @@ bool Blockchain::load(std::string db_path)
         miner->add_balance(5000);
         block_chain.pop_front();
     }
-    
-    // std::string val;
-    // s = m_db->Get(leveldb::ReadOptions(), "bliiock22_count", &val);
-    // if(!s.ok())
-    // {
-    //     CONSOLE_LOG_INFO("get bliiock22_count error");
 
-    // }
-    
-    // //s = m_db->Get(leveldb::ReadOptions(), "block_count", &val);
-
-    
-    // s = m_db->Delete(leveldb::WriteOptions(), "block_couniiwwwwwwwwwwwwt");
-
-    // if(!s.ok())
-    // {
-    //     CONSOLE_LOG_INFO("delete block_couniiwwwwwwwwwwwwt error");
-    //     return false;
-    // }
-
-    // CONSOLE_LOG_INFO("delete key not exist success");
-    
-        
     // CKey key;
     // key.MakeNewKey(false);
     // CPubKey pubkey = key.GetPubKey();
