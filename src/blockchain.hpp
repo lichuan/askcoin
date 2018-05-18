@@ -28,7 +28,8 @@ public:
     bool get_topic(std::string key, std::shared_ptr<Topic> &topic);
     bool proc_topic_expired(uint64 cur_block_id);
     bool proc_tx_map(std::shared_ptr<Block> block);
-    void update_account_rich(const std::shared_ptr<Account> &account);
+    void del_account_rich(std::shared_ptr<Account> account);
+    void add_account_rich(std::shared_ptr<Account> account);
     
 private:
     uint64 m_cur_block_id = 0;

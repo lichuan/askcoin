@@ -198,7 +198,7 @@ bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::st
     return cpk.Verify(uint256(std::vector<unsigned char>(hash, hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
 }
 
-void Blockchain::update_account_rich(const std::shared_ptr<Account> &account)
+void Blockchain::del_account_rich(std::shared_ptr<Account> account)
 {
     auto iter_end = m_account_by_rich.upper_bound(account);
     
@@ -207,11 +207,14 @@ void Blockchain::update_account_rich(const std::shared_ptr<Account> &account)
         if(*iter == account)
         {
             m_account_by_rich.erase(iter);
-
+            
             break;
         }
     }
+}
 
+void Blockchain::add_account_rich(std::shared_ptr<Account> account)
+{
     m_account_by_rich.insert(account);
 }
 
@@ -611,8 +614,6 @@ bool Blockchain::load(std::string db_path)
     author_account->set_balance(total / 2);
     m_reserve_fund_account->set_balance(total / 2);
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
-    update_account_rich(author_account);
-    update_account_rich(m_reserve_fund_account);
     uint64 block_id = data["id"].GetUint64();
     uint32 utc = data["utc"].GetUint();
     uint32 version = data["version"].GetUint();
@@ -1015,7 +1016,7 @@ bool Blockchain::load(std::string db_path)
         }
         
         const rapidjson::Value &tx_ids = data["tx_ids"];
-
+        
         if(!tx_ids.IsArray())
         {
             return false;
@@ -1269,7 +1270,6 @@ bool Blockchain::load(std::string db_path)
                 else
                 {
                     referrer_referrer->add_balance(1);
-                    update_account_rich(referrer_referrer);
                 }
 
                 if(register_name.length() > 20 || register_name.length() < 4)
@@ -1314,7 +1314,6 @@ bool Blockchain::load(std::string db_path)
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                 reg_account->set_referrer(referrer);
-                update_account_rich(referrer);
             }
             else
             {
@@ -1374,7 +1373,6 @@ bool Blockchain::load(std::string db_path)
                 else
                 {
                     referrer->add_balance(1);
-                    update_account_rich(referrer);
                 }
                 
                 if(tx_type == 2) // send coin
@@ -1433,7 +1431,6 @@ bool Blockchain::load(std::string db_path)
 
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
-                    update_account_rich(receiver);
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -1487,11 +1484,88 @@ bool Blockchain::load(std::string db_path)
                     account->sub_balance(reward);
                     std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
                     topic->set_owner(account);
+                    topic->add_member(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
                 }
                 else if(tx_type == 4) // reply
+                {
+                    // todo
+                    if(tx_data.length() > 500 + 74)
+                    {
+                        return false;
+                    }
+                    
+                    std::string topic_key = data["topic_key"].GetString();
+                    
+                    if(topic_key.length() != 44)
+                    {
+                        return false;
+                    }
+                    
+                    if(!is_base64_char(topic_key))
+                    {
+                        return false;
+                    }
+                    
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(!get_topic(topic_key, topic))
+                    {
+                        return false;
+                    }
+
+                    std::string reply_data = data["reply"].GetString();
+
+                    if(reply_data.length() < 4 || reply_data.length() > 240)
+                    {
+                        return false;
+                    }
+                    
+                    if(!is_base64_char(reply_data))
+                    {
+                        return false;
+                    }
+                    
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    reply->set_owner(account);
+                    
+                    if(topic->m_reply_list.size() >= 1000)
+                    {
+                        return false;
+                    }
+
+                    topic->m_reply_list.push_back(reply);
+                    
+                    if(data.HasMember("reply_to"))
+                    {
+                        std::string reply_to_key = data["reply_to"].GetString();
+
+                        if(reply_to_key.length() != 44)
+                        {
+                            return false;
+                        }
+
+                        if(!is_base64_char(reply_to_key))
+                        {
+                            return false;
+                        }
+                        
+                        std::shared_ptr<Reply> reply_to;
+                        
+                        if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            return false;
+                        }
+                        
+                        reply->set_reply_to(reply_to);
+                    }
+                    
+                    topic->add_member(account);
+                    account->join_topic(topic);
+                }
+                else if(tx_type == 5) // reward
                 {
                     // todo
                     if(tx_data.length() > 500 + 74)
@@ -1518,82 +1592,72 @@ bool Blockchain::load(std::string db_path)
                         return false;
                     }
 
-                    std::shared_ptr<Reply> exist_reply;
-
-                    if(topic->get_reply(tx_id, exist_reply))
-                    {
-                        return false;
-                    }
-
-                    std::string reply_data = data["reply"].GetString();
-
-                    if(reply_data.length() < 4 || reply_data.length() > 240)
+                    if(topic->get_owner() != account)
                     {
                         return false;
                     }
                     
-                    if(!is_base64_char(reply_data))
-                    {
-                        return false;
-                    }
-                    
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
                     reply->set_owner(account);
                     
-                    if(topic->m_replie_list.size() >= 1000)
+                    if(topic->m_reply_list.size() >= 1000)
                     {
                         return false;
                     }
 
-                    topic->add_reply(tx_id, reply);
-                    topic->m_replie_list.push_back(reply);
+                    uint64 amount = data["amount"].GetUint64();
                     
-                    if(data.HasMember("reply_to"))
-                    {
-                        std::string reply_to_key = data["reply_to"].GetString();
-
-                        if(reply_to_key.length() != 44)
-                        {
-                            return false;
-                        }
-
-                        if(!is_base64_char(reply_to_key))
-                        {
-                            return false;
-                        }
-                        
-                        std::shared_ptr<Reply> reply_to;
-                        
-                        if(!topic->get_reply(reply_to_key, reply_to))
-                        {
-                            return false;
-                        }
-                        
-                        reply->set_reply_to(reply_to);
-                    }
-                }
-                else if(tx_type == 5) // reward
-                {
-                    // todo
-                    if(tx_data.length() > 500 + 74)
+                    if(amount == 0)
                     {
                         return false;
                     }
+                    
+                    if(topic->get_balance() < amount)
+                    {
+                        return false;
+                    }
+                    
+                    std::string reply_to_key = data["reply_to"].GetString();
+
+                    if(reply_to_key.length() != 44)
+                    {
+                        return false;
+                    }
+                    
+                    if(!is_base64_char(reply_to_key))
+                    {
+                        return false;
+                    }
+                    
+                    std::shared_ptr<Reply> reply_to;
+                        
+                    if(!topic->get_reply(reply_to_key, reply_to))
+                    {
+                        return false;
+                    }
+
+                    if(reply_to->type() != 0)
+                    {
+                        return false;
+                    }
+                    
+                    reply->set_reply_to(reply_to);
+                    topic->sub_balance(amount);
+                    reply_to->add_balance(amount);
+                    reply_to->get_owner()->add_balance(amount);
+                    reply->add_balance(amount);
+                    topic->m_reply_list.push_back(reply);
                 }
                 else
                 {
                     return false;
                 }
-
-                update_account_rich(account);
             }
             
             m_tx_map.insert(std::make_pair(tx_id, iter_block));
-            update_account_rich(m_reserve_fund_account);
         }
         
         miner->add_balance(5000);
-        update_account_rich(miner);
         block_chain.pop_front();
     }
     

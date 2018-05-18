@@ -19,10 +19,11 @@ public:
     uint64 block_id();    
     std::string key();
     bool get_reply(std::string key, std::shared_ptr<Reply> &reply);
-    void add_reply(std::string key, std::shared_ptr<Reply> reply);
+    bool add_member(std::shared_ptr<Account> account);
     void sub_balance(uint64 value);
     uint64 get_balance();
-    std::list<std::shared_ptr<Reply>> m_replie_list;
+    std::list<std::shared_ptr<Reply>> m_reply_list;
+    std::list<std::shared_ptr<Account>> m_members;
     
 private:
     std::string m_data;
@@ -30,8 +31,6 @@ private:
     uint64 m_block_id;
     uint64 m_balance;
     std::shared_ptr<Account> m_owner;
-    std::list<std::shared_ptr<Account>> m_replier;
-    std::unordered_map<std::string, std::shared_ptr<Reply>> m_replies;
 };
 
 #endif

@@ -17,6 +17,11 @@ void Reply::set_owner(std::shared_ptr<Account> owner)
     m_owner = owner;
 }
 
+std::string Reply::key()
+{
+    return m_key;
+}
+
 std::shared_ptr<Account> Reply::get_owner()
 {
     return m_owner;
@@ -40,4 +45,9 @@ void Reply::add_balance(uint64 value)
 uint64 Reply::get_balance()
 {
     return m_balance;
+}
+
+uint32 Reply::type()
+{
+    return m_type;
 }

@@ -1,5 +1,6 @@
 #include "account.hpp"
 #include "utilstrencodings.h"
+#include "blockchain.hpp"
 
 Account::Account(uint64 id, std::string name, std::string pubkey, uint32 avatar)
 {
@@ -21,17 +22,23 @@ uint64 Account::get_balance()
 
 void Account::add_balance(uint64 value)
 {
+    Blockchain::instance()->del_account_rich(shared_from_this());
     m_balance += value;
+    Blockchain::instance()->add_account_rich(shared_from_this());
 }
 
 void Account::sub_balance(uint64 value)
 {
+    Blockchain::instance()->del_account_rich(shared_from_this());
     m_balance -= value;
+    Blockchain::instance()->add_account_rich(shared_from_this());
 }
 
 void Account::set_balance(uint64 value)
 {
+    Blockchain::instance()->del_account_rich(shared_from_this());
     m_balance = value;
+    Blockchain::instance()->add_account_rich(shared_from_this());
 }
 
 uint64 Account::id()
@@ -75,4 +82,6 @@ bool Account::join_topic(std::shared_ptr<Topic> topic)
     }
 
     m_joined_topic_list.push_back(topic);
+
+    return true;
 }

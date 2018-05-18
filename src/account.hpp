@@ -7,7 +7,7 @@
 #include "topic.hpp"
 #include "history.hpp"
 
-class Account
+class Account : public std::enable_shared_from_this<Account>
 {
 public:
     struct Rich_Comp

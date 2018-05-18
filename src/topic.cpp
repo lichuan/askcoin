@@ -34,21 +34,17 @@ std::string Topic::key()
 
 bool Topic::get_reply(std::string key, std::shared_ptr<Reply> &reply)
 {
-    auto iter = m_replies.find(key);
-
-    if(iter == m_replies.end())
+    for(auto r : m_reply_list)
     {
-        return false;
+        if(r->key() == key)
+        {
+            reply = r;
+
+            return true;
+        }
     }
 
-    reply = iter->second;
-
-    return true;
-}
-
-void Topic::add_reply(std::string key, std::shared_ptr<Reply> reply)
-{
-    m_replies.insert(std::make_pair(key, reply));
+    return false;
 }
 
 void Topic::sub_balance(uint64 value)
@@ -59,4 +55,19 @@ void Topic::sub_balance(uint64 value)
 uint64 Topic::get_balance()
 {
     return m_balance;
+}
+
+bool Topic::add_member(std::shared_ptr<Account> account)
+{
+    for(auto member : m_members)
+    {
+        if(member == account)
+        {
+            return false;
+        }
+    }
+
+    m_members.push_back(account);
+
+    return true;
 }
