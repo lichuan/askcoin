@@ -1,4 +1,4 @@
 Import("env")
 
-askcoin = env.Program("askcoin", Glob("*.cpp") + Glob("*/*.cpp"))
+askcoin = env.Program("askcoin", Glob("*.cpp") + Glob("*/*.cpp") + Glob("*/*/*.cpp"))
 Return("askcoin")

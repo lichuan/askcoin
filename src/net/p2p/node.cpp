@@ -1,6 +1,6 @@
 #include <unistd.h>
 #include "fly/base/logger.hpp"
-#include "p2p/node.hpp"
+#include "net/p2p/node.hpp"
 
 using namespace std::placeholders;
 
@@ -48,11 +48,6 @@ void Node::stop()
 void Node::wait()
 {
     m_server->wait();
-}
-
-void Node::set_peer_file(std::string peer_file)
-{
-    m_peer_file = peer_file;
 }
 
 void Node::set_host(std::string host)

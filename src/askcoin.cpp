@@ -17,8 +17,8 @@
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/error/en.h"
 #include "version.hpp"
-#include "p2p/node.hpp"
-#include "wsock_node.hpp"
+#include "net/p2p/node.hpp"
+#include "net/wsock_node.hpp"
 #include "blockchain.hpp"
 #include "utilstrencodings.h"
 
@@ -122,7 +122,6 @@ public:
         }
 
         std::string host = doc["network"]["host"].GetString();
-        //std::string peer_file = doc["network"]["p2p"]["peer_file"].GetString();
         uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
         uint32 p2p_max_passive_conn = doc["network"]["p2p"]["max_passive_conn"].GetUint();
         uint32 p2p_max_active_conn = doc["network"]["p2p"]["max_active_conn"].GetUint();
@@ -142,7 +141,6 @@ public:
         Wsock_Node::instance()->set_max_passive_conn(websocket_max_passive_conn);
         p2p::Node::instance()->set_max_active_conn(p2p_max_active_conn);
         p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
-        //p2p::Node::instance()->set_peer_file(peer_file);
         p2p::Node::instance()->set_host(host);
         
         if(!p2p::Node::instance()->start(p2p_port))

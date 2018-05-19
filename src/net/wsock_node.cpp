@@ -1,6 +1,6 @@
 #include <unistd.h>
 #include "fly/base/logger.hpp"
-#include "wsock_node.hpp"
+#include "net/wsock_node.hpp"
 
 using namespace std::placeholders;
 
@@ -49,7 +49,7 @@ void Wsock_Node::wait()
 
 void Wsock_Node::set_max_passive_conn(uint32 num)
 {
-    m_max_passive_conn = num > 300 ? num : 300;
+    m_max_passive_conn = num > 1000 ? num : 1000;
 }
 
 bool Wsock_Node::allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)

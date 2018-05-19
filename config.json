@@ -4,30 +4,30 @@
     "network": {
         "host": "here should be your host (domain or ip address)",
         "p2p": {
-            "port": 10001,
+            "port": 18050,
             "max_passive_conn": 5000,
-            "max_active_conn": 5000,
+            "max_active_conn": 1000,
             "init_peer": [
                 {
                     "host": "node1.askcoin.me",
-                    "port": 10001
+                    "port": 18050
                 },
                 {
                     "host": "112.25.77.101",
-                    "port": 10001
+                    "port": 18050
                 },
                 {
                     "host": "node2.askcoin.me",
-                    "port": 10001
+                    "port": 18050
                 },
                 {
                     "host": "node3.askcoin.me",
-                    "port": 10001
+                    "port": 18050
                 }
             ]
         },
         "websocket": {
-            "port": 20001,
+            "port": 18051,
             "max_passive_conn": 5000,
             "open": true
         }
