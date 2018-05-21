@@ -123,8 +123,6 @@ public:
 
         std::string host = doc["network"]["host"].GetString();
         uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
-        uint32 p2p_max_passive_conn = doc["network"]["p2p"]["max_passive_conn"].GetUint();
-        uint32 p2p_max_active_conn = doc["network"]["p2p"]["max_active_conn"].GetUint();
         const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
 
         for(int32 i = 0; i < init_peer.Size(); ++i)
@@ -135,12 +133,8 @@ public:
             p2p::Node::instance()->add_init_peer(addr);
         }
         
-        uint32 websocket_max_passive_conn = doc["network"]["websocket"]["max_passive_conn"].GetUint();
         uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
         bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
-        Wsock_Node::instance()->set_max_passive_conn(websocket_max_passive_conn);
-        p2p::Node::instance()->set_max_active_conn(p2p_max_active_conn);
-        p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
         p2p::Node::instance()->set_host(host);
         
         if(!p2p::Node::instance()->start(p2p_port))
@@ -155,7 +149,7 @@ public:
                 return EXIT_FAILURE;
             }
         }
-
+        
         std::string cmd_tips = "\nthe following commands are available:\n"
             ">stop\n"
             ">register_account\n"

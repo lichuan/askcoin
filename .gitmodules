@@ -7,3 +7,6 @@
 [submodule "depend/leveldb"]
 	path = depend/leveldb
 	url = git@github.com:lichuan/leveldb.git
+[submodule "depend/snappy"]
+	path = depend/snappy
+	url = git@github.com:lichuan/snappy.git

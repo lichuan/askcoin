@@ -383,6 +383,7 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
 
 bool Blockchain::load(std::string db_path)
 {
+    // to do where to run void RandAddSeedSleep() ?
     // firstly, we need verify __asic_resistant_data__
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
     {

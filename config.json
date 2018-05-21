@@ -5,8 +5,6 @@
         "host": "here should be your host (domain or ip address)",
         "p2p": {
             "port": 18050,
-            "max_passive_conn": 5000,
-            "max_active_conn": 1000,
             "init_peer": [
                 {
                     "host": "node1.askcoin.me",
@@ -28,7 +26,6 @@
         },
         "websocket": {
             "port": 18051,
-            "max_passive_conn": 5000,
             "open": true
         }
     }

@@ -1,6 +1,6 @@
 
 Entering 'depend/fly'
-commit 06d49f10d9d89b516884f2ca4da994e4dcd86fe2
+commit f7265aae0559b012cd5e68349e28400fdeacc9e6
 Entering 'depend/fly/depend/cryptopp'
 commit 18ccd89965acb3fe6f67e6cdb2ded613868112ed
 Entering 'depend/fly/depend/rapidjson'
@@ -11,6 +11,8 @@ Entering 'depend/leveldb'
 commit 47cb9e2a211e1d7157078ba7bab536beb29e56dc
 Entering 'depend/secp256k1'
 commit 6ad5cdb42a1a8257289a0423d644dcbdeab0f83c
+Entering 'depend/snappy'
+commit 193fc5d11b819b15826dc382a20f1e5729fa5004
 
 Entering 'depend/fly'
 origin	git@github.com:lichuan/fly.git (fetch)
@@ -30,4 +32,7 @@ origin	git@github.com:lichuan/leveldb.git (push)
 Entering 'depend/secp256k1'
 origin	git@github.com:lichuan/secp256k1.git (fetch)
 origin	git@github.com:lichuan/secp256k1.git (push)
+Entering 'depend/snappy'
+origin	git@github.com:lichuan/snappy.git (fetch)
+origin	git@github.com:lichuan/snappy.git (push)
 
