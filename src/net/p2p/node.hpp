@@ -1,12 +1,15 @@
-#ifndef P2P__NODE
-#define P2P__NODE
+#ifndef NET__P2P__NODE
+#define NET__P2P__NODE
 
 #include <unordered_map>
+#include <set>
 #include "fly/net/server.hpp"
 #include "fly/base/singleton.hpp"
+#include "net/p2p/peer.hpp"
 
 using fly::net::Json;
 
+namespace net {
 namespace p2p {
 
 class Node : public fly::base::Singleton<Node>
@@ -17,7 +20,6 @@ public:
     bool start(uint32 port);
     void stop();
     void wait();
-    void set_max_active_conn(uint32 num);
     void set_max_passive_conn(uint32 num);
     bool allow(std::shared_ptr<fly::net::Connection<Json>> connection);
     void init(std::shared_ptr<fly::net::Connection<Json>> connection);
@@ -26,11 +28,12 @@ public:
     void be_closed(std::shared_ptr<fly::net::Connection<Json>> connection);
     void set_host(std::string host);
     void add_init_peer(const fly::net::Addr &addr);
+    bool add_peer(const Peer &peer);
 
 private:
-    uint32 m_max_active_conn = 0;
     uint32 m_max_passive_conn = 0;
     std::unordered_map<uint64, std::shared_ptr<fly::net::Connection<Json>>> m_connections;
+    std::multiset<Peer, Peer::Score_Comp> m_peers;
     std::mutex m_mutex;
     std::string m_host;
     std::unique_ptr<fly::net::Server<Json>> m_server;
@@ -39,6 +42,7 @@ private:
     std::vector<fly::net::Addr> m_init_peer;
 };
 
+}
 }
 
 #endif

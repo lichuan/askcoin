@@ -115,36 +115,56 @@ public:
 
             return EXIT_FAILURE;
         }
+        
+        std::string host = doc["network"]["host"].GetString();
+        uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
+        uint32 p2p_max_passive_conn = doc["network"]["p2p"]["max_passive_conn"].GetUint();
+        
+        if(p2p_max_passive_conn < 1000)
+        {
+            CONSOLE_LOG_FATAL("p2p max_passive_conn should be at least 1000");
+
+            return EXIT_FAILURE;
+        }
+        
+        net::p2p::Node::instance()->set_host(host);
+        net::p2p::Node::instance()->set_max_passive_conn(p2p_max_passive_conn);
+        const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
+        
+        for(int32 i = 0; i < init_peer.Size(); ++i)
+        {
+            std::string host = init_peer[i]["host"].GetString();
+            uint16 port = init_peer[i]["port"].GetUint();
+            fly::net::Addr addr(host, port);
+            net::p2p::Node::instance()->add_init_peer(addr);
+        }
+        
+        uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
+        bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
+        uint32 websocket_max_passive_conn = doc["network"]["websocket"]["max_passive_conn"].GetUint();
+
+        if(websocket_max_passive_conn < 1000)
+        {
+            CONSOLE_LOG_FATAL("websocket max_passive_conn should be at least 1000");
+            
+            return EXIT_FAILURE;
+        }
+        
+        net::Wsock_Node::instance()->set_max_passive_conn(websocket_max_passive_conn);
 
         if(!Blockchain::instance()->load(doc["db_path"].GetString()))
         {
             return EXIT_FAILURE;
         }
 
-        std::string host = doc["network"]["host"].GetString();
-        uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
-        const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
-
-        for(int32 i = 0; i < init_peer.Size(); ++i)
-        {
-            std::string host = init_peer[i]["host"].GetString();
-            uint16 port = init_peer[i]["port"].GetUint();
-            fly::net::Addr addr(host, port);
-            p2p::Node::instance()->add_init_peer(addr);
-        }
-        
-        uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
-        bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
-        p2p::Node::instance()->set_host(host);
-        
-        if(!p2p::Node::instance()->start(p2p_port))
+        if(!net::p2p::Node::instance()->start(p2p_port))
         {
             return EXIT_FAILURE;
         }
 
         if(open_websocket)
         {            
-            if(!Wsock_Node::instance()->start(websocket_port))
+            if(!net::Wsock_Node::instance()->start(websocket_port))
             {
                 return EXIT_FAILURE;
             }
@@ -186,10 +206,10 @@ public:
                 {
                     if(open_websocket)
                     {
-                        Wsock_Node::instance()->stop();
+                        net::Wsock_Node::instance()->stop();
                     }
 
-                    p2p::Node::instance()->stop();
+                    net::p2p::Node::instance()->stop();
                     
                     break;
                 }
@@ -207,10 +227,10 @@ public:
 
         if(open_websocket)
         {
-            Wsock_Node::instance()->wait();
+            net::Wsock_Node::instance()->wait();
         }
 
-        p2p::Node::instance()->wait();
+        net::p2p::Node::instance()->wait();
         cmd_thread.join();
         Shutdown();
         CONSOLE_LOG_INFO("stop askcoin success");

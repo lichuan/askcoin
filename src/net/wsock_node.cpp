@@ -4,6 +4,8 @@
 
 using namespace std::placeholders;
 
+namespace net {
+
 Wsock_Node::Wsock_Node()
 {
 }
@@ -85,4 +87,6 @@ void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connecti
     std::lock_guard<std::mutex> guard(m_mutex);
     m_connections.erase(connection->id());
     LOG_INFO("connection count: %u", m_connections.size());
+}
+
 }

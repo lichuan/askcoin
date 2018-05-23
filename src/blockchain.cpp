@@ -1,4 +1,5 @@
 #include <netinet/in.h>
+#include <unistd.h>
 #include "leveldb/comparator.h"
 #include "fly/base/logger.hpp"
 #include "blockchain.hpp"
@@ -10,7 +11,7 @@
 #include "rapidjson/error/en.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
-#include <unistd.h>
+#include "net/p2p/node.hpp"
 
 Blockchain::Blockchain()
 {
@@ -1661,6 +1662,80 @@ bool Blockchain::load(std::string db_path)
         block_chain.pop_front();
     }
 
+    CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());
+
+    {
+        std::string peer_data;
+        s = m_db->Get(leveldb::ReadOptions(), "peer_score", &peer_data);
+    
+        if(!s.ok())
+        {
+            if(!s.IsNotFound())
+            {
+                CONSOLE_LOG_FATAL("read peer_score from leveldb failed: %s", s.ToString().c_str());
+            
+                return false;
+            }
+
+            CONSOLE_LOG_INFO("read peer_score from leveldb, it is empty");
+
+            return true;
+        }
+
+        rapidjson::Document doc;
+        const char *peer_data_str = peer_data.c_str();
+        doc.Parse(peer_data_str);
+        
+        if(doc.HasParseError())
+        {
+            return false;
+        }
+
+        if(!doc.HasMember("peers"))
+        {
+            return false;
+        }
+
+        if(!doc.HasMember("utc"))
+        {
+            return false;
+        }
+
+        const rapidjson::Value &peers = doc["peers"];
+
+        if(!peers.IsArray())
+        {
+            return false;
+        }
+    
+        for(rapidjson::Value::ConstValueIterator iter = peers.Begin(); iter != peers.End(); ++iter)
+        {
+            const rapidjson::Value &peer_doc = *iter;
+
+            if(!peer_doc.HasMember("host"))
+            {
+                return false;
+            }
+
+            if(!peer_doc.HasMember("port"))
+            {
+                return false;
+            }
+
+            if(!peer_doc.HasMember("score"))
+            {
+                return false;
+            }
+
+            net::p2p::Peer peer(fly::net::Addr(peer_doc["host"].GetString(), peer_doc["port"].GetUint()), peer_doc["score"].GetUint64());
+
+            if(!net::p2p::Node::instance()->add_peer(peer))
+            {
+                return false;
+            }
+        }
+    }
+    
     // CKey key;
     // key.MakeNewKey(false);
     // CPubKey pubkey = key.GetPubKey();

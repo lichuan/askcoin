@@ -1,11 +1,13 @@
-#ifndef WSOCK_NODE
-#define WSOCK_NODE
+#ifndef NET__WSOCK_NODE
+#define NET__WSOCK_NODE
 
 #include <unordered_map>
 #include "fly/net/server.hpp"
 #include "fly/base/singleton.hpp"
 
 using fly::net::Wsock;
+
+namespace net {
 
 class Wsock_Node : public fly::base::Singleton<Wsock_Node>
 {
@@ -29,5 +31,7 @@ private:
     std::mutex m_mutex;
     std::unique_ptr<fly::net::Server<Wsock>> m_server;
 };
+
+}
 
 #endif

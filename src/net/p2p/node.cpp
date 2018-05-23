@@ -4,6 +4,7 @@
 
 using namespace std::placeholders;
 
+namespace net {
 namespace p2p {
 
 Node::Node()
@@ -55,11 +56,6 @@ void Node::set_host(std::string host)
     m_host = host;
 }
 
-void Node::set_max_active_conn(uint32 num)
-{
-    m_max_active_conn = num > 300 ? num : 300;
-}
-
 void Node::set_max_passive_conn(uint32 num)
 {
     m_max_passive_conn = num > 300 ? num : 300;
@@ -105,4 +101,12 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
     LOG_INFO("connection count: %u", m_connections.size());
 }
 
+bool Node::add_peer(const Peer &peer)
+{
+    m_peers.insert(peer);
+
+    return true;
+}
+
+}
 }
