@@ -20,13 +20,16 @@ bool Node::start(uint32 port)
 {
     int32 cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_num = cpu_num < 4 ? 4 : cpu_num;
-    
+    m_poller.reset(new fly::net::Poller<Json>(cpu_num));
     std::unique_ptr<fly::net::Server<Json>> server(new fly::net::Server<Json>(fly::net::Addr("0.0.0.0", port),
-                                                                                std::bind(&Node::allow, this, _1),
-                                                                                std::bind(&Node::init, this, _1),
-                                                                                std::bind(&Node::dispatch, this, _1),
-                                                                                std::bind(&Node::close, this, _1),
-                                                                                std::bind(&Node::be_closed, this, _1)));
+                                                                              std::bind(&Node::allow, this, _1),
+                                                                              std::bind(&Node::init, this, _1),
+                                                                              std::bind(&Node::dispatch, this, _1),
+                                                                              std::bind(&Node::close, this, _1),
+                                                                              std::bind(&Node::be_closed, this, _1),
+                                                                              m_poller));
+    m_poller->start();
+
     if(server->start())
     {
         CONSOLE_LOG_INFO("start p2p node success");
@@ -40,16 +43,17 @@ bool Node::start(uint32 port)
     return false;
 }
 
-    
 void Node::stop()
 {
     m_server->stop();
+    m_poller->stop();
     CONSOLE_LOG_INFO("stop p2p node success");
 }
 
 void Node::wait()
 {
     m_server->wait();
+    m_poller->wait();
 }
 
 void Node::set_host(std::string host)

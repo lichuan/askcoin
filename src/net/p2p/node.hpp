@@ -40,7 +40,6 @@ private:
     std::string m_host;
     std::unique_ptr<fly::net::Server<Json>> m_server;
     std::shared_ptr<fly::net::Poller<Json>> m_poller;
-    std::shared_ptr<fly::net::Parser<Json>> m_parser;
 };
 
 }
