@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include "fly/base/logger.hpp"
+#include "fly/net/server.hpp"
 #include "net/p2p/node.hpp"
 
 using namespace std::placeholders;
@@ -56,14 +57,9 @@ void Node::set_host(std::string host)
     m_host = host;
 }
 
-void Node::set_max_passive_conn(uint32 num)
+void Node::set_max_conn(uint32 num)
 {
-    m_max_passive_conn = num > 300 ? num : 300;
-}
-
-void Node::add_init_peer(const fly::net::Addr &addr)
-{
-    m_init_peer.push_back(addr);
+    m_max_conn = num;
 }
 
 bool Node::allow(std::shared_ptr<fly::net::Connection<Json>> connection)
@@ -74,9 +70,16 @@ bool Node::allow(std::shared_ptr<fly::net::Connection<Json>> connection)
 void Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
-    m_connections[connection->id()] = connection;
-    LOG_INFO("connection count: %u", m_connections.size());
+    //m_connections[connection->id()] = connection;
+    LOG_INFO("connection count: %u", m_peers.size());
 }
+
+// rapidjson::Document doc;
+// doc.SetObject();
+// rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+// doc.AddMember("msg_type", 9922, allocator); 
+// doc.AddMember("msg_cmd", 2223333, allocator);
+// connection->send(doc);
 
 void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 {
@@ -89,23 +92,56 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
     LOG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     std::lock_guard<std::mutex> guard(m_mutex);
-    m_connections.erase(connection->id());
-    LOG_INFO("connection count: %u", m_connections.size());
+    //m_connections.erase(connection->id());
+    LOG_INFO("connection count: %u", m_peers.size());
 }
     
 void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
     LOG_INFO("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     std::lock_guard<std::mutex> guard(m_mutex);
-    m_connections.erase(connection->id());
-    LOG_INFO("connection count: %u", m_connections.size());
+    //m_connections.erase(connection->id());
+    LOG_INFO("connection count: %u", m_peers.size());
 }
 
-bool Node::add_peer(const Peer &peer)
+bool Node::add_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 {
-    m_peers.insert(peer);
-
+    std::string key = peer_score->key();
+    
+    if(m_peer_score_map.find(key) != m_peer_score_map.end())
+    {
+        return false;
+    }
+    
+    m_peer_scores.insert(peer_score);
+    m_peer_score_map.insert(std::make_pair(key, peer_score));
+    
     return true;
+}
+
+bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
+{
+    std::string key = peer_score->key();
+    
+    if(m_peer_score_map.find(key) != m_peer_score_map.end())
+    {
+        return false;
+    }
+    
+    m_peer_score_map.erase(key);
+    auto iter_end = m_peer_scores.upper_bound(peer_score);
+    
+    for(auto iter = m_peer_scores.lower_bound(peer_score); iter != iter_end; ++iter)
+    {
+        if(*iter == peer_score)
+        {
+            m_peer_scores.erase(peer_score);
+
+            return true;
+        }
+    }
+
+    return false;
 }
 
 }

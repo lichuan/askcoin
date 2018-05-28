@@ -49,9 +49,9 @@ void Wsock_Node::wait()
     m_server->wait();
 }
 
-void Wsock_Node::set_max_passive_conn(uint32 num)
+void Wsock_Node::set_max_conn(uint32 num)
 {
-    m_max_passive_conn = num > 1000 ? num : 1000;
+    m_max_conn = num;
 }
 
 bool Wsock_Node::allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)

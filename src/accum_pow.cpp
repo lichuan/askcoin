@@ -5,6 +5,11 @@ Accum_Pow::Accum_Pow()
     m_n32.fill(0);
 }
 
+Accum_Pow::Accum_Pow(uint64 v0, uint64 v1, uint64 v2, uint64 v3, uint64 v4, uint64 v5, uint64 v6, uint64 v7, uint64 v8)
+    : m_n32{v0, v1, v2, v3, v4, v5, v6, v7, v8}
+{
+}
+
 void Accum_Pow::add_pow(uint32 zero_bits)
 {
     if(zero_bits > 256)

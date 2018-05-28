@@ -32,6 +32,7 @@ public:
     void add_account_rich(std::shared_ptr<Account> account);
     
 private:
+    bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
     std::shared_ptr<Block> m_cur_block;

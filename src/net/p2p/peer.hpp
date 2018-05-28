@@ -1,7 +1,9 @@
 #ifndef NET__P2P__PEER
 #define NET__P2P__PEER
 
-#include "fly/net/addr.hpp"
+#include "fly/net/connection.hpp"
+
+using fly::net::Json;
 
 namespace net {
 namespace p2p {
@@ -9,22 +11,11 @@ namespace p2p {
 class Peer
 {
 public:
-    struct Score_Comp
-    {
-        bool operator()(const Peer &a, const Peer &b)
-        {
-            return a.m_score > b.m_score;
-        }
-    };
-    
-    Peer(const fly::net::Addr &addr, uint64 score = 0);
+    Peer();
     ~Peer();
-    std::string key();
-    
-private:
-    uint64 m_score;
-    std::string m_key;
+    uint32 m_state;
     fly::net::Addr m_addr;
+    std::shared_ptr<fly::net::Connection<Json>> m_connection;
 };
 
 }

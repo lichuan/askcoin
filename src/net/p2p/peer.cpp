@@ -1,22 +1,17 @@
+#include <unistd.h>
+#include "fly/base/logger.hpp"
 #include "net/p2p/peer.hpp"
 
 namespace net {
 namespace p2p {
 
-Peer::Peer(const fly::net::Addr &addr, uint64 score = 0)
+Peer::Peer()
 {
-    m_addr = addr;
-    m_score = score;
-    m_key = addr.m_host + ":" + fly::base::to_string(addr.m_port);
+    m_state = 0;
 }
 
 Peer::~Peer()
 {
-}
-
-std::string Peer::key()
-{
-    return m_key;
 }
 
 }

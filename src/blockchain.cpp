@@ -280,6 +280,7 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
     {
         iter_block = iter_block->get_parent();
         
+        // todo, edge case
         if(++count > 4320)
         {
             std::string block_data;
@@ -348,6 +349,7 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     {
         std::shared_ptr<Topic> topic = m_topic_list.front();
 
+        // todo, edge case
         if(topic->block_id() + 43200 < cur_block_id)
         {
             m_topics.erase(topic->key());
@@ -384,7 +386,7 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
 
 bool Blockchain::load(std::string db_path)
 {
-    // to do where to run void RandAddSeedSleep() ?
+    // todo where to run void RandAddSeedSleep() ?
     // firstly, we need verify __asic_resistant_data__
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
     {
@@ -471,6 +473,22 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
 
+        rapidjson::Document peer_doc;
+        peer_doc.SetObject();
+        rapidjson::Document::AllocatorType &peer_allocator = peer_doc.GetAllocator();
+        rapidjson::Value peers(rapidjson::kArrayType);
+        peer_doc.AddMember("utc", time(NULL), peer_allocator);
+        peer_doc.AddMember("peers", peers, peer_allocator);
+        rapidjson::StringBuffer buffer_3;
+        rapidjson::Writer<rapidjson::StringBuffer> writer_3(buffer_3);
+        peer_doc.Accept(writer_3);
+        s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer_3.GetString());
+        
+        if(!s.ok())
+        {
+            return false;
+        }
+        
         //try get again
         s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
 
@@ -1217,7 +1235,8 @@ bool Blockchain::load(std::string db_path)
                 {
                     return false;
                 }
-                
+
+                // todo, edge case
                 if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
                 {
                     return false;
@@ -1336,6 +1355,7 @@ bool Blockchain::load(std::string db_path)
                     return false;
                 }
 
+                // todo, edge case
                 if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
                 {
                     return false;
@@ -1664,26 +1684,27 @@ bool Blockchain::load(std::string db_path)
 
     CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());
 
+    if(!check_balance())
+    {
+        CONSOLE_LOG_FATAL("check_balance failed");
+
+        return false;
+    }
+    
     {
         std::string peer_data;
         s = m_db->Get(leveldb::ReadOptions(), "peer_score", &peer_data);
-    
+        
         if(!s.ok())
         {
-            if(!s.IsNotFound())
-            {
-                CONSOLE_LOG_FATAL("read peer_score from leveldb failed: %s", s.ToString().c_str());
-            
-                return false;
-            }
+            CONSOLE_LOG_FATAL("read peer score data from leveldb failed: %s", s.ToString().c_str());
 
-            CONSOLE_LOG_INFO("read peer_score from leveldb, it is empty");
-
-            return true;
+            return false;
         }
-
+        
         rapidjson::Document doc;
         const char *peer_data_str = peer_data.c_str();
+        CONSOLE_LOG_INFO("peer score data from leveldb: %s", peer_data_str);
         doc.Parse(peer_data_str);
         
         if(doc.HasParseError())
@@ -1710,29 +1731,25 @@ bool Blockchain::load(std::string db_path)
     
         for(rapidjson::Value::ConstValueIterator iter = peers.Begin(); iter != peers.End(); ++iter)
         {
-            const rapidjson::Value &peer_doc = *iter;
+            const rapidjson::Value &peer_info = *iter;
 
-            if(!peer_doc.HasMember("host"))
+            if(!peer_info.HasMember("host"))
             {
                 return false;
             }
 
-            if(!peer_doc.HasMember("port"))
+            if(!peer_info.HasMember("port"))
             {
                 return false;
             }
 
-            if(!peer_doc.HasMember("score"))
+            if(!peer_info.HasMember("score"))
             {
                 return false;
             }
-
-            net::p2p::Peer peer(fly::net::Addr(peer_doc["host"].GetString(), peer_doc["port"].GetUint()), peer_doc["score"].GetUint64());
-
-            if(!net::p2p::Node::instance()->add_peer(peer))
-            {
-                return false;
-            }
+            
+            std::shared_ptr<net::p2p::Peer_Score> peer_score(new net::p2p::Peer_Score(fly::net::Addr(peer_info["host"].GetString(), peer_info["port"].GetUint()), peer_info["score"].GetUint64()));
+            net::p2p::Node::instance()->add_peer_score(peer_score);
         }
     }
     
@@ -1852,5 +1869,11 @@ bool Blockchain::load(std::string db_path)
     //     CONSOLE_LOG_INFO("verify failed.................");
     // }
 
+    return true;
+}
+
+bool Blockchain::check_balance()
+{
+    // todo, make sure the total coin is equal to 1000000000000
     return true;
 }
