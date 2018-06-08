@@ -214,7 +214,6 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 {
     std::shared_ptr<fly::net::Connection<Json>> connection = message->get_connection();
     uint64 conn_id = connection->id();
-    const fly::net::Addr &addr = connection->peer_addr();
     std::unique_lock<std::mutex> lock(m_peer_mutex);
     auto iter_reg = m_peers.find(conn_id);
     
@@ -327,16 +326,16 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             peer->m_reg_conn_id = id_u64;
             peer->m_state = 3;
         }
-        else if(cmd == REG_VERIFY_RSP)
+        else if(cmd == REG_VERIFY_REQ)
         {
             if(peer->m_state != 0)
             {
-                LOG_ERROR("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
+                LOG_ERROR("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
                 connection->close();
-                
+
                 return;
             }
-            
+
             if(!doc.HasMember("id"))
             {
                 connection->close();
@@ -371,24 +370,24 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
+            LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
             std::unique_lock<std::mutex> lock(m_peer_mutex);
             auto iter_unreg = m_unreg_peers.find(id_u64);
 
             if(iter_unreg == m_unreg_peers.end())
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
+                LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
                 connection->close();
         
                 return;
             }
-            
+
             std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
             lock.unlock();
         
-            if(peer_unreg->m_state != 4)
+            if(peer_unreg->m_state != 3)
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
+                LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
                 connection->close();
             
                 return;
@@ -396,13 +395,21 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             if(key_u32 != peer_unreg->m_local_key)
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
+                LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
                 connection->close();
 
                 return;
             }
-            
+
             m_timer_ctl.del_timer(peer_unreg->m_timer_id);
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", MSG_REG, allocator);
+            doc.AddMember("msg_cmd", REG_VERIFY_RSP, allocator);
+            doc.AddMember("key", peer_unreg->m_remote_key, allocator);
+            doc.AddMember("id", peer_unreg->m_reg_conn_id, allocator);
+            connection->send(doc);
             lock.lock();
             m_unreg_peers.erase(id_u64);
             m_peers.insert(std::make_pair(id_u64, peer_unreg));
@@ -562,11 +569,11 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                                                                                               m_poller));
                     if(client->connect(1000))
                     {
-                        LOG_INFO("unreg peer (m_state:0) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_INFO("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                     }
                     else
                     {
-                        LOG_ERROR("unreg peer (m_state:0) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_ERROR("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                         connection->close();
                         peer_score->m_state.store(0, std::memory_order_relaxed);
                         std::lock_guard<std::mutex> guard(m_score_mutex);
@@ -580,16 +587,16 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             connection->close();
         }
     }
-    else if(cmd == REG_VERIFY_REQ)
+    else if(cmd == REG_VERIFY_RSP)
     {
         if(peer->m_state != 0)
         {
-            LOG_ERROR("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
+            LOG_ERROR("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
             connection->close();
-
+                
             return;
         }
-
+            
         if(!doc.HasMember("id"))
         {
             connection->close();
@@ -624,24 +631,24 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         uint64 id_u64 = id.GetUint64();
         uint32 key_u32 = key.GetUint();
-        LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
+        LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
         std::unique_lock<std::mutex> lock(m_peer_mutex);
         auto iter_unreg = m_unreg_peers.find(id_u64);
 
         if(iter_unreg == m_unreg_peers.end())
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
+            LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
             connection->close();
         
             return;
         }
-
+            
         std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
         lock.unlock();
         
-        if(peer_unreg->m_state != 3)
+        if(peer_unreg->m_state != 4)
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 2");
+            LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
             connection->close();
             
             return;
@@ -649,21 +656,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         if(key_u32 != peer_unreg->m_local_key)
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
+            LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
             connection->close();
 
             return;
         }
-
+            
         m_timer_ctl.del_timer(peer_unreg->m_timer_id);
-        rapidjson::Document doc;
-        doc.SetObject();
-        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-        doc.AddMember("msg_type", MSG_REG, allocator);
-        doc.AddMember("msg_cmd", REG_VERIFY_RSP, allocator);
-        doc.AddMember("key", peer_unreg->m_remote_key, allocator);
-        doc.AddMember("id", peer_unreg->m_reg_conn_id, allocator);
-        connection->send(doc);
         lock.lock();
         m_unreg_peers.erase(id_u64);
         m_peers.insert(std::make_pair(id_u64, peer_unreg));
