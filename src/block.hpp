@@ -8,14 +8,14 @@
 class Block
 {
 public:
-    Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash);
+    Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash);
     bool is_genesis();
     uint32 version();
-    uint32 utc();
+    uint64 utc();
     uint64 id();
     std::string hash();
     uint32 zero_bits();
-    uint32 utc_diff();
+    uint64 utc_diff();
     void set_parent(std::shared_ptr<Block> parent);
     std::shared_ptr<Block> get_parent();
     void add_child(std::shared_ptr<Block> child);
@@ -27,10 +27,10 @@ public:
     
 private:
     uint64 m_id;
-    uint32 m_utc;
+    uint64 m_utc;
     uint32 m_version;
     uint32 m_zero_bits;
-    uint32 m_utc_diff;
+    uint64 m_utc_diff;
     std::string m_hash;
     std::shared_ptr<Block> m_parent;
     std::shared_ptr<Account> m_miner;
@@ -41,7 +41,7 @@ private:
 class Pending_Block : public Block
 {
 public:
-    Pending_Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash);
+    Pending_Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash);
     ~Pending_Block();
     void exec();
     void exec_reverse();

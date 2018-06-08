@@ -9,8 +9,11 @@
 #include <unordered_map>
 #include "leveldb/db.h"
 #include "fly/base/singleton.hpp"
+#include "fly/net/message.hpp"
 #include "block.hpp"
 #include "account.hpp"
+
+using fly::net::Json;
 
 class Blockchain : public fly::base::Singleton<Blockchain>
 {
@@ -30,7 +33,9 @@ public:
     bool proc_tx_map(std::shared_ptr<Block> block);
     void del_account_rich(std::shared_ptr<Account> account);
     void add_account_rich(std::shared_ptr<Account> account);
-    
+    void dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message);
+    void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Json>> message);
+
 private:
     bool check_balance();
     uint64 m_cur_account_id = 0;

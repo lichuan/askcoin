@@ -1,6 +1,6 @@
 #include "block.hpp"
 
-Block::Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash)
+Block::Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash)
 {
     m_id = id;
     m_utc = utc;
@@ -20,12 +20,12 @@ uint32 Block::version()
     return m_version;
 }
 
-uint32 Block::utc()
+uint64 Block::utc()
 {
     return m_utc;
 }
 
-uint32 Block::utc_diff()
+uint64 Block::utc_diff()
 {
     return m_utc_diff;
 }
@@ -82,7 +82,7 @@ std::shared_ptr<Account> Block::get_miner()
     return m_miner;
 }
 
-Pending_Block::Pending_Block(uint64 id, uint32 utc, uint32 version, uint32 zero_bits, std::string hash)
+Pending_Block::Pending_Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash)
     : Block(id, utc, version, zero_bits, hash)
 {
 }

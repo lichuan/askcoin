@@ -20,30 +20,45 @@ std::string Peer_Score::key() const
     return m_key;
 }
 
+const fly::net::Addr& Peer_Score::addr()
+{
+    return m_addr;
+}
+
 void Peer_Score::add_score(uint64 score)
 {
-    Node::instance()->del_peer_score(shared_from_this());
+    if(!Node::instance()->erase_peer_score(shared_from_this()))
+    {
+        return;
+    }
+
     m_score += score;
-    Node::instance()->add_peer_score(shared_from_this());
+    Node::instance()->insert_peer_score(shared_from_this());
 }
 
 void Peer_Score::set_score(uint64 score)
 {
-    Node::instance()->del_peer_score(shared_from_this());
+    if(!Node::instance()->erase_peer_score(shared_from_this()))
+    {
+        return;
+    }
+
     m_score = score;
-    Node::instance()->add_peer_score(shared_from_this());
+    Node::instance()->insert_peer_score(shared_from_this());
 }
 
 void Peer_Score::sub_score(uint64 score)
 {
-    Node::instance()->del_peer_score(shared_from_this());
-
     if(m_score > score)
     {
-        m_score -= score;
-    }
+        if(!Node::instance()->erase_peer_score(shared_from_this()))
+        {
+            return;
+        }
 
-    Node::instance()->add_peer_score(shared_from_this());
+        m_score -= score;
+        Node::instance()->insert_peer_score(shared_from_this());
+    }
 }
 
 }

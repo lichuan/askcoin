@@ -634,7 +634,7 @@ bool Blockchain::load(std::string db_path)
     m_reserve_fund_account->set_balance(total / 2);
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
     uint64 block_id = data["id"].GetUint64();
-    uint32 utc = data["utc"].GetUint();
+    uint64 utc = data["utc"].GetUint64();
     uint32 version = data["version"].GetUint();
     uint32 zero_bits = data["zero_bits"].GetUint();
 
@@ -857,7 +857,7 @@ bool Blockchain::load(std::string db_path)
         }
         
         uint64 block_id = data["id"].GetUint64();
-        uint32 utc = data["utc"].GetUint();
+        uint64 utc = data["utc"].GetUint();
         uint32 version = data["version"].GetUint();
         uint32 zero_bits = data["zero_bits"].GetUint();
         std::string pre_hash = data["pre_hash"].GetString();
@@ -890,10 +890,10 @@ bool Blockchain::load(std::string db_path)
         
         std::shared_ptr<Block> parent = child_block.m_parent;
         uint64 parent_block_id = parent->id();
-        uint32 parent_utc = parent->utc();
+        uint64 parent_utc = parent->utc();
         std::string parent_hash = parent->hash();
         uint32 parent_zero_bits = parent->zero_bits();
-        uint32 utc_diff = parent->utc_diff();
+        uint64 utc_diff = parent->utc_diff();
         
         if(block_id != parent_block_id + 1)
         {
@@ -936,7 +936,7 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
 
-        uint32 now = time(NULL);
+        uint64 now = time(NULL);
         
         if(utc > now + 2)
         {
@@ -1876,4 +1876,12 @@ bool Blockchain::check_balance()
 {
     // todo, make sure the total coin is equal to 1000000000000
     return true;
+}
+
+void Blockchain::dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message)
+{
+}
+
+void Blockchain::dispatch_wsock_message(std::unique_ptr<fly::net::Message<Json>> message)
+{
 }
