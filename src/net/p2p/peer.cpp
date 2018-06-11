@@ -9,6 +9,7 @@ Peer::Peer()
 {
     m_state = 0;
     m_timer_id = 0;
+    m_ping_timer_id = 0;
     m_remote_key = 0;
     m_local_key = 0;
     m_reg_conn_id = 0;

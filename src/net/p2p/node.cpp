@@ -164,7 +164,7 @@ void Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
         
         return;
     }
-
+    
     std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
     lock.unlock();
     rapidjson::Document doc;
@@ -193,7 +193,7 @@ void Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
     
     if(!connection->is_passive())
     {
-        peer->m_addr = fly::net::Addr(m_host, m_port);
+        peer->m_addr = connection->peer_addr();
         peer->m_state = 1;
         peer->m_local_key = fly::base::random_32();
         rapidjson::Document doc;
@@ -216,14 +216,64 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     uint64 conn_id = connection->id();
     std::unique_lock<std::mutex> lock(m_peer_mutex);
     auto iter_reg = m_peers.find(conn_id);
-    
+    uint32 type = message->type();
+    uint32 cmd = message->cmd();
+
     if(iter_reg != m_peers.end())
     {
-        Blockchain::instance()->dispatch_peer_message(std::move(message));
+        std::shared_ptr<Peer> peer = iter_reg->second;
+        lock.unlock();
 
+        if(type != MSG_SYS)
+        {
+            Blockchain::instance()->dispatch_peer_message(std::move(message));
+        }
+        else
+        {
+            if(cmd == SYS_PING)
+            {
+                if(!connection->is_passive())
+                {
+                    connection->close();
+                }
+                else
+                {
+                    static bool pong_doc = false;
+                    static rapidjson::Document doc;
+
+                    if(!pong_doc)
+                    {
+                        doc.SetObject();
+                        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                        doc.AddMember("msg_type", MSG_SYS, allocator);
+                        doc.AddMember("msg_cmd", SYS_PONG, allocator);
+                        pong_doc = true;
+                    }
+                    
+                    connection->send(doc);
+                    m_timer_ctl.reset_timer(peer->m_timer_id);
+                }
+            }
+            else if(cmd == SYS_PONG)
+            {
+                if(connection->is_passive())
+                {
+                    connection->close();
+                }
+                else
+                {
+                    m_timer_ctl.reset_timer(peer->m_timer_id);
+                }
+            }
+            else
+            {
+                connection->close();
+            }
+        }
+        
         return;
     }
-    
+
     auto iter_unreg = m_unreg_peers.find(conn_id);
     
     if(iter_unreg == m_unreg_peers.end())
@@ -236,7 +286,6 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     
     std::shared_ptr<Peer> peer = iter_unreg->second;
     lock.unlock();
-    uint32 type = message->type();
     
     if(type != MSG_REG)
     {
@@ -247,8 +296,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     }
 
     rapidjson::Document& doc = message->doc();
-    uint32 cmd = message->cmd();
-    
+
     if(!connection->is_passive())
     {
         if(cmd == REG_RSP)
@@ -383,8 +431,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             }
 
             std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
-            lock.unlock();
-        
+
             if(peer_unreg->m_state != 3)
             {
                 LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
@@ -401,7 +448,26 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                 return;
             }
 
-            m_timer_ctl.del_timer(peer_unreg->m_timer_id);
+            m_unreg_peers.erase(id_u64);
+            m_peers.insert(std::make_pair(id_u64, peer_unreg));
+            m_timer_ctl.reset_timer(peer_unreg->m_timer_id);
+            std::shared_ptr<fly::net::Connection<Json>> reg_connection = peer_unreg->m_connection;
+            peer_unreg->m_ping_timer_id = m_timer_ctl.add_timer([=]() {
+                    static bool ping_doc = false;
+                    static rapidjson::Document doc;
+
+                    if(!ping_doc)
+                    {
+                        doc.SetObject();
+                        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                        doc.AddMember("msg_type", MSG_SYS, allocator);
+                        doc.AddMember("msg_cmd", SYS_PING, allocator);
+                        ping_doc = true;
+                    }
+                    
+                    reg_connection->send(doc);
+                }, 5);
+            lock.unlock();
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -410,9 +476,6 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             doc.AddMember("key", peer_unreg->m_remote_key, allocator);
             doc.AddMember("id", peer_unreg->m_reg_conn_id, allocator);
             connection->send(doc);
-            lock.lock();
-            m_unreg_peers.erase(id_u64);
-            m_peers.insert(std::make_pair(id_u64, peer_unreg));
             connection->close();
         }
         else
@@ -559,8 +622,8 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             doc.AddMember("key", peer->m_local_key, allocator);
             doc.AddMember("version", ASKCOIN_VERSION, allocator);
             connection->send(doc);
-            
-            std::thread tmp_thread([=]() {
+
+            std::thread tmp_thread([=, &lock]() {
                     std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(peer->m_addr,
                                                                                               std::bind(&Node::init_verify, this, _1, conn_id),
                                                                                               std::bind(&Node::dispatch, this, _1),
@@ -576,7 +639,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                         LOG_ERROR("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                         connection->close();
                         peer_score->m_state.store(0, std::memory_order_relaxed);
-                        std::lock_guard<std::mutex> guard(m_score_mutex);
+                        lock.lock();
                         peer_score->sub_score(100);
                     }
                 });
@@ -642,10 +705,9 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
             return;
         }
-            
+
         std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
-        lock.unlock();
-        
+
         if(peer_unreg->m_state != 4)
         {
             LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
@@ -653,7 +715,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             
             return;
         }
-
+        
         if(key_u32 != peer_unreg->m_local_key)
         {
             LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
@@ -661,11 +723,11 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             return;
         }
-            
-        m_timer_ctl.del_timer(peer_unreg->m_timer_id);
-        lock.lock();
+        
         m_unreg_peers.erase(id_u64);
         m_peers.insert(std::make_pair(id_u64, peer_unreg));
+        m_timer_ctl.reset_timer(peer_unreg->m_timer_id);
+        lock.unlock();
         connection->close();
     }
     else
@@ -677,18 +739,87 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
     uint64 conn_id = connection->id();
+    std::lock_guard<std::mutex> lock(m_peer_mutex);
+    auto iter_reg = m_peers.find(conn_id);
+    auto iter_unreg = m_unreg_peers.find(conn_id);
+    std::shared_ptr<Peer> peer;
     LOG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
-    //std::lock_guard<std::mutex> guard(m_mutex);
-    //m_connections.erase(connection->id());
-    LOG_INFO("connection count: %u", m_peers.size());
-}
     
+    if(iter_reg == m_peers.end())
+    {
+        peer = iter_unreg->second;
+        m_unreg_peers.erase(conn_id);
+        
+        if(peer->m_state == 0)
+        {
+            LOG_INFO("unreg peer (m_state:0) close");
+
+            return;
+        }
+        
+        LOG_INFO("unreg peer (%s) close", peer->key().c_str());
+    }
+    else
+    {
+        peer = iter_reg->second;
+        LOG_INFO("reg peer (%s) close", peer->key().c_str());
+        m_peers.erase(conn_id);
+    }
+    
+    std::lock_guard<std::mutex> guard(m_score_mutex);
+    auto iter_score = m_peer_score_map.find(peer->key());
+    
+    if(iter_score == m_peer_score_map.end())
+    {
+        return;
+    }
+
+    std::shared_ptr<Peer_Score> peer_score = iter_score->second;
+    peer_score->sub_score(1);
+    peer_score->m_state.store(0, std::memory_order_relaxed);
+}
+
 void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
-    LOG_INFO("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
-    //std::lock_guard<std::mutex> guard(m_mutex);
-    //m_connections.erase(connection->id());
-    LOG_INFO("connection count: %u", m_peers.size());
+    uint64 conn_id = connection->id();
+    std::lock_guard<std::mutex> lock(m_peer_mutex);
+    auto iter_reg = m_peers.find(conn_id);
+    auto iter_unreg = m_unreg_peers.find(conn_id);
+    std::shared_ptr<Peer> peer;
+    LOG_INFO("close connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    
+    if(iter_reg == m_peers.end())
+    {
+        peer = iter_unreg->second;
+        m_unreg_peers.erase(conn_id);
+        
+        if(peer->m_state == 0)
+        {
+            LOG_INFO("unreg peer (m_state:0) be closed");
+
+            return;
+        }
+        
+        LOG_INFO("unreg peer (%s) be closed", peer->key().c_str());
+    }
+    else
+    {
+        peer = iter_reg->second;
+        LOG_INFO("reg peer (%s) be closed", peer->key().c_str());
+        m_peers.erase(conn_id);
+    }
+    
+    std::lock_guard<std::mutex> guard(m_score_mutex);
+    auto iter_score = m_peer_score_map.find(peer->key());
+    
+    if(iter_score == m_peer_score_map.end())
+    {
+        return;
+    }
+
+    std::shared_ptr<Peer_Score> peer_score = iter_score->second;
+    peer_score->sub_score(1);
+    peer_score->m_state.store(0, std::memory_order_relaxed);
 }
 
 bool Node::insert_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
@@ -732,7 +863,7 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 {
     std::string key = peer_score->key();
     
-    if(m_peer_score_map.find(key) != m_peer_score_map.end())
+    if(m_peer_score_map.find(key) == m_peer_score_map.end())
     {
         return false;
     }

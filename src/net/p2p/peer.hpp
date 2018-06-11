@@ -21,6 +21,7 @@ public:
     uint32 m_local_key;
     uint64 m_reg_conn_id;
     uint64 m_timer_id;
+    uint64 m_ping_timer_id;
     std::shared_ptr<fly::net::Connection<Json>> m_connection;
 
 private:
