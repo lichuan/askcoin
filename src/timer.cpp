@@ -30,6 +30,8 @@ uint64 Timer_Controller::add_timer(std::function<void()> cb, uint32 interval, bo
     std::lock_guard<std::mutex> guard(m_mutex);
     m_timers.insert(timer);
     m_timer_map.insert(std::make_pair(id, timer));
+
+    return id;
 }
 
 void Timer_Controller::del_timer(uint64 id)
@@ -49,7 +51,7 @@ void Timer_Controller::del_timer(uint64 id)
     {
         if(*iter == timer)
         {
-            m_timers.erase(timer);
+            m_timers.erase(iter);
             m_timer_map.erase(id);
             
             return;
@@ -75,10 +77,10 @@ void Timer_Controller::reset_timer(uint64 id)
     {
         if(*iter == timer)
         {
-            m_timers.erase(timer);
+            m_timers.erase(iter);
             timer->m_utc = now + timer->m_interval;
             m_timers.insert(timer);
-
+            
             return;
         }
     }
