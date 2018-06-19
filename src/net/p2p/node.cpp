@@ -40,8 +40,10 @@ bool Node::start(uint32 port)
     {
         CONSOLE_LOG_INFO("start p2p node success");
         m_server = std::move(server);
-        std::thread tmp_thread(std::bind(&Node::connect_peer, this));
-        m_thread = std::move(tmp_thread);
+        std::thread timer_thread(std::bind(&Node::timer_proc, this));
+        m_timer_thread = std::move(timer_thread);
+        std::thread connect_thread(std::bind(&Node::connect_proc, this));
+        m_connect_thread = std::move(connect_thread);
         
         return true;
     }
@@ -59,11 +61,19 @@ void Node::stop()
     CONSOLE_LOG_INFO("stop p2p node success");
 }
 
-void Node::connect_peer()
+void Node::timer_proc()
 {
     while(!m_stop.load(std::memory_order_relaxed))
     {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
         m_timer_ctl.run();
+    }
+}
+
+void Node::connect_proc()
+{
+    while(!m_stop.load(std::memory_order_relaxed))
+    {
         uint32 peer_num = 0;
         {
             std::lock_guard<std::mutex> guard(m_peer_mutex);
@@ -124,7 +134,8 @@ void Node::connect_peer()
 
 void Node::wait()
 {
-    m_thread.join();
+    m_timer_thread.join();
+    m_connect_thread.join();
     m_server->wait();
     m_poller->wait();
 }

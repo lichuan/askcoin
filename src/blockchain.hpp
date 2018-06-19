@@ -9,11 +9,13 @@
 #include <unordered_map>
 #include "leveldb/db.h"
 #include "fly/base/singleton.hpp"
+#include "fly/base/lock_queue.hpp"
 #include "fly/net/message.hpp"
 #include "block.hpp"
 #include "account.hpp"
 
 using fly::net::Json;
+using fly::net::Wsock;
 
 class Blockchain : public fly::base::Singleton<Blockchain>
 {
@@ -34,9 +36,16 @@ public:
     void del_account_rich(std::shared_ptr<Account> account);
     void add_account_rich(std::shared_ptr<Account> account);
     void dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message);
-    void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Json>> message);
-
+    void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
+    void do_message();
+    void stop_do_message();
+    
 private:
+    void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
+    void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
+    
+private:
+    std::atomic<bool> m_stop{false};
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
@@ -50,6 +59,8 @@ private:
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::array<char, 255> m_b64_table;
     std::shared_ptr<Account> m_reserve_fund_account;
+    fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
+    fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Wsock>>> m_wsock_messages;
 };
 
 #endif

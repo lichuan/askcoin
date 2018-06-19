@@ -6,6 +6,7 @@
 #include "key.h"
 #include "version.hpp"
 #include "utilstrencodings.h"
+#include "random.h"
 #include "cryptopp/sha.h"
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
@@ -384,9 +385,63 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     return true;
 }
 
+void Blockchain::do_message()
+{
+    while(!m_stop.load(std::memory_order_relaxed))
+    {
+        bool peer_empty = false;
+        bool wsock_empty = false;
+        std::list<std::unique_ptr<fly::net::Message<Json>>> peer_messages;
+
+        if(m_peer_messages.pop(peer_messages))
+        {
+            for(auto &message : peer_messages)
+            {
+                do_peer_message(message);
+            }
+        }
+        else
+        {
+            peer_empty = true;
+        }
+        
+        std::list<std::unique_ptr<fly::net::Message<Wsock>>> wsock_messages;
+        
+        if(m_wsock_messages.pop(wsock_messages))
+        {
+            for(auto &message : wsock_messages)
+            {
+                do_wsock_message(message);
+            }
+        }
+        else
+        {
+            wsock_empty = true;
+        }
+
+        if(peer_empty && wsock_empty)
+        {
+            RandAddSeedSleep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+}
+
+void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message)
+{
+}
+
+void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message)
+{
+}
+
+void Blockchain::stop_do_message()
+{
+    m_stop.store(true, std::memory_order_relaxed);
+}
+
 bool Blockchain::load(std::string db_path)
 {
-    // todo where to run void RandAddSeedSleep() ?
     // firstly, we need verify __asic_resistant_data__
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
     {
@@ -1880,8 +1935,10 @@ bool Blockchain::check_balance()
 
 void Blockchain::dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message)
 {
+    m_peer_messages.push(std::move(message));
 }
 
-void Blockchain::dispatch_wsock_message(std::unique_ptr<fly::net::Message<Json>> message)
+void Blockchain::dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message)
 {
+    m_wsock_messages.push(std::move(message));
 }

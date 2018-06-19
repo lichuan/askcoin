@@ -36,9 +36,9 @@ public:
     bool del_peer_score(const std::shared_ptr<Peer_Score> &peer_score);
     bool insert_peer_score(const std::shared_ptr<Peer_Score> &peer_score);
     bool erase_peer_score(const std::shared_ptr<Peer_Score> &peer_score);
-    void connect_peer();
-    
-    
+    void connect_proc();
+    void timer_proc();
+
 private:
     uint32 m_max_conn = 0;
     std::atomic<bool> m_stop{false};
@@ -52,7 +52,8 @@ private:
     uint32 m_port;
     std::unique_ptr<fly::net::Server<Json>> m_server;
     std::shared_ptr<fly::net::Poller<Json>> m_poller;
-    std::thread m_thread;
+    std::thread m_connect_thread;
+    std::thread m_timer_thread;
     Timer_Controller m_timer_ctl;
 };
 
