@@ -12,11 +12,6 @@ Accum_Pow::Accum_Pow(uint64 v0, uint64 v1, uint64 v2, uint64 v3, uint64 v4, uint
 
 void Accum_Pow::add_pow(uint32 zero_bits)
 {
-    if(zero_bits > 256)
-    {
-        return;
-    }
-    
     uint32 idx = zero_bits / 32;
     uint32 remain = zero_bits % 32;
     const uint64 max_u32 = (uint64)1 << 32;
@@ -28,6 +23,11 @@ void Accum_Pow::add_pow(uint32 zero_bits)
         m_n32[idx + 1] += 1;
         idx += 1;
     }
+}
+
+bool Accum_Pow::operator==(const Accum_Pow &other)
+{
+    return m_n32 == other.m_n32;
 }
 
 bool Accum_Pow::operator>(const Accum_Pow &other)

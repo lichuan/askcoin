@@ -32,7 +32,7 @@ bool Node::start(uint32 port)
                                                                               std::bind(&Node::dispatch, this, _1),
                                                                               std::bind(&Node::close, this, _1),
                                                                               std::bind(&Node::be_closed, this, _1),
-                                                                              m_poller));
+                                                                              m_poller, 1024 * 1024)); // todo, max_msg_length?
     m_poller->start();
     m_port = port;
     
@@ -105,7 +105,7 @@ void Node::connect_proc()
                                                                                           std::bind(&Node::dispatch, this, _1),
                                                                                           std::bind(&Node::close, this, _1),
                                                                                           std::bind(&Node::be_closed, this, _1),
-                                                                                          m_poller));
+                                                                                          m_poller, 1024 * 1024)); // todo, max_msg_length
                 LOG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
 
                 if(client->connect(1000))

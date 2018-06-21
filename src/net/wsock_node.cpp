@@ -24,7 +24,7 @@ bool Wsock_Node::start(uint32 port)
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
                                                                                 std::bind(&Wsock_Node::be_closed, this, _1),
-                                                                                cpu_num));
+                                                                                cpu_num, 1024 * 1024)); // todo, max_msg_length
     if(server->start())
     {
         CONSOLE_LOG_INFO("start websocket node success");
