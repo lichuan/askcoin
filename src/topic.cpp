@@ -6,6 +6,7 @@ Topic::Topic(std::string key, std::string data, uint64 block_id, uint64 balance)
     m_data = data;
     m_block_id = block_id;
     m_balance = balance;
+    m_total = balance;
 }
 
 Topic::~Topic()
@@ -55,6 +56,11 @@ void Topic::sub_balance(uint64 value)
 uint64 Topic::get_balance()
 {
     return m_balance;
+}
+
+uint64 Topic::get_total()
+{
+    return m_total;
 }
 
 bool Topic::add_member(std::shared_ptr<Account> account)

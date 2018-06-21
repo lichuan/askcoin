@@ -187,6 +187,11 @@ std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
 
 bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64)
 {
+    if(sign_b64.length() < 80 || sign_b64.length() > 108)
+    {
+        return false;
+    }
+    
     char sign[80];
     uint32 len_sign = fly::base::base64_decode(sign_b64.c_str(), sign_b64.length(), sign, 80);
     char hash[32];
@@ -282,7 +287,7 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
         iter_block = iter_block->get_parent();
         
         // todo, edge case
-        if(++count > 4320)
+        if(++count > 43200)
         {
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
@@ -918,6 +923,7 @@ bool Blockchain::load(std::string db_path)
         std::string pre_hash = data["pre_hash"].GetString();
         const rapidjson::Value &nonce = data["nonce"];
 
+        // todo, merge and pruning? version compatible?
         if(!version_compatible(version, ASKCOIN_VERSION))
         {
             CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
@@ -1194,9 +1200,8 @@ bool Blockchain::load(std::string db_path)
                 return false;
             }
 
-            std::string data_str(buffer.GetString(), buffer.GetSize());
             std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-        
+            
             if(tx_id != tx_id_verify)
             {
                 CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
@@ -1292,11 +1297,11 @@ bool Blockchain::load(std::string db_path)
                 }
 
                 // todo, edge case
-                if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id)
                 {
                     return false;
                 }
-
+                
                 if(fee != 2)
                 {
                     return false;
@@ -1411,11 +1416,11 @@ bool Blockchain::load(std::string db_path)
                 }
 
                 // todo, edge case
-                if(block_id + 100 < cur_block_id || cur_block_id + 100 < block_id)
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id)
                 {
                     return false;
                 }
-
+                
                 if(fee != 2)
                 {
                     return false;
@@ -1497,7 +1502,7 @@ bool Blockchain::load(std::string db_path)
                     {
                         return false;
                     }
-
+                    
                     std::shared_ptr<Account> receiver;
                     
                     if(!get_account(receiver_pubkey, receiver))

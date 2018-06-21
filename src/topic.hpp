@@ -22,6 +22,7 @@ public:
     bool add_member(std::shared_ptr<Account> account);
     void sub_balance(uint64 value);
     uint64 get_balance();
+    uint64 get_total();
     std::list<std::shared_ptr<Reply>> m_reply_list;
     std::list<std::shared_ptr<Account>> m_members;
     
@@ -30,6 +31,7 @@ private:
     std::string m_key;
     uint64 m_block_id;
     uint64 m_balance;
+    uint64 m_total;
     std::shared_ptr<Account> m_owner;
 };
 
