@@ -157,4 +157,26 @@
     }
 }
 
-//
+//broadcast
+{
+    "msg_type":232,
+    "msg_cmd":99,
+    "block": {
+        "hash": "002fbcdefgaa99232bcd",
+        "sign": "wewoeisign.fdfdsfd",
+        "data": {
+            "id": 1,
+            "utc": 2938293,
+            "version": 1000,
+            "zero_bits": 25,
+            "pre_hash": "eeewfwefwf",
+            "miner": "22223",
+            "tx_ids": [
+                "wfe",
+                "e22",
+                "2232323"
+            ],
+            "nonce": [8298392839283293892,0,0,0]
+        },
+    }
+}

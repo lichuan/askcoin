@@ -106,15 +106,15 @@ void Node::connect_proc()
                                                                                           std::bind(&Node::close, this, _1),
                                                                                           std::bind(&Node::be_closed, this, _1),
                                                                                           m_poller, 1024 * 1024)); // todo, max_msg_length
-                LOG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
+                LOG_DEBUG("try to connect peer from peer_score %s", peer_score->key().c_str());
 
                 if(client->connect(1000))
                 {
-                    LOG_INFO("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
+                    LOG_DEBUG("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
                 }
                 else
                 {
-                    LOG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
+                    LOG_DEBUG("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
                     peer_score->m_state.store(0, std::memory_order_relaxed);
                     lock.lock();
                     peer_score->sub_score(10);
@@ -180,7 +180,7 @@ void Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     
     if(iter_unreg == m_unreg_peers.end())
     {
-        LOG_ERROR("init_verify unreg peer doesn't exist");
+        LOG_DEBUG("init_verify unreg peer doesn't exist");
         connection->close();
         
         return;
@@ -299,7 +299,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     
     if(iter_unreg == m_unreg_peers.end())
     {
-        LOG_ERROR("unreg peer doesn't exist");
+        LOG_DEBUG("unreg peer doesn't exist");
         connection->close();
         
         return;
@@ -310,7 +310,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     
     if(type != MSG_REG)
     {
-        LOG_ERROR("unreg peer recv message type: %u not MSG_REG", type);
+        LOG_DEBUG("unreg peer recv message type: %u not MSG_REG", type);
         connection->close();
         
         return;
@@ -324,7 +324,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             if(peer->m_state != 1)
             {
-                LOG_ERROR("unreg peer recv message REG_RSP, but m_state is not 1");
+                LOG_DEBUG("unreg peer recv message REG_RSP, but m_state is not 1");
                 connection->close();
                 
                 return;
@@ -381,12 +381,12 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             uint32 version_u32 = version.GetUint();
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_INFO("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", version_u32, id_u64, key_u32, \
+            LOG_DEBUG("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", version_u32, id_u64, key_u32, \
                      connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
             
             if(!version_compatible(version_u32, ASKCOIN_VERSION))
             {
-                LOG_ERROR("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_DEBUG("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
                 connection->close();
 
                 return;
@@ -400,7 +400,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             if(peer->m_state != 0)
             {
-                LOG_ERROR("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
+                LOG_DEBUG("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
                 connection->close();
                 
                 return;
@@ -440,13 +440,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
+            LOG_DEBUG("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
             std::unique_lock<std::mutex> lock(m_peer_mutex);
             auto iter_unreg = m_unreg_peers.find(id_u64);
 
             if(iter_unreg == m_unreg_peers.end())
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
+                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
                 connection->close();
         
                 return;
@@ -456,7 +456,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             if(peer_unreg->m_state != 4)
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
+                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
                 connection->close();
             
                 return;
@@ -464,7 +464,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
             if(key_u32 != peer_unreg->m_local_key)
             {
-                LOG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
+                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
                 connection->close();
 
                 return;
@@ -488,7 +488,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     {
         if(peer->m_state != 0)
         {
-            LOG_ERROR("unreg peer recv message REG_REQ, but m_state is not 0");
+            LOG_DEBUG("unreg peer recv message REG_REQ, but m_state is not 0");
             connection->close();
 
             return;
@@ -579,10 +579,10 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         std::string host_str = host.GetString();
         uint32 port_u32 = port.GetUint();
         uint32 key_u32 = key.GetUint();
-        LOG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u32);
+        LOG_DEBUG("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u32);
         if(!version_compatible(version_u32, ASKCOIN_VERSION))
         {
-            LOG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u32);
+            LOG_DEBUG("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u32);
             connection->close();
             
             return;
@@ -630,13 +630,12 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                                                                                               m_poller));
                     if(client->connect(1000))
                     {
-                        LOG_INFO("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_DEBUG("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                     }
                     else
                     {
-                        LOG_ERROR("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_DEBUG("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                         connection->close();
-                        peer_score->m_state.store(0, std::memory_order_relaxed);
                         lock.lock();
                         peer_score->sub_score(100);
                     }
@@ -645,7 +644,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         }
         else
         {
-            LOG_INFO("peer (%s) already registered, so close request connection", peer_score->key().c_str());
+            LOG_DEBUG("peer (%s) already registered, so close request connection", peer_score->key().c_str());
             connection->close();
         }
     }
@@ -653,7 +652,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     {
         if(peer->m_state != 0)
         {
-            LOG_ERROR("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
+            LOG_DEBUG("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
             connection->close();
 
             return;
@@ -693,13 +692,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         uint64 id_u64 = id.GetUint64();
         uint32 key_u32 = key.GetUint();
-        LOG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
+        LOG_DEBUG("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
         std::unique_lock<std::mutex> lock(m_peer_mutex);
         auto iter_unreg = m_unreg_peers.find(id_u64);
 
         if(iter_unreg == m_unreg_peers.end())
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
+            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
             connection->close();
         
             return;
@@ -709,7 +708,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         if(peer_unreg->m_state != 3)
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
+            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
             connection->close();
             
             return;
@@ -717,7 +716,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         if(key_u32 != peer_unreg->m_local_key)
         {
-            LOG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
+            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
             connection->close();
 
             return;
@@ -765,7 +764,7 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
     auto iter_reg = m_peers.find(conn_id);
     auto iter_unreg = m_unreg_peers.find(conn_id);
     std::shared_ptr<Peer> peer;
-    LOG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     
     if(iter_reg == m_peers.end())
     {
@@ -774,17 +773,17 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
         
         if(peer->m_state == 0)
         {
-            LOG_INFO("unreg peer (m_state:0) close");
+            LOG_DEBUG("unreg peer (m_state:0) close");
 
             return;
         }
         
-        LOG_INFO("unreg peer (%s) close", peer->key().c_str());
+        LOG_DEBUG("unreg peer (%s) close", peer->key().c_str());
     }
     else
     {
         peer = iter_reg->second;
-        LOG_INFO("reg peer (%s) close", peer->key().c_str());
+        LOG_DEBUG("reg peer (%s) close", peer->key().c_str());
         m_peers.erase(conn_id);
     }
 
@@ -811,7 +810,7 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
     auto iter_reg = m_peers.find(conn_id);
     auto iter_unreg = m_unreg_peers.find(conn_id);
     std::shared_ptr<Peer> peer;
-    LOG_INFO("close connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG("close connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     
     if(iter_reg == m_peers.end())
     {
@@ -820,17 +819,17 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
         
         if(peer->m_state == 0)
         {
-            LOG_INFO("unreg peer (m_state:0) be closed");
+            LOG_DEBUG("unreg peer (m_state:0) be closed");
 
             return;
         }
         
-        LOG_INFO("unreg peer (%s) be closed", peer->key().c_str());
+        LOG_DEBUG("unreg peer (%s) be closed", peer->key().c_str());
     }
     else
     {
         peer = iter_reg->second;
-        LOG_INFO("reg peer (%s) be closed", peer->key().c_str());
+        LOG_DEBUG("reg peer (%s) be closed", peer->key().c_str());
         m_peers.erase(conn_id);
     }
 
@@ -913,4 +912,48 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 }
 
 }
+}
+
+void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message)
+{
+    std::shared_ptr<fly::net::Connection<Json>> connection = message->get_connection();
+    uint64 conn_id = connection->id();
+    uint32 type = message->type();
+    uint32 cmd = message->cmd();
+    net::p2p::Node *p2p_node = net::p2p::Node::instance();
+    std::unordered_map<uint64, std::shared_ptr<net::p2p::Peer>> &peers = p2p_node->m_peers;
+    std::unique_lock<std::mutex> lock(p2p_node->m_peer_mutex);
+    auto iter_reg = peers.find(conn_id);
+    
+    if(iter_reg == peers.end())
+    {
+        return;
+    }
+
+    std::shared_ptr<net::p2p::Peer> peer = iter_reg->second;
+
+    if(type == net::p2p::MSG_BLOCK)
+    {
+    }
+    else if(type == net::p2p::MSG_TX)
+    {
+    }
+    else if(type == net::p2p::MSG_PROBE)
+    {
+    }
+    else
+    {
+        std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
+        std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
+        auto iter_score = peer_score_map.find(peer->key());
+        
+        if(iter_score == peer_score_map.end())
+        {
+            return;
+        }
+        
+        std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
+        peer_score->sub_score(1000);
+        peer_score->m_state.store(0, std::memory_order_relaxed);
+    }
 }

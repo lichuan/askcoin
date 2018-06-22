@@ -12,12 +12,15 @@
 #include "timer.hpp"
 
 using fly::net::Json;
+class Blockchain;
 
 namespace net {
 namespace p2p {
 
 class Node : public fly::base::Singleton<Node>
 {
+    friend class ::Blockchain;
+    
 public:
     Node();
     ~Node();

@@ -67,11 +67,6 @@ std::shared_ptr<Block> Block::get_parent()
     return m_parent;
 }
 
-void Block::add_child(std::shared_ptr<Block> child)
-{
-    m_children.push_back(child);
-}
-
 void Block::set_miner(std::shared_ptr<Account> miner)
 {
     m_miner = miner;

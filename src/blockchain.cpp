@@ -13,6 +13,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "net/p2p/node.hpp"
+#include "net/p2p/message.hpp"
 
 Blockchain::Blockchain()
 {
@@ -430,14 +431,6 @@ void Blockchain::do_message()
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
-}
-
-void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message)
-{
-}
-
-void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message)
-{
 }
 
 void Blockchain::stop_do_message()

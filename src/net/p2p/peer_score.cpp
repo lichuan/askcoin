@@ -36,29 +36,23 @@ void Peer_Score::add_score(uint64 score)
     Node::instance()->insert_peer_score(shared_from_this());
 }
 
-void Peer_Score::set_score(uint64 score)
+void Peer_Score::sub_score(uint64 score)
 {
     if(!Node::instance()->erase_peer_score(shared_from_this()))
     {
         return;
     }
 
-    m_score = score;
-    Node::instance()->insert_peer_score(shared_from_this());
-}
-
-void Peer_Score::sub_score(uint64 score)
-{
     if(m_score > score)
     {
-        if(!Node::instance()->erase_peer_score(shared_from_this()))
-        {
-            return;
-        }
-
         m_score -= score;
-        Node::instance()->insert_peer_score(shared_from_this());
     }
+    else
+    {
+        m_score = 0;
+    }
+
+    Node::instance()->insert_peer_score(shared_from_this());
 }
 
 }

@@ -18,7 +18,6 @@ public:
     uint64 utc_diff();
     void set_parent(std::shared_ptr<Block> parent);
     std::shared_ptr<Block> get_parent();
-    void add_child(std::shared_ptr<Block> child);
     bool difficult_than(std::shared_ptr<Block> other);
     void add_my_difficulty_to(std::shared_ptr<Block> other);
     void set_miner(std::shared_ptr<Account> miner);
@@ -34,7 +33,6 @@ private:
     std::string m_hash;
     std::shared_ptr<Block> m_parent;
     std::shared_ptr<Account> m_miner;
-    std::vector<std::shared_ptr<Block>> m_children;
     Accum_Pow m_accum_pow;
 };
 

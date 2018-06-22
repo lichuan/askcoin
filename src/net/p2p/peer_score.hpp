@@ -25,7 +25,6 @@ public:
     const fly::net::Addr& addr();
     void add_score(uint64 score);
     void sub_score(uint64 score);
-    void set_score(uint64 score);
     std::atomic<uint32> m_state{0};
     
 private:

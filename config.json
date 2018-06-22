@@ -1,4 +1,5 @@
 {
+    "log_level": "debug",
     "log_path": "./log",
     "db_path": "./db",
     "network": {

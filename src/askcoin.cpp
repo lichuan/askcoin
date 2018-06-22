@@ -86,6 +86,13 @@ public:
             return EXIT_FAILURE;
         }
 
+        if(!doc.HasMember("log_level"))
+        {
+            std::cout << "config.json don't contain log_level field!" << std::endl;
+
+            return EXIT_FAILURE;
+        }
+
         if(!doc.HasMember("log_path"))
         {
             std::cout << "config.json don't contain log_path field!" << std::endl;
@@ -93,13 +100,44 @@ public:
             return EXIT_FAILURE;
         }
 
-        fly::base::Logger::instance()->init(fly::base::DEBUG, "askcoin", doc["log_path"].GetString());
+        std::string log_level_str = doc["log_level"].GetString();
+        fly::base::LOG_LEVEL log_level;
+        
+        if(log_level_str == "debug")
+        {
+            log_level = fly::base::DEBUG;
+        }
+        else if(log_level_str == "info")
+        {
+            log_level = fly::base::INFO;
+        }
+        else if(log_level_str == "warn")
+        {
+            log_level = fly::base::WARN;
+        }
+        else if(log_level_str == "error")
+        {
+            log_level = fly::base::ERROR;
+        }
+        else if(log_level_str == "fatal")
+        {
+            log_level = fly::base::FATAL;
+        }
+        else
+        {
+            std::cout << "config.json log_level invalid!" << std::endl;
+
+            return EXIT_FAILURE;
+        }
+        
+        fly::base::Logger::instance()->init(log_level, "askcoin", doc["log_path"].GetString());
         CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u\n", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
         
         if (!AppInitSanityChecks())
         {
             CONSOLE_LOG_FATAL("sanity check failed");
-            exit(EXIT_FAILURE);
+            
+            return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("db_path"))
@@ -203,17 +241,18 @@ public:
                 
                 if(cmd_string == "stop")
                 {
+                    Blockchain::instance()->stop_do_message();
+
                     if(open_websocket)
                     {
                         net::Wsock_Node::instance()->stop();
                     }
 
                     net::p2p::Node::instance()->stop();
-                    Blockchain::instance()->stop_do_message();
-                    
+
                     break;
                 }
-
+                
                 if(cmd_string == "help")
                 {
                     std::cout << cmd_tips << std::endl;
@@ -226,14 +265,14 @@ public:
         });
 
         std::thread message_thread(std::bind(&Blockchain::do_message, Blockchain::instance()));
-        
+        message_thread.join();
+
         if(open_websocket)
         {
             net::Wsock_Node::instance()->wait();
         }
-        
+
         net::p2p::Node::instance()->wait();
-        message_thread.join();
         cmd_thread.join();
         Shutdown();
         CONSOLE_LOG_INFO("stop askcoin success");
