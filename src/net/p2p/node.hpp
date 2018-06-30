@@ -24,10 +24,11 @@ class Node : public fly::base::Singleton<Node>
 public:
     Node();
     ~Node();
-    bool start(uint32 port);
+    bool start(uint16 port);
     void stop();
     void wait();
     void set_max_conn(uint32 num);
+    uint32 get_max_conn();
     bool allow(std::shared_ptr<fly::net::Connection<Json>> connection);
     void init(std::shared_ptr<fly::net::Connection<Json>> connection);
     void init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, uint64 id);
@@ -52,7 +53,7 @@ private:
     std::mutex m_score_mutex;
     std::mutex m_peer_mutex;
     std::string m_host;
-    uint32 m_port;
+    uint16 m_port;
     std::unique_ptr<fly::net::Server<Json>> m_server;
     std::shared_ptr<fly::net::Poller<Json>> m_poller;
     std::thread m_connect_thread;

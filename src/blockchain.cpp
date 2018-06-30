@@ -425,6 +425,9 @@ void Blockchain::do_message()
             wsock_empty = true;
         }
 
+        m_timer_ctl_1.run();
+        m_timer_ctl_2.run();
+        
         if(peer_empty && wsock_empty)
         {
             RandAddSeedSleep();
@@ -910,7 +913,7 @@ bool Blockchain::load(std::string db_path)
         }
         
         uint64 block_id = data["id"].GetUint64();
-        uint64 utc = data["utc"].GetUint();
+        uint64 utc = data["utc"].GetUint64();
         uint32 version = data["version"].GetUint();
         uint32 zero_bits = data["zero_bits"].GetUint();
         std::string pre_hash = data["pre_hash"].GetString();
@@ -985,14 +988,14 @@ bool Blockchain::load(std::string db_path)
             return false;
         }
         
-        if(utc <= parent_utc)
+        if(utc < parent_utc)
         {
             return false;
         }
 
         uint64 now = time(NULL);
         
-        if(utc > now + 2)
+        if(utc > now)
         {
             CONSOLE_LOG_FATAL("verify block utc from leveldb failed, hash: %s, please check your system time", child_block.m_hash.c_str(), block_id);
             
@@ -1290,7 +1293,7 @@ bool Blockchain::load(std::string db_path)
                 }
 
                 // todo, edge case
-                if(block_id + 100 < cur_block_id || block_id > cur_block_id)
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     return false;
                 }
@@ -1409,7 +1412,7 @@ bool Blockchain::load(std::string db_path)
                 }
 
                 // todo, edge case
-                if(block_id + 100 < cur_block_id || block_id > cur_block_id)
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     return false;
                 }

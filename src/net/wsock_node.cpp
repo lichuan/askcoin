@@ -15,7 +15,7 @@ Wsock_Node::~Wsock_Node()
 {
 }
 
-bool Wsock_Node::start(uint32 port)
+bool Wsock_Node::start(uint16 port)
 {
     int32 cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_num = cpu_num < 4 ? 4 : cpu_num;

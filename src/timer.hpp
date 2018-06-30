@@ -36,6 +36,7 @@ public:
     void reset_timer(uint64 id);
     void del_timer(uint64 id);
     void run();
+    void clear();
     
 private:
     std::multiset<std::shared_ptr<Timer>, Timer::Comp> m_timers;

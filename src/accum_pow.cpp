@@ -25,6 +25,42 @@ void Accum_Pow::add_pow(uint32 zero_bits)
     }
 }
 
+bool Accum_Pow::sub_pow(uint32 zero_bits)
+{
+    uint32 idx = zero_bits / 32;
+    uint32 remain = zero_bits % 32;
+    const uint64 max_u32 = (uint64)1 << 32;
+    uint64 v = (uint64)1 << remain;
+    auto n32 = m_n32;
+
+    if(m_n32[idx] < v)
+    {
+        m_n32[idx] = m_n32[idx] + max_u32 - v;
+        
+        while(++idx <= 8)
+        {
+            if(m_n32[idx] == 0)
+            {
+                m_n32[idx] = max_u32 - 1;
+            }
+            else
+            {
+                m_n32[idx] -= 1;
+
+                return true;
+            }
+        }
+
+        m_n32 = n32;
+
+        return false;
+    }
+
+    m_n32[idx] -= v;
+
+    return true;
+}
+
 bool Accum_Pow::operator==(const Accum_Pow &other)
 {
     return m_n32 == other.m_n32;

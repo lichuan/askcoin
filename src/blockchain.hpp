@@ -13,9 +13,19 @@
 #include "fly/net/message.hpp"
 #include "block.hpp"
 #include "account.hpp"
+#include "pending_brief_request.hpp"
+#include "timer.hpp"
 
 using fly::net::Json;
 using fly::net::Wsock;
+
+namespace net {
+namespace p2p {
+
+class Peer;
+
+}
+}
 
 class Blockchain : public fly::base::Singleton<Blockchain>
 {
@@ -42,7 +52,9 @@ public:
     
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
+    void punish_peer(std::shared_ptr<net::p2p::Peer> peer);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
+    void do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain);
     
 private:
     std::atomic<bool> m_stop{false};
@@ -54,6 +66,12 @@ private:
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
+    std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
+    std::unordered_multimap<std::string, std::shared_ptr<Pending_Chain>> m_pending_chains;
+    std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
+    Timer_Controller m_timer_ctl_1;
+    Timer_Controller m_timer_ctl_2;
+    std::unordered_set<std::string> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
     std::list<std::shared_ptr<Topic>> m_topic_list;

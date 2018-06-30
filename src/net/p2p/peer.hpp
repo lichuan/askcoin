@@ -15,7 +15,7 @@ public:
     Peer();
     ~Peer();
     const std::string& key() const;
-    uint32 m_state;
+    uint8 m_state;
     fly::net::Addr m_addr;
     uint32 m_remote_key;
     uint32 m_local_key;

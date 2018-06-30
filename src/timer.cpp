@@ -22,6 +22,13 @@ Timer_Controller::~Timer_Controller()
 {
 }
 
+void Timer_Controller::clear()
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    m_timers.clear();
+    m_timer_map.clear();
+}
+
 uint64 Timer_Controller::add_timer(std::function<void()> cb, uint32 interval, bool oneshot)
 {
     uint32 now = time(NULL);
@@ -52,7 +59,7 @@ void Timer_Controller::del_timer(uint64 id)
         if(*iter == timer)
         {
             m_timers.erase(iter);
-            m_timer_map.erase(id);
+            m_timer_map.erase(iter_timer);
             
             return;
         }

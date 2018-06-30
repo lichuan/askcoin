@@ -155,7 +155,7 @@ public:
         }
         
         std::string host = doc["network"]["host"].GetString();
-        uint32 p2p_port = doc["network"]["p2p"]["port"].GetUint();
+        uint16 p2p_port = doc["network"]["p2p"]["port"].GetUint();
         uint32 p2p_max_conn = doc["network"]["p2p"]["max_conn"].GetUint();
         
         if(p2p_max_conn == 0)
@@ -168,7 +168,7 @@ public:
         net::p2p::Node::instance()->set_host(host);
         net::p2p::Node::instance()->set_max_conn(p2p_max_conn);
         const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
-        uint32 websocket_port = doc["network"]["websocket"]["port"].GetUint();
+        uint16 websocket_port = doc["network"]["websocket"]["port"].GetUint();
         bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
         uint32 websocket_max_conn = doc["network"]["websocket"]["max_conn"].GetUint();
         
@@ -266,7 +266,7 @@ public:
 
         std::thread message_thread(std::bind(&Blockchain::do_message, Blockchain::instance()));
         message_thread.join();
-
+        
         if(open_websocket)
         {
             net::Wsock_Node::instance()->wait();

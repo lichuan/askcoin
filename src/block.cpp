@@ -50,6 +50,16 @@ bool Block::difficult_than(std::shared_ptr<Block> other)
     return m_accum_pow > other->m_accum_pow;
 }
 
+bool Block::difficult_than_me(const Accum_Pow &accum_pow)
+{
+    return accum_pow > m_accum_pow;
+}
+
+bool Block::difficult_equal(const Accum_Pow &accum_pow)
+{
+    return m_accum_pow == accum_pow;
+}
+
 void Block::add_my_difficulty_to(std::shared_ptr<Block> other)
 {
     other->m_accum_pow = m_accum_pow;
@@ -75,13 +85,4 @@ void Block::set_miner(std::shared_ptr<Account> miner)
 std::shared_ptr<Account> Block::get_miner()
 {
     return m_miner;
-}
-
-Pending_Block::Pending_Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash)
-    : Block(id, utc, version, zero_bits, hash)
-{
-}
-
-Pending_Block::~Pending_Block()
-{
 }

@@ -40,7 +40,6 @@
         "pre_hash": "eeewfwefwf",
         "miner": "22223",
         "tx_ids": [
-            "wfe",
             "e22",
             "2232323"
         ],
@@ -48,7 +47,6 @@
     },
     "tx": [
         {
-            "hash": "woiiiiiiiiiiiiiiiiiwfe",
             "sign": "oijowwwwwwwww",
             "data": {
                 "type": 2,
@@ -62,7 +60,6 @@
             }
         },
         {
-            "hash": "woiiiiiiiiiiiiiiiiiwfe",
             "sign": "oijowwwwwwwww",
             "data": {
                 "type": 2,
@@ -112,7 +109,6 @@
 
 //tx new topic
 {
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
     "sign":"oijowwwwwwwww",
     "data":{
         "type":5,
@@ -127,7 +123,6 @@
 
 //tx topic reply
 {
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
     "sign":"oijowwwwwwwww",
     "data":{
         "type":6,
@@ -143,7 +138,6 @@
 
 //tx give reward
 {
-    "hash":"woiiiiiiiiiiiiiiiiiwfe",
     "sign":"oijowwwwwwwww",
     "data":{
         "type":7,
@@ -164,6 +158,7 @@
     "block": {
         "hash": "002fbcdefgaa99232bcd",
         "sign": "wewoeisign.fdfdsfd",
+        "pow": [1,2,3,4,5,6,7,8,9],
         "data": {
             "id": 1,
             "utc": 2938293,
@@ -172,11 +167,38 @@
             "pre_hash": "eeewfwefwf",
             "miner": "22223",
             "tx_ids": [
-                "wfe",
                 "e22",
                 "2232323"
             ],
             "nonce": [8298392839283293892,0,0,0]
         },
+        "tx": [
+            {
+                "sign": "oijowwwwwwwww",
+                "data": {
+                    "type": 2,
+                    "pubkey":"efweffwf",
+                    "utc": 2989883883,
+                    "block_id": 339,
+                    "fee":92832,
+                    "amount": 100000000000000,
+                    "memo": "this is my memo msg",
+                    "receiver": "pubkey..."
+                }
+            },
+            {
+                "sign": "oijowwwwwwwww",
+                "data": {
+                    "type": 2,
+                    "pubkey":"efweffwf",
+                    "utc": 2989883883,
+                    "block_id": 339,
+                    "amount": 100000000000000,
+                    "fee":22232323,
+                    "memo": "this is my memo msg",
+                    "receiver": "pubkey..."
+                }
+            }
+        ]
     }
 }

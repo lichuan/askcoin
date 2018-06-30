@@ -15,7 +15,7 @@ public:
     Wsock_Node();
     ~Wsock_Node();
 
-    bool start(uint32 port);
+    bool start(uint16 port);
     void stop();
     void wait();
     void set_max_conn(uint32 num);

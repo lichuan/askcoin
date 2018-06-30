@@ -19,11 +19,13 @@ public:
     void set_parent(std::shared_ptr<Block> parent);
     std::shared_ptr<Block> get_parent();
     bool difficult_than(std::shared_ptr<Block> other);
+    bool difficult_than_me(const Accum_Pow &accum_pow);
+    bool difficult_equal(const Accum_Pow &accum_pow);
     void add_my_difficulty_to(std::shared_ptr<Block> other);
     void set_miner(std::shared_ptr<Account> miner);
     std::shared_ptr<Account> get_miner();
     //std::vector<std::string> m_tx_ids;
-    
+
 private:
     uint64 m_id;
     uint64 m_utc;
@@ -34,15 +36,6 @@ private:
     std::shared_ptr<Block> m_parent;
     std::shared_ptr<Account> m_miner;
     Accum_Pow m_accum_pow;
-};
-
-class Pending_Block : public Block
-{
-public:
-    Pending_Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash);
-    ~Pending_Block();
-    void exec();
-    void exec_reverse();
 };
 
 #endif
