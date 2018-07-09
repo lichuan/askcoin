@@ -3,6 +3,7 @@
 
 #include <unordered_map>
 #include <set>
+#include <unordered_set>
 #include <thread>
 #include "fly/net/poller.hpp"
 #include "fly/base/singleton.hpp"
@@ -49,6 +50,7 @@ private:
     std::unordered_map<uint64, std::shared_ptr<Peer>> m_peers;
     std::unordered_map<uint64, std::shared_ptr<Peer>> m_unreg_peers;
     std::unordered_map<std::string, std::shared_ptr<Peer_Score>> m_peer_score_map;
+    std::unordered_set<std::string> m_banned_peers;
     std::multiset<std::shared_ptr<Peer_Score>, Peer_Score::Score_Comp> m_peer_scores;
     std::mutex m_score_mutex;
     std::mutex m_peer_mutex;

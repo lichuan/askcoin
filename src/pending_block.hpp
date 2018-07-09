@@ -14,8 +14,6 @@ public:
     uint32 m_zero_bits;
     std::string m_hash;
     std::string m_pre_hash;
-    std::string m_miner_pubkey;
-    std::list<std::string> m_tx_ids;
 };
 
 #endif

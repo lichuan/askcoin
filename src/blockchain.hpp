@@ -54,7 +54,7 @@ private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
     void punish_peer(std::shared_ptr<net::p2p::Peer> peer);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
-    void do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain);
+    void do_brief_chain();
     
 private:
     std::atomic<bool> m_stop{false};
@@ -67,10 +67,10 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
-    std::unordered_multimap<std::string, std::shared_ptr<Pending_Chain>> m_pending_chains;
+    std::list<std::string> m_pending_block_hashes;
+    std::list<std::shared_ptr<Pending_Chain>> m_pending_chains;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
-    Timer_Controller m_timer_ctl_1;
-    Timer_Controller m_timer_ctl_2;
+    Timer_Controller m_timer_ctl;
     std::unordered_set<std::string> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;

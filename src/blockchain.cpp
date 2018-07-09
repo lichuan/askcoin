@@ -425,13 +425,13 @@ void Blockchain::do_message()
             wsock_empty = true;
         }
 
-        m_timer_ctl_1.run();
-        m_timer_ctl_2.run();
+        m_timer_ctl.run();
+        do_brief_chain();
         
         if(peer_empty && wsock_empty)
         {
             RandAddSeedSleep();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
 }
