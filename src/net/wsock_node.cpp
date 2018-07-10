@@ -64,30 +64,30 @@ void Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
     m_connections[connection->id()] = connection;
-    LOG_DEBUG("connection count: %u", m_connections.size());
+    LOG_DEBUG_INFO("connection count: %u", m_connections.size());
 }
 
 void Wsock_Node::dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
 {
     std::shared_ptr<fly::net::Connection<Wsock>> connection = message->get_connection();
     const fly::net::Addr &addr = connection->peer_addr();
-    LOG_DEBUG("recv message from %s:%d raw_data: %s", addr.m_host.c_str(), addr.m_port, message->raw_data().c_str());
+    LOG_DEBUG_INFO("recv message from %s:%d raw_data: %s", addr.m_host.c_str(), addr.m_port, message->raw_data().c_str());
 }
     
 void Wsock_Node::close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
 {
-    LOG_DEBUG("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     std::lock_guard<std::mutex> guard(m_mutex);
     m_connections.erase(connection->id());
-    LOG_DEBUG("connection count: %u", m_connections.size());
+    LOG_DEBUG_INFO("connection count: %u", m_connections.size());
 }
     
 void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection)
 {
-    LOG_DEBUG("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG_INFO("connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     std::lock_guard<std::mutex> guard(m_mutex);
     m_connections.erase(connection->id());
-    LOG_DEBUG("connection count: %u", m_connections.size());
+    LOG_DEBUG_INFO("connection count: %u", m_connections.size());
 }
 
 }

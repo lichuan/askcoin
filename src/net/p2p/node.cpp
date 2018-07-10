@@ -98,7 +98,7 @@ void Node::connect_proc()
 
             if(m_banned_peers.find(peer_score->key()) != m_banned_peers.end())
             {
-                LOG_DEBUG("try to connect banned peer %s, skipped", peer_score->key().c_str());
+                LOG_DEBUG_INFO("try to connect banned peer %s, skipped", peer_score->key().c_str());
 
                 continue;
             }
@@ -114,15 +114,15 @@ void Node::connect_proc()
                                                                                           std::bind(&Node::close, this, _1),
                                                                                           std::bind(&Node::be_closed, this, _1),
                                                                                           m_poller, 1024 * 1024)); // todo, max_msg_length
-                LOG_DEBUG("try to connect peer from peer_score %s", peer_score->key().c_str());
+                LOG_DEBUG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
 
                 if(client->connect(1000))
                 {
-                    LOG_DEBUG("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
+                    LOG_DEBUG_INFO("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
                 }
                 else
                 {
-                    LOG_DEBUG("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
+                    LOG_DEBUG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
                     peer_score->m_state.store(0, std::memory_order_relaxed);
                     lock.lock();
                     peer_score->sub_score(10);
@@ -193,7 +193,7 @@ void Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     
     if(iter_unreg == m_unreg_peers.end())
     {
-        LOG_DEBUG("init_verify unreg peer doesn't exist");
+        LOG_DEBUG_ERROR("init_verify unreg peer doesn't exist");
         connection->close();
         
         return;
@@ -313,7 +313,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     
     if(iter_unreg == m_unreg_peers.end())
     {
-        LOG_DEBUG("unreg peer doesn't exist");
+        LOG_DEBUG_ERROR("unreg peer doesn't exist");
         connection->close();
         
         return;
@@ -324,7 +324,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     
     if(type != MSG_REG)
     {
-        LOG_DEBUG("unreg peer recv message type: %u not MSG_REG", type);
+        LOG_DEBUG_ERROR("unreg peer recv message type: %u not MSG_REG", type);
         connection->close();
         
         return;
@@ -338,7 +338,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             if(peer->m_state != 1)
             {
-                LOG_DEBUG("unreg peer recv message REG_RSP, but m_state is not 1");
+                LOG_DEBUG_ERROR("unreg peer recv message REG_RSP, but m_state is not 1");
                 connection->close();
                 
                 return;
@@ -395,12 +395,12 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             uint32 version_u32 = version.GetUint();
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_DEBUG("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", version_u32, id_u64, key_u32, \
+            LOG_DEBUG_INFO("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", version_u32, id_u64, key_u32, \
                      connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
             
             if(!version_compatible(version_u32, ASKCOIN_VERSION))
             {
-                LOG_DEBUG("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_DEBUG_ERROR("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
                 connection->close();
 
                 return;
@@ -414,7 +414,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             if(peer->m_state != 0)
             {
-                LOG_DEBUG("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
+                LOG_DEBUG_ERROR("verify unreg peer recv message REG_VERIFY_RSP, but m_state is not 0");
                 connection->close();
                 
                 return;
@@ -454,13 +454,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_DEBUG("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
+            LOG_DEBUG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_RSP, id:%lu, key:%u", id_u64, key_u32);
             std::unique_lock<std::mutex> lock(m_peer_mutex);
             auto iter_unreg = m_unreg_peers.find(id_u64);
 
             if(iter_unreg == m_unreg_peers.end())
             {
-                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
+                LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer doesn't exist");
                 connection->close();
         
                 return;
@@ -470,7 +470,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
             if(peer_unreg->m_state != 4)
             {
-                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
+                LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_state != 4");
                 connection->close();
             
                 return;
@@ -478,7 +478,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
             if(key_u32 != peer_unreg->m_local_key)
             {
-                LOG_DEBUG("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
+                LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_RSP, unreg peer m_local_key != key_u32");
                 connection->close();
 
                 return;
@@ -502,7 +502,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     {
         if(peer->m_state != 0)
         {
-            LOG_DEBUG("unreg peer recv message REG_REQ, but m_state is not 0");
+            LOG_DEBUG_ERROR("unreg peer recv message REG_REQ, but m_state is not 0");
             connection->close();
 
             return;
@@ -593,10 +593,10 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         std::string host_str = host.GetString();
         uint16 port_u16 = port.GetUint();
         uint32 key_u32 = key.GetUint();
-        LOG_DEBUG("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u16);
+        LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u16);
         if(!version_compatible(version_u32, ASKCOIN_VERSION))
         {
-            LOG_DEBUG("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
+            LOG_DEBUG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
             connection->close();
             
             return;
@@ -611,7 +611,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
         if(m_banned_peers.find(peer_score->key()) != m_banned_peers.end())
         {
-            LOG_DEBUG("unreg peer (m_state:0) is banned, addr: %s:%u", host_str.c_str(), port_u16);
+            LOG_DEBUG_ERROR("unreg peer (m_state:0) is banned, addr: %s:%u", host_str.c_str(), port_u16);
             connection->close();
             
             return;
@@ -653,11 +653,11 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                                                                                               m_poller));
                     if(client->connect(1000))
                     {
-                        LOG_DEBUG("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_DEBUG_INFO("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                     }
                     else
                     {
-                        LOG_DEBUG("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
+                        LOG_DEBUG_ERROR("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                         connection->close();
                         lock.lock();
                         peer_score->sub_score(100);
@@ -667,7 +667,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         }
         else
         {
-            LOG_DEBUG("peer (%s) already registered, so close request connection", peer_score->key().c_str());
+            LOG_DEBUG_ERROR("peer (%s) already registered, so close request connection", peer_score->key().c_str());
             connection->close();
         }
     }
@@ -675,7 +675,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     {
         if(peer->m_state != 0)
         {
-            LOG_DEBUG("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
+            LOG_DEBUG_ERROR("verify unreg peer recv message REG_VERIFY_REQ, but m_state is not 0");
             connection->close();
 
             return;
@@ -715,13 +715,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         uint64 id_u64 = id.GetUint64();
         uint32 key_u32 = key.GetUint();
-        LOG_DEBUG("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
+        LOG_DEBUG_INFO("verify unreg peer (m_state:0) recv message cmd REG_VERIFY_REQ, id:%lu, key:%u", id_u64, key_u32);
         std::unique_lock<std::mutex> lock(m_peer_mutex);
         auto iter_unreg = m_unreg_peers.find(id_u64);
 
         if(iter_unreg == m_unreg_peers.end())
         {
-            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
+            LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer doesn't exist");
             connection->close();
         
             return;
@@ -731,7 +731,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         if(peer_unreg->m_state != 3)
         {
-            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
+            LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
             connection->close();
             
             return;
@@ -739,7 +739,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
 
         if(key_u32 != peer_unreg->m_local_key)
         {
-            LOG_DEBUG("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
+            LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
             connection->close();
 
             return;
@@ -787,7 +787,7 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
     auto iter_reg = m_peers.find(conn_id);
     auto iter_unreg = m_unreg_peers.find(conn_id);
     std::shared_ptr<Peer> peer;
-    LOG_DEBUG("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG_INFO("close connection from %s:%d", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     
     if(iter_reg == m_peers.end())
     {
@@ -796,17 +796,17 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
         
         if(peer->m_state == 0)
         {
-            LOG_DEBUG("unreg peer (m_state:0) close");
+            LOG_DEBUG_INFO("unreg peer (m_state:0) close");
 
             return;
         }
         
-        LOG_DEBUG("unreg peer (%s) close", peer->key().c_str());
+        LOG_DEBUG_INFO("unreg peer (%s) close", peer->key().c_str());
     }
     else
     {
         peer = iter_reg->second;
-        LOG_DEBUG("reg peer (%s) close", peer->key().c_str());
+        LOG_DEBUG_INFO("reg peer (%s) close", peer->key().c_str());
         m_peers.erase(conn_id);
     }
 
@@ -833,7 +833,7 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
     auto iter_reg = m_peers.find(conn_id);
     auto iter_unreg = m_unreg_peers.find(conn_id);
     std::shared_ptr<Peer> peer;
-    LOG_DEBUG("close connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+    LOG_DEBUG_INFO("close connection from %s:%d be closed", connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
     
     if(iter_reg == m_peers.end())
     {
@@ -842,17 +842,17 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
         
         if(peer->m_state == 0)
         {
-            LOG_DEBUG("unreg peer (m_state:0) be closed");
+            LOG_DEBUG_INFO("unreg peer (m_state:0) be closed");
 
             return;
         }
         
-        LOG_DEBUG("unreg peer (%s) be closed", peer->key().c_str());
+        LOG_DEBUG_INFO("unreg peer (%s) be closed", peer->key().c_str());
     }
     else
     {
         peer = iter_reg->second;
-        LOG_DEBUG("reg peer (%s) be closed", peer->key().c_str());
+        LOG_DEBUG_INFO("reg peer (%s) be closed", peer->key().c_str());
         m_peers.erase(conn_id);
     }
 
@@ -951,14 +951,14 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
             return;
         }
 
-        LOG_DEBUG("punish_peer + banned, peer: %s", peer->key().c_str());
+        LOG_DEBUG_INFO("punish_peer + banned, peer: %s", peer->key().c_str());
         std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
         peer_score->sub_score(1000);
         p2p_node->m_banned_peers.insert(peer->key());
         p2p_node->m_timer_ctl.add_timer([=]() {
                 std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
                 p2p_node->m_banned_peers.erase(peer->key());
-                LOG_DEBUG("unbanned peer: %s", peer->key().c_str());
+                LOG_DEBUG_INFO("unbanned peer: %s", peer->key().c_str());
             }, 600, true);
     }
 }
@@ -991,7 +991,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     
     rapidjson::Document& doc = message->doc();
     uint32 msg_length = message->length(); // todo, the following need check length
-    LOG_DEBUG("peer msg: %s, length: %u, peer key: %s", message->raw_data().c_str(), msg_length, peer->key().c_str());
+    LOG_DEBUG_INFO("peer msg: %s, length: %u, peer key: %s", message->raw_data().c_str(), msg_length, peer->key().c_str());
     
     if(type == net::p2p::MSG_BLOCK)
     {
@@ -1387,16 +1387,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
                 if(diff > 3600)
                 {
-                    LOG_DEBUG("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
+                    LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
                 }
                 
                 m_timer_ctl.add_timer([=]() {
-                        m_pending_chains.push_back(pending_chain);
+                        m_pending_brief_chains.push_back(pending_chain);
                     }, diff, true);
             }
             else
             {
-                m_pending_chains.push_back(pending_chain);
+                m_pending_brief_chains.push_back(pending_chain);
             }
         }
         else if(cmd == net::p2p::BLOCK_BRIEF_RSP)
@@ -1672,10 +1672,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
 void Blockchain::do_brief_chain()
 {
-    std::shared_ptr<Pending_Chain> most_difficult_chain = std::make_shared<Pending_Chain>();
     std::set<std::string> failed_brief_reqs;
     
-    for(auto iter = m_pending_chains.begin(); iter != m_pending_chains.end();)
+    for(auto iter = m_pending_brief_chains.begin(); iter != m_pending_brief_chains.end();)
     {
         std::shared_ptr<Pending_Chain> pending_chain = *iter;
         std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
@@ -1690,14 +1689,14 @@ void Blockchain::do_brief_chain()
             if(iter_1 != m_blocks.end())
             {
                 std::shared_ptr<Block> pre_block = iter_1->second;
-                
+                iter = m_pending_brief_chains.erase(iter);
+                continue_if = true;
+
                 if(pending_block->m_id != pre_block->id() + 1)
                 {
                     punish_peer(peer);
                     m_pending_peer_keys.erase(peer->key());
-                    iter = m_pending_chains.erase(iter);
-                    continue_if = true;
-                    
+
                     break;
                 }
                 
@@ -1705,17 +1704,12 @@ void Blockchain::do_brief_chain()
                 {
                     punish_peer(peer);
                     m_pending_peer_keys.erase(peer->key());
-                    iter = m_pending_chains.erase(iter);
-                    continue_if = true;
 
                     break;
                 }
                 
-                if(pending_chain->m_declared_pow > most_difficult_chain->m_declared_pow)
-                {
-                    most_difficult_chain = pending_chain;
-                }
-
+                m_brief_chains.push_back(pending_chain);
+                
                 break;
             }
             
@@ -1729,7 +1723,7 @@ void Blockchain::do_brief_chain()
                 {
                     punish_peer(peer);
                     m_pending_peer_keys.erase(peer->key());
-                    iter = m_pending_chains.erase(iter);
+                    iter = m_pending_brief_chains.erase(iter);
                     continue_if = true;
                     
                     break;
@@ -1739,7 +1733,7 @@ void Blockchain::do_brief_chain()
                 {
                     punish_peer(peer);
                     m_pending_peer_keys.erase(peer->key());
-                    iter = m_pending_chains.erase(iter);
+                    iter = m_pending_brief_chains.erase(iter);
                     continue_if = true;
                     
                     break;
@@ -1774,6 +1768,21 @@ void Blockchain::do_brief_chain()
                             }
                             else
                             {
+                                auto last_peer = request->m_peers[request->m_last_idx];
+                                
+                                if(last_peer->m_connection->closed())
+                                {
+                                    request->del_peer(last_peer);
+                                }
+                                
+                                if(request->m_peers.empty())
+                                {
+                                    request->m_state = 1;
+                                    m_timer_ctl.del_timer(request->m_timer_id);
+                                    
+                                    return;
+                                }
+                                
                                 rapidjson::Document doc;
                                 doc.SetObject();
                                 rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -1782,6 +1791,7 @@ void Blockchain::do_brief_chain()
                                 doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
                                 uint32 idx = fly::base::random_between(0, request->m_peers.size() - 1);
                                 request->m_peers[idx]->m_connection->send(doc);
+                                request->m_last_idx = idx;
                                 ++request->m_try_num;
                             }
                         }, 2);
@@ -1794,15 +1804,16 @@ void Blockchain::do_brief_chain()
                 if(request->m_state == 1) // failed
                 {
                     failed_brief_reqs.insert(pre_hash);
-                    punish_peer(peer);
-                    m_pending_peer_keys.erase(peer->key());
-                    iter = m_pending_chains.erase(iter);
-                    continue_if = true;
-                    
-                    break;
+
+                    if(pending_chain->m_brief_req_state.m_requested)
+                    {
+                        punish_peer(peer);
+                        m_pending_peer_keys.erase(peer->key());
+                        iter = m_pending_brief_chains.erase(iter);
+                        continue_if = true;
+                    }
                 }
-                
-                if(!pending_chain->m_brief_req_state.m_requested)
+                else if(!pending_chain->m_brief_req_state.m_requested)
                 {
                     request->m_peers.push_back(pending_chain->m_peer);
                     pending_chain->m_brief_req_state.m_requested = true;
@@ -1827,20 +1838,19 @@ void Blockchain::do_brief_chain()
         m_pending_brief_reqs.erase(req_hash);
     }
     
+    std::shared_ptr<Pending_Chain> most_difficult_chain = std::make_shared<Pending_Chain>();
     Accum_Pow zero_pow;
+
+    for(auto &pending_chain : m_brief_chains)
+    {
+        if(pending_chain->m_declared_pow > most_difficult_chain->m_declared_pow)
+        {
+            most_difficult_chain = pending_chain;
+        }
+    }
 
     if(most_difficult_chain->m_declared_pow > zero_pow)
     {
-        for(auto iter = m_pending_chains.begin(); iter != m_pending_chains.end(); ++iter)
-        {
-            if(most_difficult_chain == *iter)
-            {
-                m_pending_chains.erase(iter);
-
-                break;
-            }
-        }
-
         //switch_chain(most_difficult_chain);
     }
 }

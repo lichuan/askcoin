@@ -68,7 +68,8 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
-    std::list<std::shared_ptr<Pending_Chain>> m_pending_chains;
+    std::list<std::shared_ptr<Pending_Chain>> m_pending_brief_chains;
+    std::list<std::shared_ptr<Pending_Chain>> m_brief_chains;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
     Timer_Controller m_timer_ctl;
     std::unordered_set<std::string> m_pending_peer_keys;
