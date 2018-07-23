@@ -241,14 +241,13 @@ public:
                 
                 if(cmd_string == "stop")
                 {
-                    Blockchain::instance()->stop_do_message();
-
                     if(open_websocket)
                     {
                         net::Wsock_Node::instance()->stop();
                     }
-
+                    
                     net::p2p::Node::instance()->stop();
+                    Blockchain::instance()->stop_do_message();
 
                     break;
                 }
@@ -265,14 +264,14 @@ public:
         });
 
         std::thread message_thread(std::bind(&Blockchain::do_message, Blockchain::instance()));
-        message_thread.join();
-        
+
         if(open_websocket)
         {
             net::Wsock_Node::instance()->wait();
         }
-
+        
         net::p2p::Node::instance()->wait();
+        message_thread.join();
         cmd_thread.join();
         Shutdown();
         CONSOLE_LOG_INFO("stop askcoin success");

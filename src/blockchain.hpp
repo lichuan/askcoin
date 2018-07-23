@@ -57,17 +57,21 @@ private:
     void do_brief_chain();
     
 private:
+    void switch_chain(std::shared_ptr<Pending_Chain> pending_chain);
+    void rollback(uint64 block_id);
     std::atomic<bool> m_stop{false};
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
     std::shared_ptr<Block> m_cur_block;
+    std::shared_ptr<Block> m_most_difficult_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
     std::unordered_set<std::string> m_account_names;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
+    bool m_is_switching = false;
     std::list<std::shared_ptr<Pending_Chain>> m_pending_brief_chains;
     std::list<std::shared_ptr<Pending_Chain>> m_brief_chains;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;

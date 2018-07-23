@@ -378,6 +378,13 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
             {
                 return false;
             }
+
+            uint64 balance = topic->get_balance();
+            
+            if(balance > 0)
+            {
+                m_reserve_fund_account->add_balance(balance);
+            }
             
             owner->m_topic_list.pop_front();
             m_topic_list.pop_front();
@@ -997,8 +1004,8 @@ bool Blockchain::load(std::string db_path)
         
         if(utc > now)
         {
-            CONSOLE_LOG_FATAL("verify block utc from leveldb failed, hash: %s, please check your system time", child_block.m_hash.c_str(), block_id);
-            
+            CONSOLE_LOG_FATAL("verify block utc from leveldb failed, id: %u, hash: %s, please check your system time", block_id, child_block.m_hash.c_str());
+
             return false;
         }
         
@@ -1049,6 +1056,7 @@ bool Blockchain::load(std::string db_path)
     std::list<std::shared_ptr<Block>> block_chain;
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block = the_most_difficult_block;
+    m_most_difficult_block = the_most_difficult_block;
 
     while(iter_block->id() != 0)
     {
@@ -1942,4 +1950,168 @@ void Blockchain::dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> 
 void Blockchain::dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message)
 {
     m_wsock_messages.push(std::move(message));
+}
+
+void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
+{
+    m_is_switching = true;
+    std::shared_ptr<Block> iter_block = m_cur_block;
+    std::shared_ptr<Block> iter_block_1;
+    std::shared_ptr<Pending_Block> first_pending_block = pending_chain->m_req_blocks.front();
+    std::shared_ptr<Pending_Block> last_pending_block = pending_chain->m_req_blocks.back();
+    uint64 pending_block_num = pending_chain->m_req_blocks.size();
+    uint64 id = iter_block->id();
+    uint64 id_pending = first_pending_block->m_id;
+    uint64 cross_id = 0;
+    std::string cross_hash;
+    std::string iter_hash = first_pending_block->m_hash;
+    LOG_INFO("switch chain, cur_block(id: %u, hash: %s) first_pending_block(id: %u, hash: %s, pre_hash: %s) last_pending_block(id: %u, hash: %s) from peer: %s", \
+             id, iter_block->hash().c_str(), first_pending_block->m_id, first_pending_block->m_hash.c_str(), first_pending_block->m_pre_hash.c_str(), \
+             last_pending_block->m_id, last_pending_block->m_hash.c_str(), pending_chain->m_peer->key().c_str());
+    std::list<std::string> db_hashes;
+
+    if(id == id_pending)
+    {
+        while(true)
+        {
+            if(iter_block->hash() == iter_hash)
+            {
+                cross_id = iter_block->id();
+                cross_hash = iter_block->hash();
+                
+                if(!db_hashes.empty())
+                {
+                    db_hashes.pop_front();
+                }
+
+                break;
+            }
+            
+            if(!iter_block_1)
+            {
+                iter_block_1 = m_blocks[first_pending_block->m_pre_hash];
+            }
+            else
+            {
+                iter_block_1 = iter_block_1->get_parent();
+            }
+            
+            iter_block = iter_block->get_parent();
+            iter_hash = iter_block_1->hash();
+            db_hashes.push_front(iter_hash);
+        }
+    }
+    else if(id < id_pending)
+    {
+        while(id < id_pending)
+        {
+            if(!iter_block_1)
+            {
+                iter_block_1 = m_blocks[first_pending_block->m_pre_hash];
+            }
+            else
+            {
+                iter_block_1 = iter_block_1->get_parent();
+            }
+            
+            id_pending = iter_block_1->id();
+            iter_hash = iter_block_1->hash();
+            db_hashes.push_front(iter_hash);
+        }
+        
+        while(true)
+        {
+            if(iter_block->hash() == iter_hash)
+            {
+                cross_id = iter_block->id();
+                cross_hash = iter_block->hash();
+                db_hashes.pop_front();
+
+                break;
+            }
+            
+            iter_block_1 = iter_block_1->get_parent();
+            iter_block = iter_block->get_parent();
+            iter_hash = iter_block_1->hash();
+            db_hashes.push_front(iter_hash);
+        }
+    }
+    else
+    {
+        uint64 id_pending_last = last_pending_block->m_id;
+        
+        while(id > id_pending_last)
+        {
+            iter_block = iter_block->get_parent();
+            id  = iter_block->id();
+        }
+        
+        uint64 diff = id_pending_last - id;
+        uint64 idx = pending_block_num - 1 - diff;
+        iter_hash = pending_chain->m_req_blocks[idx]->m_hash;
+        
+        while(true)
+        {
+            if(iter_block->hash() == iter_hash)
+            {
+                cross_id = iter_block->id();
+                cross_hash = iter_hash;
+                
+                if(!db_hashes.empty())
+                {
+                    db_hashes.pop_front();
+                }
+                
+                break;
+            }
+            
+            iter_block = iter_block->get_parent();
+            
+            if(idx > 0)
+            {
+                --idx;
+                iter_hash = pending_chain->m_req_blocks[idx]->m_hash;
+            }
+            else
+            {
+                if(!iter_block_1)
+                {
+                    iter_block_1 = m_blocks[first_pending_block->m_pre_hash];
+                }
+                else
+                {
+                    iter_block_1 = iter_block_1->get_parent();
+                }
+                    
+                iter_hash = iter_block_1->hash();
+                db_hashes.push_front(iter_hash);
+            }
+        }
+    }
+
+    uint64 cur_id  = m_cur_block->id();
+    
+    if(cross_id < cur_id)
+    {
+        uint64 distance = cur_id - cross_id;
+        LOG_INFO("switch chain, rollback distance: %lu, from peer: %s", distance, pending_chain->m_peer->key().c_str());
+        
+        if(distance > 50)
+        {
+            LOG_WARN("switch chain, rollback distance too long, distance: %lu, from peer: %s", distance, pending_chain->m_peer->key().c_str());
+        }
+        
+        rollback(cross_id);
+    }
+    
+    if(cross_id >= first_pending_block->m_id)
+    {
+        pending_chain->m_start = cross_id - first_pending_block->m_id + 1;
+    }
+
+    //request_detail(pending_chain);
+}
+
+void Blockchain::rollback(uint64 block_id)
+{
 }
