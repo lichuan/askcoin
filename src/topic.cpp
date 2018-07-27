@@ -48,6 +48,11 @@ bool Topic::get_reply(std::string key, std::shared_ptr<Reply> &reply)
     return false;
 }
 
+void Topic::add_balance(uint64 value)
+{
+    m_balance += value;
+}
+
 void Topic::sub_balance(uint64 value)
 {
     m_balance -= value;
@@ -63,17 +68,17 @@ uint64 Topic::get_total()
     return m_total;
 }
 
-bool Topic::add_member(std::shared_ptr<Account> account)
+bool Topic::add_member(std::string tx_id, std::shared_ptr<Account> account)
 {
-    for(auto member : m_members)
+    for(auto &p : m_members)
     {
-        if(member == account)
+        if(p.second == account)
         {
             return false;
         }
     }
 
-    m_members.push_back(account);
+    m_members.push_back(std::make_pair(tx_id, account));
 
     return true;
 }

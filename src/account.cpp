@@ -71,17 +71,28 @@ std::shared_ptr<Account> Account::get_referrer()
     return m_referrer;
 }
 
-bool Account::join_topic(std::shared_ptr<Topic> topic)
+void Account::leave_topic(std::shared_ptr<Topic> topic)
+{
+    for(auto iter = m_joined_topic_list.begin(); iter != m_joined_topic_list.end(); ++iter)
+    {
+        if(*iter == topic)
+        {
+            m_joined_topic_list.erase(iter);
+            
+            break;
+        }
+    }
+}
+
+bool Account::joined_topic(std::shared_ptr<Topic> topic)
 {
     for(auto t : m_joined_topic_list)
     {
         if(t == topic)
         {
-            return false;
+            return true;
         }
     }
 
-    m_joined_topic_list.push_back(topic);
-
-    return true;
+    return false;
 }

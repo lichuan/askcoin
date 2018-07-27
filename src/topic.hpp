@@ -19,12 +19,13 @@ public:
     uint64 block_id();    
     std::string key();
     bool get_reply(std::string key, std::shared_ptr<Reply> &reply);
-    bool add_member(std::shared_ptr<Account> account);
+    bool add_member(std::string tx_id, std::shared_ptr<Account> account);
     void sub_balance(uint64 value);
+    void add_balance(uint64 value);
     uint64 get_balance();
     uint64 get_total();
     std::list<std::shared_ptr<Reply>> m_reply_list;
-    std::list<std::shared_ptr<Account>> m_members;
+    std::list<std::pair<std::string, std::shared_ptr<Account>>> m_members;
     
 private:
     std::string m_data;

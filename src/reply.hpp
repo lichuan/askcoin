@@ -18,6 +18,7 @@ public:
     void set_reply_to(std::shared_ptr<Reply> to);
     std::shared_ptr<Reply> get_reply_to();
     void add_balance(uint64 value);
+    void sub_balance(uint64 value);
     uint64 get_balance();
     uint32 type();
     

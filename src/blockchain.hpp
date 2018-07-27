@@ -79,6 +79,8 @@ private:
     std::unordered_set<std::string> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
+    std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;
+    std::unordered_map<uint64, std::pair<std::shared_ptr<Block>, std::list<std::string>>> m_rollback_txs;
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::array<char, 255> m_b64_table;
     std::shared_ptr<Account> m_reserve_fund_account;

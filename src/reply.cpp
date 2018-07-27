@@ -37,6 +37,11 @@ std::shared_ptr<Reply> Reply::get_reply_to()
     return m_to;
 }
 
+void Reply::sub_balance(uint64 value)
+{
+    m_balance -= value;
+}
+
 void Reply::add_balance(uint64 value)
 {
     m_balance += value;

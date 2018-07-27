@@ -30,7 +30,8 @@ public:
     std::shared_ptr<Account> get_referrer();
     uint64 get_balance();
     void add_history(History *history);
-    bool join_topic(std::shared_ptr<Topic> topic);
+    bool joined_topic(std::shared_ptr<Topic> topic);
+    void leave_topic(std::shared_ptr<Topic> topic);
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::list<std::shared_ptr<Topic>> m_joined_topic_list;
     
