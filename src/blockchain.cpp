@@ -1705,9 +1705,8 @@ bool Blockchain::load(std::string db_path)
                             }
 
                             account->m_joined_topic_list.push_back(topic);
+                            topic->add_member(tx_id, account);
                         }
-                        
-                        topic->add_member(tx_id, account);
                     }
                 }
                 else if(tx_type == 5) // reward
@@ -2034,8 +2033,8 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     LOG_INFO("switch chain, cur_block(id: %u, hash: %s) first_pending_block(id: %u, hash: %s, pre_hash: %s) last_pending_block(id: %u, hash: %s) from peer: %s", \
              id, iter_block->hash().c_str(), first_pending_block->m_id, first_pending_block->m_hash.c_str(), first_pending_block->m_pre_hash.c_str(), \
              last_pending_block->m_id, last_pending_block->m_hash.c_str(), pending_chain->m_peer->key().c_str());
-    std::list<std::string> db_hashes;
-
+    std::list<std::shared_ptr<Block>> db_blocks;
+    
     if(id == id_pending)
     {
         while(true)
@@ -2045,9 +2044,9 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 cross_id = iter_block->id();
                 cross_hash = iter_block->hash();
                 
-                if(!db_hashes.empty())
+                if(!db_blocks.empty())
                 {
-                    db_hashes.pop_front();
+                    db_blocks.pop_front();
                 }
 
                 break;
@@ -2064,7 +2063,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             
             iter_block = iter_block->get_parent();
             iter_hash = iter_block_1->hash();
-            db_hashes.push_front(iter_hash);
+            db_blocks.push_front(iter_block_1);
         }
     }
     else if(id < id_pending)
@@ -2082,7 +2081,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             
             id_pending = iter_block_1->id();
             iter_hash = iter_block_1->hash();
-            db_hashes.push_front(iter_hash);
+            db_blocks.push_front(iter_block_1);
         }
         
         while(true)
@@ -2091,7 +2090,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             {
                 cross_id = iter_block->id();
                 cross_hash = iter_block->hash();
-                db_hashes.pop_front();
+                db_blocks.pop_front();
 
                 break;
             }
@@ -2099,7 +2098,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             iter_block_1 = iter_block_1->get_parent();
             iter_block = iter_block->get_parent();
             iter_hash = iter_block_1->hash();
-            db_hashes.push_front(iter_hash);
+            db_blocks.push_front(iter_block_1);
         }
     }
     else
@@ -2123,9 +2122,9 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 cross_id = iter_block->id();
                 cross_hash = iter_hash;
                 
-                if(!db_hashes.empty())
+                if(!db_blocks.empty())
                 {
-                    db_hashes.pop_front();
+                    db_blocks.pop_front();
                 }
                 
                 break;
@@ -2150,7 +2149,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 }
                     
                 iter_hash = iter_block_1->hash();
-                db_hashes.push_front(iter_hash);
+                db_blocks.push_front(iter_block_1);
             }
         }
     }
@@ -2170,12 +2169,698 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         rollback(cross_id);
     }
     
-    if(cross_id >= first_pending_block->m_id)
+    if(cross_id >= first_pending_block->m_id - 1)
     {
-        pending_chain->m_start = cross_id - first_pending_block->m_id + 1;
+        pending_chain->m_start = cross_id + 1 - first_pending_block->m_id;
     }
+    
+    for(auto iter_block : db_blocks)
+    {
+        uint64 cur_block_id = iter_block->id();
 
-    //request_detail(pending_chain);
+        if(cur_block_id == 0)
+        {
+            continue;
+        }
+        
+        std::string block_data;
+        std::string block_hash = iter_block->hash();
+        leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
+        
+        if(!s.ok())
+        {
+            LOG_FATAL("switch chain, leveldb read failed, block_id: %lu, block_hash: %s, reason: %s", \
+                      cur_block_id, block_hash.c_str(), s.ToString().c_str());
+            
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        rapidjson::Document doc;
+        const char *block_data_str = block_data.c_str();
+        doc.Parse(block_data_str);
+        
+        if(doc.HasParseError())
+        {
+            LOG_FATAL("swich chain, parse block data failed, block_id: %lu, block_hash: %s, reason: %s", \
+                      cur_block_id, block_hash.c_str(), GetParseError_En(doc.GetParseError()));
+
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        if(!doc.HasMember("data"))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        if(!doc.HasMember("tx"))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        const rapidjson::Value &data = doc["data"];
+
+        if(!data.HasMember("tx_ids"))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        const rapidjson::Value &tx_ids = data["tx_ids"];
+        const rapidjson::Value &tx = doc["tx"];
+        
+        if(!tx_ids.IsArray())
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        if(!tx.IsArray())
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        uint32 tx_num = tx_ids.Size();
+
+        if(tx_num > 2000)
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        if(tx.Size() != tx_num)
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        std::shared_ptr<Account> miner = iter_block->get_miner();
+
+        if(!miner)
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        if(!proc_topic_expired(cur_block_id))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+
+        if(!proc_tx_map(iter_block))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        for(uint32 i = 0; i < tx_num; ++i)
+        {
+            std::string tx_id = tx_ids[i].GetString();
+
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            const rapidjson::Value &tx_node = tx[i];
+
+            if(!tx_node.IsObject())
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            if(!tx_node.HasMember("sign"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            if(!tx_node.HasMember("data"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            std::string tx_sign = tx_node["sign"].GetString();
+            const rapidjson::Value &data = tx_node["data"];
+
+            if(!is_base64_char(tx_sign))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            if(!data.HasMember("pubkey"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            if(!data.HasMember("type"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            if(!data.HasMember("utc"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            
+            //base64 44 bytes length
+            if(tx_id.length() != 44)
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+            if(tx_id != tx_id_verify)
+            {
+                CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
+                
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            std::string pubkey = data["pubkey"].GetString();
+            
+            if(pubkey.length() != 88)
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            if(!is_base64_char(pubkey))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            if(!verify_sign(pubkey, tx_id, tx_sign))
+            {
+                CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
+                
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            uint32 tx_type = data["type"].GetUint();
+
+            if(tx_type == 1) // register account
+            {
+                if(!data.HasMember("avatar"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!data.HasMember("sign"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::shared_ptr<Account> exist_account;
+                
+                if(get_account(pubkey, exist_account))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!data.HasMember("sign_data"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                std::string reg_sign = data["sign"].GetString();
+
+                if(!is_base64_char(reg_sign))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                const rapidjson::Value &sign_data = data["sign_data"];
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                sign_data.Accept(writer);
+                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                
+                if(!sign_data.HasMember("block_id"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!sign_data.HasMember("name"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!sign_data.HasMember("referrer"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!sign_data.HasMember("fee"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                uint64 block_id = sign_data["block_id"].GetUint64();
+                std::string register_name = sign_data["name"].GetString();
+                std::string referrer_pubkey = sign_data["referrer"].GetString();
+                uint64 fee = sign_data["fee"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(fee != 2)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(referrer_pubkey.length() != 88)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!is_base64_char(referrer_pubkey))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::shared_ptr<Account> referrer;
+                
+                if(!get_account(referrer_pubkey, referrer))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(referrer->get_balance() < 2)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                referrer->sub_balance(2);
+                miner->add_balance(1);
+
+                if(!referrer_referrer)
+                {
+                    if(referrer->id() > 1)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    m_reserve_fund_account->add_balance(1);
+                }
+                else
+                {
+                    referrer_referrer->add_balance(1);
+                }
+
+                if(register_name.length() > 20 || register_name.length() < 4)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!is_base64_char(register_name))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(account_name_exist(register_name))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                char raw_name[15] = {0};
+                uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
+                
+                if(len > 15 || len == 0)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                for(uint32 i = 0; i < len; ++i)
+                {
+                    if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                }
+                
+                uint32 avatar = data["avatar"].GetUint();
+                
+                if(avatar >= 8)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
+                m_account_names.insert(register_name);
+                m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                reg_account->set_referrer(referrer);
+            }
+            else
+            {
+                if(!data.HasMember("fee"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!data.HasMember("block_id"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                uint64 fee = data["fee"].GetUint64();
+                uint64 block_id = data["block_id"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(fee != 2)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(account->get_balance() < 2)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::shared_ptr<Account> referrer = account->get_referrer();
+                account->sub_balance(2);
+                miner->add_balance(1);
+                
+                if(!referrer)
+                {
+                    if(account->id() > 1)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    m_reserve_fund_account->add_balance(1);
+                }
+                else
+                {
+                    referrer->add_balance(1);
+                }
+                
+                if(tx_type == 2) // send coin
+                {
+                    std::string memo = data["memo"].GetString();
+
+                    if(!memo.empty())
+                    {
+                        if(memo.length() > 80 || memo.length() < 4)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!is_base64_char(memo))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    }
+                    
+                    uint64 amount = data["amount"].GetUint64();
+                    
+                    if(amount == 0)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(account->get_balance() < amount)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::string receiver_pubkey = data["receiver"].GetString();
+                    
+                    if(receiver_pubkey.length() != 88)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!is_base64_char(receiver_pubkey))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Account> receiver;
+                    
+                    if(!get_account(receiver_pubkey, receiver))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    account->sub_balance(amount);
+                    receiver->add_balance(amount);
+                }
+                else if(tx_type == 3) // new topic
+                {
+                    if(!data.HasMember("reward"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    uint64 reward = data["reward"].GetUint64();
+
+                    if(reward == 0)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(account->get_balance() < reward)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    std::shared_ptr<Topic> exist_topic;
+
+                    if(get_topic(tx_id, exist_topic))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::string topic_data = data["topic"].GetString();
+
+                    if(topic_data.length() < 4 || topic_data.length() > 240)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(!is_base64_char(topic_data))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(account->m_topic_list.size() >= 100)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    account->sub_balance(reward);
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                    topic->set_owner(account);
+                    account->m_topic_list.push_back(topic);
+                    m_topic_list.push_back(topic);
+                    m_topics.insert(std::make_pair(tx_id, topic));
+                }
+                else if(tx_type == 4) // reply
+                {
+                    std::string topic_key = data["topic_key"].GetString();
+                    
+                    if(topic_key.length() != 44)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(!is_base64_char(topic_key))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(!get_topic(topic_key, topic))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    std::string reply_data = data["reply"].GetString();
+
+                    if(reply_data.length() < 4 || reply_data.length() > 240)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(!is_base64_char(reply_data))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    reply->set_owner(account);
+                    
+                    if(topic->m_reply_list.size() >= 1000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    topic->m_reply_list.push_back(reply);
+                    
+                    if(data.HasMember("reply_to"))
+                    {
+                        std::string reply_to_key = data["reply_to"].GetString();
+
+                        if(reply_to_key.length() != 44)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!is_base64_char(reply_to_key))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        std::shared_ptr<Reply> reply_to;
+                        
+                        if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        reply->set_reply_to(reply_to);
+                    }
+
+                    if(topic->get_owner() != account)
+                    {
+                        if(!account->joined_topic(topic))
+                        {
+                            if(account->m_joined_topic_list.size() >= 100)
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+
+                            account->m_joined_topic_list.push_back(topic);
+                            topic->add_member(tx_id, account);
+                        }
+                    }
+                }
+                else if(tx_type == 5) // reward
+                {
+                    std::string topic_key = data["topic_key"].GetString();
+                    
+                    if(topic_key.length() != 44)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!is_base64_char(topic_key))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(!get_topic(topic_key, topic))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(topic->get_owner() != account)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                    reply->set_owner(account);
+                    
+                    if(topic->m_reply_list.size() >= 1000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    uint64 amount = data["amount"].GetUint64();
+                    
+                    if(amount == 0)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(topic->get_balance() < amount)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::string reply_to_key = data["reply_to"].GetString();
+
+                    if(reply_to_key.length() != 44)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    if(!is_base64_char(reply_to_key))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    std::shared_ptr<Reply> reply_to;
+                        
+                    if(!topic->get_reply(reply_to_key, reply_to))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(reply_to->type() != 0)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    reply->set_reply_to(reply_to);
+                    topic->sub_balance(amount);
+                    reply_to->add_balance(amount);
+                    reply_to->get_owner()->add_balance(amount);
+                    reply->add_balance(amount);
+                    topic->m_reply_list.push_back(reply);
+                }
+                else
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+            }
+            
+            m_tx_map.insert(std::make_pair(tx_id, iter_block));
+        }
+
+        uint64 remain_balance = m_reserve_fund_account->get_balance();
+
+        if(remain_balance >= 5000)
+        {
+            m_reserve_fund_account->sub_balance(5000);
+            miner->add_balance(5000);
+            iter_block->m_miner_reward = true;
+        }
+        else
+        {
+            iter_block->m_miner_reward = false;
+        }
+    }
 }
 
 void Blockchain::rollback(uint64 block_id)
@@ -2200,7 +2885,10 @@ void Blockchain::rollback(uint64 block_id)
         
         if(!s.ok())
         {
-            exit(EXIT_FAILURE);
+            LOG_FATAL("rollback, leveldb read failed, block_id: %lu, block_hash: %s, reason: %s", \
+                      cur_block_id, block_hash.c_str(), s.ToString().c_str());
+            
+            ASKCOIN_EXIT(EXIT_FAILURE);
         }
         
         rapidjson::Document doc;
@@ -2209,7 +2897,10 @@ void Blockchain::rollback(uint64 block_id)
         
         if(doc.HasParseError())
         {
-            exit(EXIT_FAILURE);
+            LOG_FATAL("rollback, parse block data failed, block_id: %lu, block_hash: %s, reason: %s", \
+                      cur_block_id, block_hash.c_str(), GetParseError_En(doc.GetParseError()));
+
+            ASKCOIN_EXIT(EXIT_FAILURE);
         }
         
         const rapidjson::Value &data = doc["data"];
@@ -2219,14 +2910,14 @@ void Blockchain::rollback(uint64 block_id)
         
         if(tx.Size() != tx_num)
         {
-            exit(EXIT_FAILURE);
+            ASKCOIN_EXIT(EXIT_FAILURE);
         }
         
         std::shared_ptr<Account> miner = m_cur_block->get_miner();
 
         if(!miner)
         {
-            exit(EXIT_FAILURE);
+            ASKCOIN_EXIT(EXIT_FAILURE);
         }
         
         if(m_cur_block->m_miner_reward)
@@ -2247,24 +2938,24 @@ void Blockchain::rollback(uint64 block_id)
             //base64 44 bytes length
             if(tx_id.length() != 44)
             {
-                exit(EXIT_FAILURE);
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
 
             std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
             
             if(tx_id != tx_id_verify)
             {
-                LOG_FATAL("rollback 1, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
                           cur_block_id, block_hash.c_str(), tx_id.c_str());
 
-                exit(EXIT_FAILURE);
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
             std::string pubkey = data["pubkey"].GetString();
             
             if(pubkey.length() != 88)
             {
-                exit(EXIT_FAILURE);
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
 
             m_tx_map.erase(tx_id);
@@ -2285,7 +2976,7 @@ void Blockchain::rollback(uint64 block_id)
                 {
                     if(referrer->id() > 1)
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
                     m_reserve_fund_account->sub_balance(1);
@@ -2310,7 +3001,7 @@ void Blockchain::rollback(uint64 block_id)
                 {
                     if(account->id() > 1)
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
                     m_reserve_fund_account->sub_balance(1);
@@ -2371,7 +3062,7 @@ void Blockchain::rollback(uint64 block_id)
                 }
                 else
                 {
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             }
 
@@ -2466,7 +3157,7 @@ void Blockchain::rollback(uint64 block_id)
                 {
                     LOG_FATAL("rollback, leveldb read failed, block_id: %lu, block_hash: %s, reason: %s", cur_block_id, block_hash.c_str(), s.ToString().c_str());
 
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             
                 rapidjson::Document doc;
@@ -2478,7 +3169,7 @@ void Blockchain::rollback(uint64 block_id)
                     LOG_FATAL("rollback, parse block data failed, block_id: %lu, block_hash: %s, reason: %s", cur_block_id, block_hash.c_str(), \
                               GetParseError_En(doc.GetParseError()));
 
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
                 {
@@ -2501,7 +3192,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                 if(tx.Size() != tx_num)
                 {
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
                 
                 for(uint32 i = 0; i < tx_num; ++i)
@@ -2516,7 +3207,7 @@ void Blockchain::rollback(uint64 block_id)
                     //base64 44 bytes length
                     if(tx_id.length() != 44)
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 
                     std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
@@ -2526,7 +3217,7 @@ void Blockchain::rollback(uint64 block_id)
                         LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
                                   cur_block_id, block_hash.c_str(), tx_id.c_str());
                     
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
                     tx_pair.second.push_front(tx_id);
@@ -2605,7 +3296,7 @@ void Blockchain::rollback(uint64 block_id)
                     }
                     else
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
             
@@ -2624,7 +3315,7 @@ void Blockchain::rollback(uint64 block_id)
                 {
                     LOG_FATAL("rollback, leveldb read failed, block_id: %lu, block_hash: %s, reason: %s", cur_block_id, block_hash.c_str(), s.ToString().c_str());
 
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             
                 rapidjson::Document doc;
@@ -2636,7 +3327,7 @@ void Blockchain::rollback(uint64 block_id)
                     LOG_FATAL("rollback, parse block data failed, block_id: %lu, block_hash: %s, reason: %s", cur_block_id, block_hash.c_str(), \
                               GetParseError_En(doc.GetParseError()));
 
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             
                 const rapidjson::Value &data = doc["data"];
@@ -2646,7 +3337,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                 if(tx.Size() != tx_num)
                 {
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
                 for(uint32 i = 0; i < tx_num; ++i)
@@ -2661,7 +3352,7 @@ void Blockchain::rollback(uint64 block_id)
                     //base64 44 bytes length
                     if(tx_id.length() != 44)
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 
                     std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
@@ -2671,7 +3362,7 @@ void Blockchain::rollback(uint64 block_id)
                         LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
                                   cur_block_id, block_hash.c_str(), tx_id.c_str());
                     
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 
                     std::string pubkey = data["pubkey"].GetString();
@@ -2740,7 +3431,7 @@ void Blockchain::rollback(uint64 block_id)
                     }
                     else
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
             
@@ -2756,7 +3447,10 @@ void Blockchain::rollback(uint64 block_id)
             
             if(!s.ok())
             {
-                exit(EXIT_FAILURE);
+                LOG_FATAL("rollback, leveldb read failed, block_id: %lu, block_hash: %s, reason: %s", \
+                          cur_block_id, block_hash.c_str(), s.ToString().c_str());
+
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
         
             rapidjson::Document doc;
@@ -2765,9 +3459,12 @@ void Blockchain::rollback(uint64 block_id)
         
             if(doc.HasParseError())
             {
-                exit(EXIT_FAILURE);
+                LOG_FATAL("rollback, parse block data failed, block_id: %lu, block_hash: %s, reason: %s", \
+                          cur_block_id, block_hash.c_str(), GetParseError_En(doc.GetParseError()));
+
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
-        
+            
             const rapidjson::Value &data = doc["data"];
             const rapidjson::Value &tx_ids = data["tx_ids"];
             const rapidjson::Value &tx = doc["tx"];
@@ -2775,14 +3472,14 @@ void Blockchain::rollback(uint64 block_id)
         
             if(tx.Size() != tx_num)
             {
-                exit(EXIT_FAILURE);
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
         
             std::shared_ptr<Account> miner = iter_block->get_miner();
 
             if(!miner)
             {
-                exit(EXIT_FAILURE);
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
         
             if(m_cur_block->m_miner_reward)
@@ -2803,24 +3500,24 @@ void Blockchain::rollback(uint64 block_id)
                 //base64 44 bytes length
                 if(tx_id.length() != 44)
                 {
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
                 std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
             
                 if(tx_id != tx_id_verify)
                 {
-                    LOG_FATAL("rollback 1, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                    LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
                               cur_block_id, block_hash.c_str(), tx_id.c_str());
 
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             
                 std::string pubkey = data["pubkey"].GetString();
             
                 if(pubkey.length() != 88)
                 {
-                    exit(EXIT_FAILURE);
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
                 m_tx_map.erase(tx_id);
@@ -2841,7 +3538,7 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         if(referrer->id() > 1)
                         {
-                            exit(EXIT_FAILURE);
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
 
                         m_reserve_fund_account->sub_balance(1);
@@ -2866,7 +3563,7 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         if(account->id() > 1)
                         {
-                            exit(EXIT_FAILURE);
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
 
                         m_reserve_fund_account->sub_balance(1);
@@ -2927,7 +3624,7 @@ void Blockchain::rollback(uint64 block_id)
                     }
                     else
                     {
-                        exit(EXIT_FAILURE);
+                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
 

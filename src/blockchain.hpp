@@ -19,6 +19,10 @@
 using fly::net::Json;
 using fly::net::Wsock;
 
+#define ASKCOIN_EXIT(code) \
+    LOG_FATAL("exit(%s) at function: %s", #code, __FUNCTION__); \
+    exit(code);
+
 namespace net {
 namespace p2p {
 
