@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <algorithm>
 #include <chrono>
 #include "fly/base/logger.hpp"
 #include "fly/net/server.hpp"
@@ -306,7 +307,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             }
         }
         
-        return;
+        ASKCOIN_RETURN;
     }
 
     auto iter_unreg = m_unreg_peers.find(conn_id);
@@ -348,7 +349,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &version = doc["version"];
@@ -357,14 +358,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!doc.HasMember("id"))
             {
                 connection->close();
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &id = doc["id"];
@@ -373,14 +374,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!doc.HasMember("key"))
             {
                 connection->close();
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &key = doc["key"];
@@ -389,7 +390,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
             
             uint32 version_u32 = version.GetUint();
@@ -424,7 +425,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &id = doc["id"];
@@ -433,14 +434,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!doc.HasMember("key"))
             {
                 connection->close();
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &key = doc["key"];
@@ -449,7 +450,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             {
                 connection->close();
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint64 id_u64 = id.GetUint64();
@@ -494,7 +495,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
         }
-        
+
         return;
     }
     
@@ -512,7 +513,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &version = doc["version"];
@@ -521,14 +522,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         if(!doc.HasMember("id"))
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &id = doc["id"];
@@ -537,14 +538,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         if(!doc.HasMember("key"))
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &key = doc["key"];
@@ -553,14 +554,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         if(!doc.HasMember("host"))
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &host = doc["host"];
@@ -569,14 +570,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         if(!doc.HasMember("port"))
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &port = doc["port"];
@@ -585,7 +586,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
             
-            return;
+            ASKCOIN_RETURN;
         }
         
         uint32 version_u32 = version.GetUint();
@@ -685,7 +686,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &id = doc["id"];
@@ -694,14 +695,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         if(!doc.HasMember("key"))
         {
             connection->close();
 
-            return;
+            ASKCOIN_RETURN;
         }
             
         const rapidjson::Value &key = doc["key"];
@@ -710,7 +711,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             connection->close();
                 
-            return;
+            ASKCOIN_RETURN;
         }
 
         uint64 id_u64 = id.GetUint64();
@@ -818,7 +819,7 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
     
     if(iter_score == m_peer_score_map.end())
     {
-        return;
+        ASKCOIN_RETURN;
     }
 
     std::shared_ptr<Peer_Score> peer_score = iter_score->second;
@@ -864,7 +865,7 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
     
     if(iter_score == m_peer_score_map.end())
     {
-        return;
+        ASKCOIN_RETURN;
     }
     
     std::shared_ptr<Peer_Score> peer_score = iter_score->second;
@@ -948,7 +949,7 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
         
         if(iter_score == peer_score_map.end())
         {
-            return;
+            ASKCOIN_RETURN;
         }
 
         LOG_DEBUG_INFO("punish_peer + banned, peer: %s", peer->key().c_str());
@@ -976,7 +977,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
     if(iter_reg == peers.end())
     {
-        return;
+        ASKCOIN_RETURN;
     }
 
     std::shared_ptr<net::p2p::Peer> peer = iter_reg->second;
@@ -999,14 +1000,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         {
             if(m_pending_peer_keys.find(peer->key()) != m_pending_peer_keys.end())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!doc.HasMember("block"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &block = doc["block"];
@@ -1015,35 +1016,35 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block.HasMember("hash"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block.HasMember("sign"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block["hash"].IsString())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block["sign"].IsString())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::string block_hash = block["hash"].GetString();
@@ -1053,19 +1054,19 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(m_blocks.find(block_hash) != m_blocks.end())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block.HasMember("pow"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             const rapidjson::Value &pow_array = block["pow"];
@@ -1074,7 +1075,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             uint32 pow_num = pow_array.Size();
@@ -1083,7 +1084,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             for(uint32 i = 0; i < 9; ++i)
@@ -1092,7 +1093,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 {
                     punish_peer(peer);
                     
-                    return;
+                    ASKCOIN_RETURN;
                 }
             }
             
@@ -1102,14 +1103,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             // todo, what if is switching?
             if(!m_most_difficult_block->difficult_than_me(declared_pow))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!block.HasMember("data"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &data = block["data"];
@@ -1118,21 +1119,21 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("id"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["id"].IsUint64())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint64 block_id = data["id"].GetUint64();
@@ -1141,21 +1142,21 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("utc"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["utc"].IsUint64())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint64 utc = data["utc"].GetUint64();
@@ -1164,14 +1165,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["version"].IsUint())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             // todo, version compatible?
@@ -1181,14 +1182,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["zero_bits"].IsUint())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint32 zero_bits = data["zero_bits"].GetUint();
@@ -1197,21 +1198,21 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
                 
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!data.HasMember("pre_hash"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["pre_hash"].IsString())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::string pre_hash = data["pre_hash"].GetString();
@@ -1220,21 +1221,21 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!data.HasMember("miner"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["miner"].IsString())
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::string miner_pubkey = data["miner"].GetString();
@@ -1243,14 +1244,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("nonce"))
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             const rapidjson::Value &nonce = data["nonce"];
@@ -1259,14 +1260,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(nonce.Size() != 4)
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             for(uint32 i = 0; i < 4; ++i)
@@ -1275,7 +1276,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 {
                     punish_peer(peer);
 
-                    return;
+                    ASKCOIN_RETURN;
                 }
             }
             
@@ -1283,7 +1284,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &tx_ids = data["tx_ids"];
@@ -1292,7 +1293,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             uint32 tx_num = tx_ids.Size();
@@ -1301,7 +1302,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             rapidjson::StringBuffer buffer;
@@ -1314,7 +1315,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
 
             for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
@@ -1325,7 +1326,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 {
                     punish_peer(peer);
 
-                    return;
+                    ASKCOIN_RETURN;
                 }
             }
             
@@ -1333,14 +1334,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!verify_hash(block_hash, data_str, zero_bits))
             {
                 punish_peer(peer);
                 
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::shared_ptr<Pending_Block> pending_block;
@@ -1363,7 +1364,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 punish_peer(peer);
 
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(is_new_pending_block)
@@ -1412,34 +1413,34 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         {
             if(!doc.HasMember("block"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &block = doc["block"];
 
             if(!block.IsObject())
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!block.HasMember("hash"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block.HasMember("sign"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block["hash"].IsString())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!block["sign"].IsString())
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             std::string block_hash = block["hash"].GetString();
@@ -1447,77 +1448,77 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(block_hash.length() != 44)
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(m_blocks.find(block_hash) != m_blocks.end())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(m_pending_blocks.find(block_hash) != m_pending_blocks.end())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             auto iter_brief_req = m_pending_brief_reqs.find(block_hash);
             
             if(iter_brief_req == m_pending_brief_reqs.end())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::shared_ptr<Pending_Brief_Request> request = iter_brief_req->second;
 
             if(!block.HasMember("data"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &data = block["data"];
 
             if(!data.IsObject())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("id"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["id"].IsUint64())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint64 block_id = data["id"].GetUint64();
 
             if(block_id == 0)
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("utc"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["utc"].IsUint64())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint64 utc = data["utc"].GetUint64();
 
             if(!data.HasMember("version"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["version"].IsUint())
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             // todo, version compatible?
@@ -1525,97 +1526,97 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(!data.HasMember("zero_bits"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["zero_bits"].IsUint())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             uint32 zero_bits = data["zero_bits"].GetUint();
 
             if(zero_bits == 0 || zero_bits > 256)
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!data.HasMember("pre_hash"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["pre_hash"].IsString())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::string pre_hash = data["pre_hash"].GetString();
 
             if(pre_hash.length() != 44)
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!data.HasMember("miner"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data["miner"].IsString())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             std::string miner_pubkey = data["miner"].GetString();
 
             if(miner_pubkey.length() != 88)
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(!data.HasMember("nonce"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             const rapidjson::Value &nonce = data["nonce"];
 
             if(!nonce.IsArray())
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             if(nonce.Size() != 4)
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             for(uint32 i = 0; i < 4; ++i)
             {
                 if(!nonce[i].IsUint64())
                 {
-                    return;
+                    ASKCOIN_RETURN;
                 }
             }
             
             if(!data.HasMember("tx_ids"))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             const rapidjson::Value &tx_ids = data["tx_ids"];
 
             if(!tx_ids.IsArray())
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             uint32 tx_num = tx_ids.Size();
             
             if(tx_num > 2000)
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             rapidjson::StringBuffer buffer;
@@ -1626,7 +1627,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(block_hash != block_hash_verify)
             {
-                return;
+                ASKCOIN_RETURN;
             }
 
             for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
@@ -1635,18 +1636,18 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 
                 if(tx_id.length() != 44)
                 {
-                    return;
+                    ASKCOIN_RETURN;
                 }
             }
             
             if(!verify_sign(miner_pubkey, block_hash, block_sign))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             if(!verify_hash(block_hash, data_str, zero_bits))
             {
-                return;
+                ASKCOIN_RETURN;
             }
             
             auto pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash);
@@ -1786,20 +1787,21 @@ void Blockchain::do_brief_chain()
                     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                     doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
                     doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-                    request->m_peers[0]->m_connection->send(doc);
+                    request->m_peers.back()->m_connection->send(doc);
+                    ++request->m_try_num;
                     request->m_timer_id = m_timer_ctl.add_timer([=]() {
-                            if(request->m_try_num > request->m_peers.size() * 2)
+                            if(request->m_try_num >= request->m_peers.size() * 2)
                             {
                                 request->m_state = 1;
                                 m_timer_ctl.del_timer(request->m_timer_id);
                             }
                             else
                             {
-                                auto last_peer = request->m_peers[request->m_last_idx];
+                                auto last_peer = request->m_peers.back();
                                 
                                 if(last_peer->m_connection->closed())
                                 {
-                                    request->del_peer(last_peer);
+                                    request->m_peers.pop_back();
                                 }
                                 
                                 if(request->m_peers.empty())
@@ -1816,9 +1818,8 @@ void Blockchain::do_brief_chain()
                                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                                 doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
                                 doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-                                uint32 idx = fly::base::random_between(0, request->m_peers.size() - 1);
-                                request->m_peers[idx]->m_connection->send(doc);
-                                request->m_last_idx = idx;
+                                std::random_shuffle(request->m_peers.begin(), request->m_peers.end());
+                                request->m_peers.back()->m_connection->send(doc);
                                 ++request->m_try_num;
                             }
                         }, 1);
@@ -1867,7 +1868,7 @@ void Blockchain::do_brief_chain()
 
     if(m_is_switching)
     {
-        return;
+        ASKCOIN_RETURN;
     }
     
     std::shared_ptr<Pending_Chain> most_difficult_chain = std::make_shared<Pending_Chain>();

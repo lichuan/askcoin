@@ -580,7 +580,7 @@ bool Blockchain::load(std::string db_path)
         
         if(!s.ok())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         rapidjson::Document peer_doc;
@@ -596,7 +596,7 @@ bool Blockchain::load(std::string db_path)
         
         if(!s.ok())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         //try get again
@@ -604,7 +604,7 @@ bool Blockchain::load(std::string db_path)
 
         if(!s.ok())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
     }
     
@@ -622,22 +622,22 @@ bool Blockchain::load(std::string db_path)
 
     if(!doc.HasMember("hash"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!doc.HasMember("sign"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!doc.HasMember("data"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!doc.HasMember("children"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     std::string block_hash = doc["hash"].GetString();
@@ -645,49 +645,49 @@ bool Blockchain::load(std::string db_path)
 
     if(block_hash != "QKQzeV/UzpDNQDWZGVVU5vyKdTw9MmrTbOD/wfa480Y=")
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!is_base64_char(block_sign))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     const rapidjson::Value &data = doc["data"];
     
     if(!data.HasMember("id"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!data.HasMember("utc"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!data.HasMember("version"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     if(!data.HasMember("zero_bits"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!data.HasMember("intro"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!data.HasMember("author"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(!data.HasMember("init_account"))
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     rapidjson::StringBuffer buffer;
@@ -721,7 +721,7 @@ bool Blockchain::load(std::string db_path)
        || account_id != 1 \
        || avatar != 1)
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     if(!verify_sign(pubkey, block_hash, block_sign))
@@ -750,29 +750,29 @@ bool Blockchain::load(std::string db_path)
 
     if(block_id != 0)
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(utc != 1518926400)
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(version != 10000)
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     if(zero_bits != 0)
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     const rapidjson::Value &children = doc["children"];
 
     if(!children.IsArray())
     {
-        return false;
+        ASKCOIN_RETURN false;
     }
 
     std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
@@ -825,34 +825,34 @@ bool Blockchain::load(std::string db_path)
         
         if(!doc.HasMember("hash"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("sign"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("data"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(!doc.HasMember("tx"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         const rapidjson::Value &tx = doc["tx"];
 
         if(!tx.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("children"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
     
         std::string block_hash = doc["hash"].GetString();
@@ -860,79 +860,79 @@ bool Blockchain::load(std::string db_path)
 
         if(!is_base64_char(block_hash))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!is_base64_char(block_sign))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         const rapidjson::Value &data = doc["data"];
     
         if(!data.HasMember("id"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!data.HasMember("utc"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!data.HasMember("version"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
     
         if(!data.HasMember("zero_bits"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!data.HasMember("pre_hash"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(!data.HasMember("miner"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!data.HasMember("tx_ids"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         const rapidjson::Value &tx_ids = data["tx_ids"];
 
         if(!tx_ids.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         uint32 tx_num = tx_ids.Size();
 
         if(tx_num > 2000)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(tx.Size() != tx_num)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         // todo
         if(block_data.length() > 500 + tx_num * 44)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(!data.HasMember("nonce"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         rapidjson::StringBuffer buffer;
@@ -961,19 +961,19 @@ bool Blockchain::load(std::string db_path)
 
         if(miner_pubkey.length() != 88)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!is_base64_char(miner_pubkey))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         std::shared_ptr<Account> miner_account;
                 
         if(!get_account(miner_pubkey, miner_account))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(!verify_sign(miner_pubkey, block_hash, block_sign))
@@ -1000,19 +1000,19 @@ bool Blockchain::load(std::string db_path)
         
         if(!nonce.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(nonce.Size() != 4)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         for(uint32 i = 0; i < 4; ++i)
         {
             if(!nonce[i].IsUint64())
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
         }
         
@@ -1025,19 +1025,19 @@ bool Blockchain::load(std::string db_path)
         
         if(block_id != parent_block_id + 1)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(pre_hash != parent_hash)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(utc_diff < 15)
         {
             if(zero_bits != parent_zero_bits + 1)
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
         }
         else if(utc_diff > 35)
@@ -1046,22 +1046,22 @@ bool Blockchain::load(std::string db_path)
             {
                 if(zero_bits != parent_zero_bits - 1)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
             }
             else if(zero_bits != 1)
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
         }
         else if(zero_bits != parent_zero_bits)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(utc < parent_utc)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         uint64 now = time(NULL);
@@ -1087,7 +1087,7 @@ bool Blockchain::load(std::string db_path)
         
         if(m_blocks.find(block_hash) != m_blocks.end())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         m_blocks.insert(std::make_pair(block_hash, cur_block));
@@ -1095,7 +1095,7 @@ bool Blockchain::load(std::string db_path)
         
         if(!children.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
@@ -1139,7 +1139,7 @@ bool Blockchain::load(std::string db_path)
         
         if(!s.ok())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         rapidjson::Document doc;
@@ -1148,24 +1148,24 @@ bool Blockchain::load(std::string db_path)
         
         if(doc.HasParseError())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("data"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("tx"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         const rapidjson::Value &data = doc["data"];
 
         if(!data.HasMember("tx_ids"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         const rapidjson::Value &tx_ids = data["tx_ids"];
@@ -1173,41 +1173,41 @@ bool Blockchain::load(std::string db_path)
         
         if(!tx_ids.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!tx.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         uint32 tx_num = tx_ids.Size();
 
         if(tx_num > 2000)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         if(tx.Size() != tx_num)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         std::shared_ptr<Account> miner = iter_block->get_miner();
 
         if(!miner)
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!proc_topic_expired(cur_block_id))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!proc_tx_map(iter_block))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
         
         for(uint32 i = 0; i < tx_num; ++i)
@@ -1217,24 +1217,24 @@ bool Blockchain::load(std::string db_path)
             // tx can not be replayed.
             if(m_tx_map.find(tx_id) != m_tx_map.end())
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             const rapidjson::Value &tx_node = tx[i];
 
             if(!tx_node.IsObject())
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             if(!tx_node.HasMember("sign"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!tx_node.HasMember("data"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             std::string tx_sign = tx_node["sign"].GetString();
@@ -1242,22 +1242,22 @@ bool Blockchain::load(std::string db_path)
 
             if(!is_base64_char(tx_sign))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             if(!data.HasMember("pubkey"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!data.HasMember("type"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             if(!data.HasMember("utc"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             rapidjson::StringBuffer buffer;
@@ -1267,7 +1267,7 @@ bool Blockchain::load(std::string db_path)
             //base64 44 bytes length
             if(tx_id.length() != 44)
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
@@ -1276,19 +1276,19 @@ bool Blockchain::load(std::string db_path)
             {
                 CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
                 
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             std::string pubkey = data["pubkey"].GetString();
             
             if(pubkey.length() != 88)
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!is_base64_char(pubkey))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!verify_sign(pubkey, tx_id, tx_sign))
@@ -1304,31 +1304,31 @@ bool Blockchain::load(std::string db_path)
             {
                 if(!data.HasMember("avatar"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!data.HasMember("sign"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 std::shared_ptr<Account> exist_account;
                 
                 if(get_account(pubkey, exist_account))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!data.HasMember("sign_data"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 std::string reg_sign = data["sign"].GetString();
 
                 if(!is_base64_char(reg_sign))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 const rapidjson::Value &sign_data = data["sign_data"];
@@ -1339,22 +1339,22 @@ bool Blockchain::load(std::string db_path)
                 
                 if(!sign_data.HasMember("block_id"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 if(!sign_data.HasMember("name"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 if(!sign_data.HasMember("referrer"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!sign_data.HasMember("fee"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 uint64 block_id = sign_data["block_id"].GetUint64();
@@ -1364,45 +1364,45 @@ bool Blockchain::load(std::string db_path)
                 
                 if(block_id == 0)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 // todo, edge case
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(fee != 2)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 if(referrer_pubkey.length() != 88)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!is_base64_char(referrer_pubkey))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 std::shared_ptr<Account> referrer;
                 
                 if(!get_account(referrer_pubkey, referrer))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(referrer->get_balance() < 2)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
@@ -1413,7 +1413,7 @@ bool Blockchain::load(std::string db_path)
                 {
                     if(referrer->id() > 1)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     m_reserve_fund_account->add_balance(1);
@@ -1425,17 +1425,17 @@ bool Blockchain::load(std::string db_path)
 
                 if(register_name.length() > 20 || register_name.length() < 4)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!is_base64_char(register_name))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(account_name_exist(register_name))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 char raw_name[15] = {0};
@@ -1443,14 +1443,14 @@ bool Blockchain::load(std::string db_path)
                 
                 if(len > 15 || len == 0)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 for(uint32 i = 0; i < len; ++i)
                 {
                     if(std::isspace(static_cast<unsigned char>(raw_name[i])))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                 }
                 
@@ -1458,7 +1458,7 @@ bool Blockchain::load(std::string db_path)
                 
                 if(avatar >= 8)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
@@ -1470,12 +1470,12 @@ bool Blockchain::load(std::string db_path)
             {
                 if(!data.HasMember("fee"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(!data.HasMember("block_id"))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 uint64 fee = data["fee"].GetUint64();
@@ -1483,30 +1483,30 @@ bool Blockchain::load(std::string db_path)
                 
                 if(block_id == 0)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 // todo, edge case
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 if(fee != 2)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 std::shared_ptr<Account> account;
                 
                 if(!get_account(pubkey, account))
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
 
                 if(account->get_balance() < 2)
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
                 
                 std::shared_ptr<Account> referrer = account->get_referrer();
@@ -1517,7 +1517,7 @@ bool Blockchain::load(std::string db_path)
                 {
                     if(account->id() > 1)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     m_reserve_fund_account->add_balance(1);
@@ -1535,12 +1535,12 @@ bool Blockchain::load(std::string db_path)
                     {
                         if(memo.length() > 80 || memo.length() < 4)
                         {
-                            return false;
+                            ASKCOIN_RETURN false;
                         }
 
                         if(!is_base64_char(memo))
                         {
-                            return false;
+                            ASKCOIN_RETURN false;
                         }
                     }
                     
@@ -1548,31 +1548,31 @@ bool Blockchain::load(std::string db_path)
                     
                     if(amount == 0)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(account->get_balance() < amount)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::string receiver_pubkey = data["receiver"].GetString();
                     
                     if(receiver_pubkey.length() != 88)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     if(!is_base64_char(receiver_pubkey))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Account> receiver;
                     
                     if(!get_account(receiver_pubkey, receiver))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     account->sub_balance(amount);
@@ -1582,43 +1582,43 @@ bool Blockchain::load(std::string db_path)
                 {
                     if(!data.HasMember("reward"))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     uint64 reward = data["reward"].GetUint64();
 
                     if(reward == 0)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     if(account->get_balance() < reward)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     std::shared_ptr<Topic> exist_topic;
 
                     if(get_topic(tx_id, exist_topic))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::string topic_data = data["topic"].GetString();
 
                     if(topic_data.length() < 4 || topic_data.length() > 240)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(!is_base64_char(topic_data))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(account->m_topic_list.size() >= 100)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     account->sub_balance(reward);
@@ -1634,31 +1634,31 @@ bool Blockchain::load(std::string db_path)
                     
                     if(topic_key.length() != 44)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(!is_base64_char(topic_key))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Topic> topic;
                     
                     if(!get_topic(topic_key, topic))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     std::string reply_data = data["reply"].GetString();
 
                     if(reply_data.length() < 4 || reply_data.length() > 240)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(!is_base64_char(reply_data))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
@@ -1666,7 +1666,7 @@ bool Blockchain::load(std::string db_path)
                     
                     if(topic->m_reply_list.size() >= 1000)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     topic->m_reply_list.push_back(reply);
@@ -1677,19 +1677,19 @@ bool Blockchain::load(std::string db_path)
 
                         if(reply_to_key.length() != 44)
                         {
-                            return false;
+                            ASKCOIN_RETURN false;
                         }
 
                         if(!is_base64_char(reply_to_key))
                         {
-                            return false;
+                            ASKCOIN_RETURN false;
                         }
                         
                         std::shared_ptr<Reply> reply_to;
                         
                         if(!topic->get_reply(reply_to_key, reply_to))
                         {
-                            return false;
+                            ASKCOIN_RETURN false;
                         }
                         
                         reply->set_reply_to(reply_to);
@@ -1701,7 +1701,7 @@ bool Blockchain::load(std::string db_path)
                         {
                             if(account->m_joined_topic_list.size() >= 100)
                             {
-                                return false;
+                                ASKCOIN_RETURN false;
                             }
 
                             account->m_joined_topic_list.push_back(topic);
@@ -1715,24 +1715,24 @@ bool Blockchain::load(std::string db_path)
                     
                     if(topic_key.length() != 44)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     if(!is_base64_char(topic_key))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Topic> topic;
                     
                     if(!get_topic(topic_key, topic))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     if(topic->get_owner() != account)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
@@ -1740,43 +1740,43 @@ bool Blockchain::load(std::string db_path)
                     
                     if(topic->m_reply_list.size() >= 1000)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     uint64 amount = data["amount"].GetUint64();
                     
                     if(amount == 0)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(topic->get_balance() < amount)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::string reply_to_key = data["reply_to"].GetString();
 
                     if(reply_to_key.length() != 44)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     if(!is_base64_char(reply_to_key))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     std::shared_ptr<Reply> reply_to;
                         
                     if(!topic->get_reply(reply_to_key, reply_to))
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
 
                     if(reply_to->type() != 0)
                     {
-                        return false;
+                        ASKCOIN_RETURN false;
                     }
                     
                     reply->set_reply_to(reply_to);
@@ -1788,7 +1788,7 @@ bool Blockchain::load(std::string db_path)
                 }
                 else
                 {
-                    return false;
+                    ASKCOIN_RETURN false;
                 }
             }
             
@@ -1817,7 +1817,7 @@ bool Blockchain::load(std::string db_path)
     {
         CONSOLE_LOG_FATAL("check_balance failed");
 
-        return false;
+        ASKCOIN_RETURN false;
     }
     
     {
@@ -1838,24 +1838,24 @@ bool Blockchain::load(std::string db_path)
         
         if(doc.HasParseError())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("peers"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         if(!doc.HasMember("utc"))
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
 
         const rapidjson::Value &peers = doc["peers"];
 
         if(!peers.IsArray())
         {
-            return false;
+            ASKCOIN_RETURN false;
         }
     
         for(rapidjson::Value::ConstValueIterator iter = peers.Begin(); iter != peers.End(); ++iter)
@@ -1864,17 +1864,17 @@ bool Blockchain::load(std::string db_path)
 
             if(!peer_info.HasMember("host"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!peer_info.HasMember("port"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
 
             if(!peer_info.HasMember("score"))
             {
-                return false;
+                ASKCOIN_RETURN false;
             }
             
             std::shared_ptr<net::p2p::Peer_Score> peer_score(new net::p2p::Peer_Score(fly::net::Addr(peer_info["host"].GetString(), peer_info["port"].GetUint()), peer_info["score"].GetUint64()));
@@ -2172,6 +2172,20 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     if(cross_id >= first_pending_block->m_id - 1)
     {
         pending_chain->m_start = cross_id + 1 - first_pending_block->m_id;
+    }
+
+    for(auto i = pending_chain->m_start; i < pending_block_num; ++i)
+    {
+        auto iter = m_blocks.find(pending_chain->m_req_blocks[i]->m_hash);
+
+        if(iter == m_blocks.end())
+        {
+            pending_chain->m_start = i;
+
+            break;
+        }
+
+        db_blocks.push_back(iter->second);
     }
     
     for(auto iter_block : db_blocks)

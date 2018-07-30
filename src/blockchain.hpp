@@ -23,6 +23,10 @@ using fly::net::Wsock;
     LOG_FATAL("exit(%s) at function: %s", #code, __FUNCTION__); \
     exit(code);
 
+#define ASKCOIN_RETURN \
+    LOG_DEBUG_INFO("return at function: %s", __FUNCTION__); \
+    return
+
 namespace net {
 namespace p2p {
 
