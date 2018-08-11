@@ -79,16 +79,16 @@
 {
     "sign":"oijowwwwwwwww",
     "data":{
-        "pubkey":"eeeeeeeeeee",
         "type":1,
+        "pubkey":"eeeeeeeeeee",
         "utc":9988888,
         "avatar":22,
         "sign":"awfwewewdffff",
         "sign_data": {
             "block_id":9283,
+            "fee":100000000,
             "name":"b64(iijjjj中文)",
-            "referrer":"pubkey.......",
-            "fee":100000000
+            "referrer":"pubkey......."
         }
     }
 }
@@ -98,6 +98,7 @@
     "sign":"oijowwwwwwwww",
     "data":{
         "type":2,
+        "pubkey":"oikkkkkkkkkk",
         "utc": 2989883883,
         "block_id": 339,
         "fee":2000022,
@@ -114,9 +115,9 @@
         "type":5,
         "pubkey":"oikkkkkkkkkk",
         "utc":9988888,
+        "block_id": 339,
         "fee":2222,
         "reward":9999,
-        "block_id": 339,
         "topic":"abceffabbbb323233232323"
     }
 }
@@ -128,8 +129,8 @@
         "type":6,
         "pubkey":"eeeeeeeeee",
         "utc":9988888,
-        "fee":332,
         "block_id": 339,
+        "fee":332,
         "topic_key":"lllllllllllllllllllllllllllllllll",
         "reply":"abceffabbbb323233232323",
         "reply_to":"to key..."
@@ -141,10 +142,10 @@
     "sign":"oijowwwwwwwww",
     "data":{
         "type":7,
-        "utc":9988888,
         "pubkey":"2fwfewefef",
-        "fee":98,
+        "utc":9988888,
         "block_id": 339,
+        "fee":98,
         "topic_key":"lllllllllllllllllllllllllllllllll",
         "reply_to":"ooooooooooiwiieiweo",
         "amount":9222
@@ -155,50 +156,50 @@
 {
     "msg_type":232,
     "msg_cmd":99,
-    "block": {
-        "hash": "002fbcdefgaa99232bcd",
-        "sign": "wewoeisign.fdfdsfd",
-        "pow": [1,2,3,4,5,6,7,8,9],
-        "data": {
-            "id": 1,
-            "utc": 2938293,
-            "version": 1000,
-            "zero_bits": 25,
-            "pre_hash": "eeewfwefwf",
-            "miner": "22223",
-            "tx_ids": [
-                "e22",
-                "2232323"
-            ],
-            "nonce": [8298392839283293892,0,0,0]
-        },
-        "tx": [
-            {
-                "sign": "oijowwwwwwwww",
-                "data": {
-                    "type": 2,
-                    "pubkey":"efweffwf",
-                    "utc": 2989883883,
-                    "block_id": 339,
-                    "fee":92832,
-                    "amount": 100000000000000,
-                    "memo": "this is my memo msg",
-                    "receiver": "pubkey..."
-                }
-            },
-            {
-                "sign": "oijowwwwwwwww",
-                "data": {
-                    "type": 2,
-                    "pubkey":"efweffwf",
-                    "utc": 2989883883,
-                    "block_id": 339,
-                    "amount": 100000000000000,
-                    "fee":22232323,
-                    "memo": "this is my memo msg",
-                    "receiver": "pubkey..."
-                }
+    "hash": "002fbcdefgaa99232bcd",
+    "sign": "wewoeisign.fdfdsfd",
+    "pow": [1,2,3,4,5,6,7,8,9],
+    "data": {
+        "id": 1,
+        "utc": 2938293,
+        "version": 1000,
+        "zero_bits": 25,
+        "pre_hash": "eeewfwefwf",
+        "miner": "22223",
+        "tx_ids": [
+            "e22",
+            "2232323"
+        ],
+        "nonce": [8298392839283293892,0,0,0]
+    },
+    "tx": [
+        {
+            "sign": "oijowwwwwwwww",
+            "data": {
+                "type": 2,
+                "pubkey":"efweffwf",
+                "utc": 2989883883,
+                "block_id": 339,
+                "fee":92832,
+                "amount": 100000000000000,
+                "memo": "this is my memo msg",
+                "receiver": "pubkey..."
             }
-        ]
-    }
+        },
+        {
+            "sign": "oijowwwwwwwww",
+            "data": {
+                "type": 2,
+                "pubkey":"efweffwf",
+                "utc": 2989883883,
+                "block_id": 339,
+                "amount": 100000000000000,
+                "fee":22232323,
+                "memo": "this is my memo msg",
+                "receiver": "pubkey..."
+            }
+        }
+    ]
 }
+
+max_size_fields = {"msg_type":1234567890,"msg_cmd":1234567890,"hash":"12345678901234567890123456789012345678901234","sign":"123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678","pow":[1234567890,1234567890,1234567890,1234567890,1234567890,1234567890,1234567890,1234567890,1234567890],"data":{"id":12345678901234567890,"utc":12345678901234567890,"version":1234567890,"zero_bits":123,"pre_hash":"12345678901234567890123456789012345678901234","miner":"1234567890123456789012345678901234567890123456789012345678901234567890123456789012345678","tx_ids":[],"nonce":[12345678901234567890,12345678901234567890,12345678901234567890,12345678901234567890]},"tx":[]}

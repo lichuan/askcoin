@@ -7,10 +7,10 @@ class Pending_Brief_Request
 {
 public:
     Pending_Brief_Request();
-    std::vector<std::shared_ptr<net::p2p::Peer>> m_peers;
-
+    std::vector<std::shared_ptr<Pending_Chain>> m_attached_chains;
+    
 public:
-    uint8 m_state;
+    std::string m_hash;
     uint32 m_try_num;
     uint64 m_timer_id;
 };

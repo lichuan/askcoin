@@ -134,12 +134,12 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     block_data += "another_32_bytes";
     coin_hash(block_data.c_str(), block_data.length(), p + 32);
     uint32 arr_16[16] = {0};
-
+    
     for(uint32 i = 0; i < 16; ++i)
     {
         arr_16[i] = ntohl(buf[i]);
     }
-
+    
     for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM;)
     {
         for(int j = 0; j < 16; ++j)
@@ -479,10 +479,10 @@ void Blockchain::do_message()
             wsock_empty = true;
         }
 
-        m_timer_ctl.run();
+        bool called = m_timer_ctl.run();
         do_brief_chain();
         
-        if(peer_empty && wsock_empty)
+        if(peer_empty && wsock_empty && !called)
         {
             RandAddSeedSleep();
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -565,7 +565,8 @@ bool Blockchain::load(std::string db_path)
         rapidjson::StringBuffer buffer_1;
         rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
         data.Accept(writer_1);
-        
+
+        LOG_DEBUG_INFO("genesis -------------------data---------------------: %s", buffer_1.GetString());
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
         std::string sign_b64 = "MEQCIAtl9A36GVH3/JEKywWnb1qL14o+Hto7qyIt67rGyBbwAiAiZKzMQfPe+juW8sz48P1SFN4Vt0QrYO9qzv+qCY4Uow==";
         // sign_b64 = sign("", genesis_block_hash);
@@ -797,6 +798,7 @@ bool Blockchain::load(std::string db_path)
     {
         Child_Block child_block(genesis_block, iter->GetString());
         block_list.push_back(child_block);
+        ++genesis_block->m_child_num;
     }
     
     while(!block_list.empty())
@@ -1068,7 +1070,7 @@ bool Blockchain::load(std::string db_path)
         
         if(utc > now)
         {
-            CONSOLE_LOG_FATAL("verify block utc from leveldb failed, id: %u, hash: %s, please check your system time", block_id, child_block.m_hash.c_str());
+            CONSOLE_LOG_FATAL("verify block utc from leveldb failed, id: %lu, hash: %s, please check your system time", block_id, child_block.m_hash.c_str());
 
             return false;
         }
@@ -1102,8 +1104,9 @@ bool Blockchain::load(std::string db_path)
         {
             Child_Block child_block(cur_block, iter->GetString());
             block_list.push_back(child_block);
+            ++cur_block->m_child_num;
         }
-
+        
         // for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
         // {
         //     cur_block->m_tx_ids.push_back(iter->GetString());
@@ -2169,7 +2172,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         rollback(cross_id);
     }
     
-    if(cross_id >= first_pending_block->m_id - 1)
+    if(cross_id >= first_pending_block->m_id)
     {
         pending_chain->m_start = cross_id + 1 - first_pending_block->m_id;
     }
@@ -2190,11 +2193,12 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     
     for(auto iter_block : db_blocks)
     {
+        m_cur_block = iter_block;
         uint64 cur_block_id = iter_block->id();
-
+        
         if(cur_block_id == 0)
         {
-            continue;
+            ASKCOIN_EXIT(EXIT_FAILURE);
         }
         
         std::string block_data;
@@ -2343,8 +2347,6 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             
             if(tx_id != tx_id_verify)
             {
-                CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
-                
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
@@ -2362,8 +2364,6 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
 
             if(!verify_sign(pubkey, tx_id, tx_sign))
             {
-                CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
-                
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
@@ -2875,12 +2875,84 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
             iter_block->m_miner_reward = false;
         }
     }
+    
+    auto pending_block = pending_chain->m_req_blocks[pending_chain->m_start];
+    auto pending_id = pending_block->m_id;
+    auto pending_hash = pending_block->m_hash;
+    auto request = std::make_shared<Pending_Detail_Request>();
+    request->m_owner_chain = pending_chain;
+    rapidjson::Document doc;
+    doc.SetObject();
+    rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+    doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+    doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
+    doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
+    pending_chain->m_peer->m_connection->send(doc);
+    ++request->m_try_num;
+    request->m_timer_id = m_timer_ctl.add_timer([=]() {
+            if(request->m_try_num >= request->m_attached_chains.size() * 2)
+            {
+                punish_detail_req(request);
+            }
+            else
+            {
+                auto last_peer = request->m_attached_chains.back()->m_peer;
+                
+                if(last_peer->m_connection->closed())
+                {
+                    request->m_attached_chains.pop_back();
+                    
+                    if(request->m_attached_chains.empty())
+                    {
+                        punish_detail_req(request);
+                        
+                        return;
+                    }
+                }
+                
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+                doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
+                doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
+                std::random_shuffle(request->m_attached_chains.begin(), request->m_attached_chains.end());
+                request->m_attached_chains.back()->m_peer->m_connection->send(doc);
+                ++request->m_try_num;
+            }
+        }, 1);
+    
+    for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end(); ++iter)
+    {
+        auto &inner_chain = *iter;
+        auto num = inner_chain->m_req_blocks.size();
+        auto start_id = inner_chain->m_req_blocks[0]->m_id;
+        auto end_id = inner_chain->m_req_blocks[num - 1]->m_id;
+        
+        if(pending_id > end_id || pending_id < start_id)
+        {
+            continue;
+        }
+        
+        auto idx = pending_id - start_id;
+            
+        if(inner_chain->m_req_blocks[idx]->m_hash != pending_hash)
+        {
+            continue;
+        }
+
+        inner_chain->m_start = idx;
+        inner_chain->m_detail_attached = true;
+        request->m_attached_chains.push_back(inner_chain);
+    }
+    
+    m_detail_request = request;
 }
 
 void Blockchain::rollback(uint64 block_id)
 {
     uint64 cur_block_id  = m_cur_block->id();
-
+    
     while(cur_block_id > block_id)
     {
         if(cur_block_id > 4321)

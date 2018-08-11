@@ -183,9 +183,11 @@ public:
 
         if(!Blockchain::instance()->load(doc["db_path"].GetString()))
         {
+            CONSOLE_LOG_FATAL("load from leveldb failed");
+
             return EXIT_FAILURE;
         }
-
+        
         for(int32 i = 0; i < init_peer.Size(); ++i)
         {
             std::string host = init_peer[i]["host"].GetString();

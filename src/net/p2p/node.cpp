@@ -964,6 +964,53 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
     }
 }
 
+void Blockchain::punish_brief_req(std::shared_ptr<Pending_Brief_Request> request)
+{
+    for(auto iter = m_pending_brief_chains.begin(); iter != m_pending_brief_chains.end();)
+    {
+        std::shared_ptr<Pending_Chain> pending_chain = *iter;
+
+        if(!pending_chain->m_brief_attached)
+        {
+            ++iter;
+            continue;
+        }
+        
+        std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
+        iter = m_pending_brief_chains.erase(iter);
+        punish_peer(peer);
+        m_pending_peer_keys.erase(peer->key());
+        LOG_DEBUG_INFO("punish_brief_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_hash.c_str());
+    }
+    
+    m_timer_ctl.del_timer(request->m_timer_id);
+    m_pending_brief_reqs.erase(request->m_hash);
+}
+
+void Blockchain::punish_detail_req(std::shared_ptr<Pending_Detail_Request> request)
+{
+    for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end();)
+    {
+        std::shared_ptr<Pending_Chain> pending_chain = *iter;
+        
+        if(!pending_chain->m_detail_attached)
+        {
+            ++iter;
+            continue;
+        }
+
+        std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
+        iter = m_brief_chains.erase(iter);
+        punish_peer(peer);
+        m_pending_peer_keys.erase(peer->key());
+        m_is_switching = false;
+        std::string block_hash = request->m_owner_chain->m_req_blocks[request->m_owner_chain->m_start]->m_hash;
+        LOG_DEBUG_INFO("punish_detail_req, peer key: %s, block_hash: %s", peer->key().c_str(), block_hash.c_str());
+    }
+    
+    m_timer_ctl.del_timer(request->m_timer_id);
+}
+
 void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message)
 {
     std::shared_ptr<fly::net::Connection<Json>> connection = message->get_connection();
@@ -1003,52 +1050,36 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
-            if(!doc.HasMember("block"))
-            {
-                punish_peer(peer);
-
-                ASKCOIN_RETURN;
-            }
-            
-            const rapidjson::Value &block = doc["block"];
-
-            if(!block.IsObject())
+            if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
 
                 ASKCOIN_RETURN;
             }
 
-            if(!block.HasMember("hash"))
+            if(!doc.HasMember("sign"))
             {
                 punish_peer(peer);
 
                 ASKCOIN_RETURN;
             }
 
-            if(!block.HasMember("sign"))
+            if(!doc["hash"].IsString())
             {
                 punish_peer(peer);
 
                 ASKCOIN_RETURN;
             }
 
-            if(!block["hash"].IsString())
+            if(!doc["sign"].IsString())
             {
                 punish_peer(peer);
 
                 ASKCOIN_RETURN;
             }
 
-            if(!block["sign"].IsString())
-            {
-                punish_peer(peer);
-
-                ASKCOIN_RETURN;
-            }
-
-            std::string block_hash = block["hash"].GetString();
-            std::string block_sign = block["sign"].GetString();
+            std::string block_hash = doc["hash"].GetString();
+            std::string block_sign = doc["sign"].GetString();
 
             if(block_hash.length() != 44)
             {
@@ -1062,14 +1093,43 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
-            if(!block.HasMember("pow"))
+            if(!doc.HasMember("data"))
+            {
+                punish_peer(peer);
+
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &data = doc["data"];
+
+            if(!data.IsObject())
             {
                 punish_peer(peer);
 
                 ASKCOIN_RETURN;
             }
 
-            const rapidjson::Value &pow_array = block["pow"];
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            std::string data_str(buffer.GetString(), buffer.GetSize());
+            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+            if(block_hash != block_hash_verify)
+            {
+                punish_peer(peer);
+
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("pow"))
+            {
+                punish_peer(peer);
+
+                ASKCOIN_RETURN;
+            }
+
+            const rapidjson::Value &pow_array = doc["pow"];
 
             if(!pow_array.IsArray())
             {
@@ -1103,22 +1163,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             // todo, what if is switching?
             if(!m_most_difficult_block->difficult_than_me(declared_pow))
             {
-                ASKCOIN_RETURN;
-            }
-            
-            if(!block.HasMember("data"))
-            {
-                punish_peer(peer);
-
-                ASKCOIN_RETURN;
-            }
-            
-            const rapidjson::Value &data = block["data"];
-
-            if(!data.IsObject())
-            {
-                punish_peer(peer);
-
                 ASKCOIN_RETURN;
             }
 
@@ -1304,20 +1348,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
                 ASKCOIN_RETURN;
             }
-
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            data.Accept(writer);
-            std::string data_str(buffer.GetString(), buffer.GetSize());
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
             
-            if(block_hash != block_hash_verify)
-            {
-                punish_peer(peer);
-
-                ASKCOIN_RETURN;
-            }
-
             for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
             {
                 std::string tx_id = iter->GetString();
@@ -1394,7 +1425,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             if(utc > now)
             {
                 uint32 diff = utc - now;
-
+                
                 if(diff > 3600)
                 {
                     LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
@@ -1409,48 +1440,134 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_pending_brief_chains.push_back(pending_chain);
             }
         }
+        else if(cmd == net::p2p::BLOCK_BRIEF_REQ)
+        {
+            if(!doc.HasMember("hash"))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["hash"].IsString())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            std::string block_hash = doc["hash"].GetString();
+            
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter = m_blocks.find(block_hash);
+            
+            if(iter == m_blocks.end())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            std::string block_data;
+            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
+            
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Document doc;
+            const char *block_data_str = block_data.c_str();
+            doc.Parse(block_data_str);
+            
+            if(doc.HasParseError())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Value &hash_node = doc["hash"];
+            std::string block_hash_db = hash_node.GetString();
+            
+            if(block_hash != block_hash_db)
+            {
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Value &sign_node = doc["sign"];
+            std::string block_sign = sign_node.GetString();
+            rapidjson::Value &data = doc["data"];
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
+            if(block_hash != block_hash_verify)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            std::string miner_pubkey = data["miner"].GetString();
+            
+            if(miner_pubkey.length() != 88)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!verify_sign(miner_pubkey, block_hash, block_sign))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            {
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+                doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_RSP, allocator);
+                doc.AddMember("hash", hash_node, allocator);
+                doc.AddMember("sign", sign_node, allocator);
+                doc.AddMember("data", data, allocator);
+                connection->send(doc);
+            }
+        }
         else if(cmd == net::p2p::BLOCK_BRIEF_RSP)
         {
-            if(!doc.HasMember("block"))
+            if(!doc.HasMember("hash"))
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("sign"))
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["hash"].IsString())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["sign"].IsString())
             {
                 ASKCOIN_RETURN;
             }
             
-            const rapidjson::Value &block = doc["block"];
+            std::string block_hash = doc["hash"].GetString();
+            std::string block_sign = doc["sign"].GetString();
 
-            if(!block.IsObject())
+            if(!is_base64_char(block_hash))
             {
                 ASKCOIN_RETURN;
             }
             
-            if(!block.HasMember("hash"))
+            if(!is_base64_char(block_sign))
             {
                 ASKCOIN_RETURN;
             }
-
-            if(!block.HasMember("sign"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!block["hash"].IsString())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!block["sign"].IsString())
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            std::string block_hash = block["hash"].GetString();
-            std::string block_sign = block["sign"].GetString();
 
             if(block_hash.length() != 44)
             {
                 ASKCOIN_RETURN;
             }
-
+            
             if(m_blocks.find(block_hash) != m_blocks.end())
             {
                 ASKCOIN_RETURN;
@@ -1470,151 +1587,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             std::shared_ptr<Pending_Brief_Request> request = iter_brief_req->second;
 
-            if(!block.HasMember("data"))
+            if(!doc.HasMember("data"))
             {
                 ASKCOIN_RETURN;
             }
             
-            const rapidjson::Value &data = block["data"];
+            const rapidjson::Value &data = doc["data"];
 
             if(!data.IsObject())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data.HasMember("id"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["id"].IsUint64())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            uint64 block_id = data["id"].GetUint64();
-
-            if(block_id == 0)
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data.HasMember("utc"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["utc"].IsUint64())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            uint64 utc = data["utc"].GetUint64();
-
-            if(!data.HasMember("version"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["version"].IsUint())
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            // todo, version compatible?
-            uint32 version = data["version"].GetUint();
-            
-            if(!data.HasMember("zero_bits"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["zero_bits"].IsUint())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            uint32 zero_bits = data["zero_bits"].GetUint();
-
-            if(zero_bits == 0 || zero_bits > 256)
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            if(!data.HasMember("pre_hash"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["pre_hash"].IsString())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            std::string pre_hash = data["pre_hash"].GetString();
-
-            if(pre_hash.length() != 44)
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            if(!data.HasMember("miner"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["miner"].IsString())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            std::string miner_pubkey = data["miner"].GetString();
-
-            if(miner_pubkey.length() != 88)
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(!data.HasMember("nonce"))
-            {
-                ASKCOIN_RETURN;
-            }
-
-            const rapidjson::Value &nonce = data["nonce"];
-
-            if(!nonce.IsArray())
-            {
-                ASKCOIN_RETURN;
-            }
-
-            if(nonce.Size() != 4)
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            for(uint32 i = 0; i < 4; ++i)
-            {
-                if(!nonce[i].IsUint64())
-                {
-                    ASKCOIN_RETURN;
-                }
-            }
-            
-            if(!data.HasMember("tx_ids"))
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            const rapidjson::Value &tx_ids = data["tx_ids"];
-
-            if(!tx_ids.IsArray())
-            {
-                ASKCOIN_RETURN;
-            }
-            
-            uint32 tx_num = tx_ids.Size();
-            
-            if(tx_num > 2000)
             {
                 ASKCOIN_RETURN;
             }
@@ -1630,12 +1610,173 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(!data.HasMember("id"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["id"].IsUint64())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint64 block_id = data["id"].GetUint64();
+
+            if(block_id == 0)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data.HasMember("utc"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["utc"].IsUint64())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint64 utc = data["utc"].GetUint64();
+
+            if(!data.HasMember("version"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["version"].IsUint())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            // todo, version compatible?
+            uint32 version = data["version"].GetUint();
+            
+            if(!data.HasMember("zero_bits"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["zero_bits"].IsUint())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint32 zero_bits = data["zero_bits"].GetUint();
+
+            if(zero_bits == 0 || zero_bits > 256)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("pre_hash"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["pre_hash"].IsString())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            std::string pre_hash = data["pre_hash"].GetString();
+
+            if(pre_hash.length() != 44)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("miner"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["miner"].IsString())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            std::string miner_pubkey = data["miner"].GetString();
+
+            if(miner_pubkey.length() != 88)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data.HasMember("nonce"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            const rapidjson::Value &nonce = data["nonce"];
+
+            if(!nonce.IsArray())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(nonce.Size() != 4)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            for(uint32 i = 0; i < 4; ++i)
+            {
+                if(!nonce[i].IsUint64())
+                {
+                    punish_brief_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            
+            if(!data.HasMember("tx_ids"))
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &tx_ids = data["tx_ids"];
+
+            if(!tx_ids.IsArray())
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            uint32 tx_num = tx_ids.Size();
+            
+            if(tx_num > 2000)
+            {
+                punish_brief_req(request);
+                ASKCOIN_RETURN;
+            }
+
             for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
             {
                 std::string tx_id = iter->GetString();
                 
                 if(tx_id.length() != 44)
                 {
+                    punish_brief_req(request);
                     ASKCOIN_RETURN;
                 }
             }
@@ -1647,6 +1788,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(!verify_hash(block_hash, data_str, zero_bits))
             {
+                punish_brief_req(request);
                 ASKCOIN_RETURN;
             }
             
@@ -1659,9 +1801,613 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_pending_blocks.erase(m_pending_block_hashes.front());
                 m_pending_block_hashes.pop_front();
             }
-
+            
             m_timer_ctl.del_timer(request->m_timer_id);
             m_pending_brief_reqs.erase(block_hash);
+        }
+        else if(cmd == net::p2p::BLOCK_DETAIL_REQ)
+        {
+            if(!doc.HasMember("hash"))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["hash"].IsString())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            std::string block_hash = doc["hash"].GetString();
+            
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter = m_blocks.find(block_hash);
+            
+            if(iter == m_blocks.end())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            std::string block_data;
+            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
+            
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Document doc;
+            const char *block_data_str = block_data.c_str();
+            doc.Parse(block_data_str);
+            
+            if(doc.HasParseError())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Value &hash_node = doc["hash"];
+            std::string block_hash_db = hash_node.GetString();
+            
+            if(block_hash != block_hash_db)
+            {
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Value &sign_node = doc["sign"];
+            std::string block_sign = sign_node.GetString();
+            rapidjson::Value &data = doc["data"];
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
+            if(block_hash != block_hash_verify)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            std::string miner_pubkey = data["miner"].GetString();
+            
+            if(miner_pubkey.length() != 88)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!verify_sign(miner_pubkey, block_hash, block_sign))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            {
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+                doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_RSP, allocator);
+                doc.AddMember("hash", hash_node, allocator);
+                doc.AddMember("sign", sign_node, allocator);
+                doc.AddMember("data", data, allocator);
+                doc.AddMember("tx", doc["tx"], allocator);
+                connection->send(doc);
+            }
+        }
+        else if(cmd == net::p2p::BLOCK_DETAIL_RSP)
+        {
+            if(!doc.HasMember("hash"))
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("sign"))
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["hash"].IsString())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["sign"].IsString())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            std::string block_hash = doc["hash"].GetString();
+            std::string block_sign = doc["sign"].GetString();
+
+            if(!is_base64_char(block_hash))
+            {
+                ASKCOIN_RETURN false;
+            }
+            
+            if(!is_base64_char(block_sign))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(m_blocks.find(block_hash) != m_blocks.end())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!m_is_switching)
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("data"))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &data = doc["data"];
+
+            if(!data.IsObject())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("tx"))
+            {
+                ASKCOIN_RETURN;
+            }
+
+            const rapidjson::Value &tx = doc["tx"];
+            
+            if(!tx.IsArray())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            std::string data_str(buffer.GetString(), buffer.GetSize());
+            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+            if(block_hash != block_hash_verify)
+            {
+                ASKCOIN_RETURN;
+            }
+
+            auto request = m_detail_request;
+
+            if(!data.HasMember("id"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["id"].IsUint64())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint64 block_id = data["id"].GetUint64();
+
+            if(block_id == 0)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data.HasMember("utc"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["utc"].IsUint64())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint64 utc = data["utc"].GetUint64();
+
+            if(!data.HasMember("version"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["version"].IsUint())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            // todo, version compatible?
+            uint32 version = data["version"].GetUint();
+            
+            if(!version_compatible(version, ASKCOIN_VERSION))
+            {
+                LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u)", version, ASKCOIN_VERSION);
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("zero_bits"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["zero_bits"].IsUint())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint32 zero_bits = data["zero_bits"].GetUint();
+
+            if(zero_bits == 0 || zero_bits > 256)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("pre_hash"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["pre_hash"].IsString())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            std::string pre_hash = data["pre_hash"].GetString();
+
+            if(pre_hash.length() != 44)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!is_base64_char(pre_hash))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("miner"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["miner"].IsString())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            std::string miner_pubkey = data["miner"].GetString();
+
+            if(miner_pubkey.length() != 88)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(!is_base64_char(miner_pubkey))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            std::shared_ptr<Account> miner_account;
+            
+            if(!get_account(miner_pubkey, miner_account))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("nonce"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &nonce = data["nonce"];
+
+            if(!nonce.IsArray())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(nonce.Size() != 4)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            for(uint32 i = 0; i < 4; ++i)
+            {
+                if(!nonce[i].IsUint64())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            
+            if(!data.HasMember("tx_ids"))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &tx_ids = data["tx_ids"];
+
+            if(!tx_ids.IsArray())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            uint32 tx_num = tx_ids.Size();
+            
+            if(tx_num > 2000)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(tx_num != tx.Size())
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            std::shared_ptr<Pending_Chain> owner_chain = request->m_owner_chain;
+            std::shared_ptr<Block> parent = m_blocks[pre_hash];
+            uint64 parent_block_id = parent->id();
+            uint64 parent_utc = parent->utc();
+            std::string parent_hash = parent->hash();
+            uint32 parent_zero_bits = parent->zero_bits();
+            uint64 utc_diff = parent->utc_diff();
+            
+            if(block_id != parent_block_id + 1)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            if(pre_hash != parent_hash)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
+            if(utc_diff < 15)
+            {
+                if(zero_bits != parent_zero_bits + 1)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else if(utc_diff > 35)
+            {
+                if(parent_zero_bits > 1)
+                {
+                    if(zero_bits != parent_zero_bits - 1)
+                    {
+                        punish_detail_req(request);
+                        ASKCOIN_RETURN;
+                    }
+                }
+                else if(zero_bits != 1)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else if(zero_bits != parent_zero_bits)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+        
+            if(utc < parent_utc)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+
+            uint64 now = time(NULL);
+        
+            if(utc > now)
+            {
+                LOG_ERROR("recv BLOCK_DETAIL_RSP, verify utc failed, id: %lu, hash: %s, please check your system time", \
+                          block_id, block_hash.c_str());
+                return false;
+            }
+            
+            if(!verify_hash(block_hash, data_str, zero_bits))
+            {
+                CONSOLE_LOG_FATAL("recv BLOCK_DETAIL_RSP, verify_hash failed, id: %lu, hash: %s, zero_bits: %u", \
+                                  block_id, block_hash.c_str(), zero_bits);
+                return false;
+            }
+            
+            std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
+            cur_block->set_parent(parent);
+            cur_block->set_miner(miner_account);
+            parent->add_my_difficulty_to(cur_block);
+        
+            if(m_blocks.find(block_hash) != m_blocks.end())
+            {
+                ASKCOIN_RETURN;
+            }
+        
+            m_blocks.insert(std::make_pair(block_hash, cur_block));
+
+            // 695 is the max size of the other fields from the block,
+            // refer to max_size_fields in data_structure.example file
+            uint32 max_msg_size = 695 + tx_num * 47;
+            
+            for(uint32 i = 0; i < tx_num; ++i)
+            {
+                if(!tx_ids[i].IsString())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                std::string tx_id = tx_ids[i].GetString();
+                
+                if(tx_id.length() != 44)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(tx_id))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(m_tx_map.find(tx_id) != m_tx_map.end())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            
+                const rapidjson::Value &tx_node = tx[i];
+
+                if(!tx_node.IsObject())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            
+                if(!tx_node.HasMember("sign"))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!tx_node.HasMember("data"))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!tx_node["sign"].IsString())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                std::string tx_sign = tx_node["sign"].GetString();
+                const rapidjson::Value &data = tx_node["data"];
+
+                if(!data.IsObject())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(tx_sign))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            
+                if(!data.HasMember("pubkey"))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!data.HasMember("type"))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            
+                if(!data.HasMember("utc"))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                data.Accept(writer);
+                std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+                if(tx_id != tx_id_verify)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!data["pubkey"].IsString())
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                std::string pubkey = data["pubkey"].GetString();
+                
+                if(pubkey.length() != 88)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!is_base64_char(pubkey))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!verify_sign(pubkey, tx_id, tx_sign))
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 tx_type = data["type"].GetUint();
+            }
+            
+            for(uint32 i = 0; i < tx_num; ++i)
+            {
+                std::string tx_id = tx_ids[i].GetString();
+                const rapidjson::Value &tx_node = tx[i];
+                const rapidjson::Value &data = tx_node["data"];
+                std::string pubkey = data["pubkey"].GetString();
+                uint32 tx_type = data["type"].GetUint();
+            }
+            
+            if(!verify_sign(miner_pubkey, block_hash, block_sign))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!verify_hash(block_hash, data_str, zero_bits))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
         }
         else
         {
@@ -1682,8 +2428,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
 void Blockchain::do_brief_chain()
 {
-    std::set<std::string> failed_brief_reqs;
-    
     for(auto iter = m_pending_brief_chains.begin(); iter != m_pending_brief_chains.end();)
     {
         std::shared_ptr<Pending_Chain> pending_chain = *iter;
@@ -1728,9 +2472,36 @@ void Blockchain::do_brief_chain()
                 
                 m_brief_chains.push_back(pending_chain);
                 
+                if(m_is_switching)
+                {
+                    std::shared_ptr<Pending_Chain> owner_chain = m_detail_request->m_owner_chain;
+                    auto pending_block = owner_chain->m_req_blocks[owner_chain->m_start];
+                    auto pending_id = pending_block->m_id;
+                    auto pending_hash = pending_block->m_hash;
+                    auto num = pending_chain->m_req_blocks.size();
+                    auto start_id = pending_chain->m_req_blocks[0]->m_id;
+                    auto end_id = pending_chain->m_req_blocks[num - 1]->m_id;
+        
+                    if(pending_id > end_id || pending_id < start_id)
+                    {
+                        break;
+                    }
+                    
+                    auto idx = pending_id - start_id;
+                    
+                    if(pending_chain->m_req_blocks[idx]->m_hash != pending_hash)
+                    {
+                        break;
+                    }
+                    
+                    pending_chain->m_start = idx;
+                    pending_chain->m_detail_attached = true;
+                    m_detail_request->m_attached_chains.push_back(pending_chain);
+                }
+                
                 break;
             }
-
+            
             // pre_hash(gensis block) should be in m_blocks
             if(pending_block->m_id == 1)
             {
@@ -1769,7 +2540,7 @@ void Blockchain::do_brief_chain()
                 }
 
                 pending_chain->m_req_blocks.push_front(pre_pending_block);
-                pending_chain->m_requested = false;
+                pending_chain->m_brief_attached = false;
             }
             else
             {
@@ -1779,37 +2550,37 @@ void Blockchain::do_brief_chain()
                 if(iter_3 == m_pending_brief_reqs.end())
                 {
                     request = std::make_shared<Pending_Brief_Request>();
-                    request->m_peers.push_back(pending_chain->m_peer);
-                    pending_chain->m_requested = true;
+                    request->m_attached_chains.push_back(pending_chain);
+                    request->m_hash = pre_hash;
+                    m_pending_brief_reqs.insert(std::make_pair(pre_hash, request));
+                    pending_chain->m_brief_attached = true;
                     rapidjson::Document doc;
                     doc.SetObject();
                     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
                     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                     doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
                     doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-                    request->m_peers.back()->m_connection->send(doc);
+                    request->m_attached_chains.back()->m_peer->m_connection->send(doc);
                     ++request->m_try_num;
                     request->m_timer_id = m_timer_ctl.add_timer([=]() {
-                            if(request->m_try_num >= request->m_peers.size() * 2)
+                            if(request->m_try_num >= request->m_attached_chains.size() * 2)
                             {
-                                request->m_state = 1;
-                                m_timer_ctl.del_timer(request->m_timer_id);
+                                punish_brief_req(request);
                             }
                             else
                             {
-                                auto last_peer = request->m_peers.back();
+                                auto last_peer = request->m_attached_chains.back()->m_peer;
                                 
                                 if(last_peer->m_connection->closed())
                                 {
-                                    request->m_peers.pop_back();
-                                }
-                                
-                                if(request->m_peers.empty())
-                                {
-                                    request->m_state = 1;
-                                    m_timer_ctl.del_timer(request->m_timer_id);
-                                    
-                                    return;
+                                    request->m_attached_chains.pop_back();
+
+                                    if(request->m_attached_chains.empty())
+                                    {
+                                        punish_brief_req(request);
+
+                                        return;
+                                    }
                                 }
                                 
                                 rapidjson::Document doc;
@@ -1818,8 +2589,8 @@ void Blockchain::do_brief_chain()
                                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                                 doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
                                 doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-                                std::random_shuffle(request->m_peers.begin(), request->m_peers.end());
-                                request->m_peers.back()->m_connection->send(doc);
+                                std::random_shuffle(request->m_attached_chains.begin(), request->m_attached_chains.end());
+                                request->m_attached_chains.back()->m_peer->m_connection->send(doc);
                                 ++request->m_try_num;
                             }
                         }, 1);
@@ -1828,23 +2599,11 @@ void Blockchain::do_brief_chain()
                 {
                     request = iter_3->second;
                 }
-                
-                if(request->m_state == 1) // failed
-                {
-                    failed_brief_reqs.insert(pre_hash);
 
-                    if(pending_chain->m_requested)
-                    {
-                        punish_peer(peer);
-                        m_pending_peer_keys.erase(peer->key());
-                        iter = m_pending_brief_chains.erase(iter);
-                        continue_if = true;
-                    }
-                }
-                else if(!pending_chain->m_requested)
+                if(!pending_chain->m_brief_attached)
                 {
-                    request->m_peers.push_back(pending_chain->m_peer);
-                    pending_chain->m_requested = true;
+                    request->m_attached_chains.push_back(pending_chain);
+                    pending_chain->m_brief_attached = true;
                 }
                 
                 break;
@@ -1859,11 +2618,6 @@ void Blockchain::do_brief_chain()
         {
             ++iter;
         }
-    }
-
-    for(auto &req_hash : failed_brief_reqs)
-    {
-        m_pending_brief_reqs.erase(req_hash);
     }
 
     if(m_is_switching)

@@ -19,7 +19,7 @@ public:
         }
     };
     
-    Peer_Score(const fly::net::Addr &addr, uint64 score = 10000);
+    Peer_Score(const fly::net::Addr &addr, uint64 score = 1000000);
     ~Peer_Score();
     std::string key() const;
     const fly::net::Addr& addr();

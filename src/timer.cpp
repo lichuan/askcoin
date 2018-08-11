@@ -93,11 +93,12 @@ void Timer_Controller::reset_timer(uint64 id)
     }
 }
 
-void Timer_Controller::run()
+bool Timer_Controller::run()
 {
     uint64 now = time(NULL);
     std::list<std::shared_ptr<Timer>> timeout_list;
     std::lock_guard<std::mutex> guard(m_mutex);
+    bool called = false;
     
     for(auto iter = m_timers.begin(); iter != m_timers.end();)
     {
@@ -107,7 +108,8 @@ void Timer_Controller::run()
         {
             timer->m_cb();
             iter = m_timers.erase(iter);
-
+            called = true;
+            
             if(!timer->m_oneshot)
             {
                 timer->m_utc = now + timer->m_interval;
@@ -128,4 +130,6 @@ void Timer_Controller::run()
     {
         m_timers.insert(timer);
     }
+
+    return called;
 }

@@ -25,8 +25,9 @@ public:
     std::deque<std::shared_ptr<Pending_Block>> m_req_blocks;
     std::shared_ptr<net::p2p::Peer> m_peer;
     Accum_Pow m_remain_pow;
-    bool m_requested;
     uint64 m_start;
+    bool m_detail_attached;
+    bool m_brief_attached;
 };
 
 #endif

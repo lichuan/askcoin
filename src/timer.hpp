@@ -35,7 +35,7 @@ public:
     uint64 add_timer(std::function<void()> cb, uint32 interval, bool oneshot = false);
     void reset_timer(uint64 id);
     void del_timer(uint64 id);
-    void run();
+    bool run();
     void clear();
     
 private:

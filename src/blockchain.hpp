@@ -14,6 +14,7 @@
 #include "block.hpp"
 #include "account.hpp"
 #include "pending_brief_request.hpp"
+#include "pending_detail_request.hpp"
 #include "timer.hpp"
 
 using fly::net::Json;
@@ -57,10 +58,12 @@ public:
     void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
     void do_message();
     void stop_do_message();
-    
+
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
     void punish_peer(std::shared_ptr<net::p2p::Peer> peer);
+    void punish_brief_req(std::shared_ptr<Pending_Brief_Request> req);
+    void punish_detail_req(std::shared_ptr<Pending_Detail_Request> request);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
     void do_brief_chain();
     
@@ -83,6 +86,7 @@ private:
     std::list<std::shared_ptr<Pending_Chain>> m_pending_brief_chains;
     std::list<std::shared_ptr<Pending_Chain>> m_brief_chains;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
+    std::shared_ptr<Pending_Detail_Request> m_detail_request;
     Timer_Controller m_timer_ctl;
     std::unordered_set<std::string> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;

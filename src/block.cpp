@@ -8,6 +8,7 @@ Block::Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::strin
     m_zero_bits = zero_bits;
     m_hash = hash;
     m_utc_diff = 0;
+    m_child_num = 0;
 }
 
 uint64 Block::id()
