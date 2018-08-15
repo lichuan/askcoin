@@ -353,10 +353,11 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
                 return false;
             }
 
+            tx_pair.first = iter_block;
+            
             for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
             {
                 std::string tx_id = iter->GetString();
-                tx_pair.first = iter_block;
                 tx_pair.second.push_front(tx_id);
                 
                 if(m_tx_map.erase(tx_id) != 1)
@@ -2889,6 +2890,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
     pending_chain->m_peer->m_connection->send(doc);
     ++request->m_try_num;
+    LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pending_id, pending_hash.c_str());
     request->m_timer_id = m_timer_ctl.add_timer([=]() {
             if(request->m_try_num >= request->m_attached_chains.size() * 2)
             {
@@ -2905,18 +2907,39 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                     if(request->m_attached_chains.empty())
                     {
                         punish_detail_req(request);
-                        
+
                         return;
                     }
                 }
-                
+
+                while(true)
+                {
+                    std::random_shuffle(request->m_attached_chains.begin(), request->m_attached_chains.end());
+                    auto last_peer = request->m_attached_chains.back()->m_peer;
+                                
+                    if(last_peer->m_connection->closed())
+                    {
+                        request->m_attached_chains.pop_back();
+
+                        if(request->m_attached_chains.empty())
+                        {
+                            punish_detail_req(request);
+                            
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
                 rapidjson::Document doc;
                 doc.SetObject();
                 rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                 doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
                 doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-                std::random_shuffle(request->m_attached_chains.begin(), request->m_attached_chains.end());
                 request->m_attached_chains.back()->m_peer->m_connection->send(doc);
                 ++request->m_try_num;
             }
@@ -2992,7 +3015,7 @@ void Blockchain::rollback(uint64 block_id)
         const rapidjson::Value &data = doc["data"];
         const rapidjson::Value &tx_ids = data["tx_ids"];
         const rapidjson::Value &tx = doc["tx"];
-        uint32 tx_num = tx_ids.Size();
+        int32 tx_num = tx_ids.Size();
         
         if(tx.Size() != tx_num)
         {
@@ -3005,14 +3028,21 @@ void Blockchain::rollback(uint64 block_id)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
+
+        LOG_DEBUG_INFO("rollback, id: %lu, hash: %s", cur_block_id, block_hash.c_str());
         
         if(m_cur_block->m_miner_reward)
         {
             m_reserve_fund_account->add_balance(5000);
             miner->sub_balance(5000);
         }
+
+        if(tx_num <= 0)
+        {
+            goto proc_tx_end;
+        }
         
-        for(uint32 i = 0; i < tx_num; ++i)
+        for(int32 i = tx_num - 1; i >= 0; --i)
         {
             std::string tx_id = tx_ids[i].GetString();
             const rapidjson::Value &tx_node = tx[i];
@@ -3151,45 +3181,46 @@ void Blockchain::rollback(uint64 block_id)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             }
-
-            if(cur_block_id > 4321)
-            {
-                auto &topic_list = m_rollback_topics[cur_block_id - 4321];
-
-                for(auto topic : topic_list)
-                {
-                    m_topics.insert(std::make_pair(topic->key(), topic));
-                    topic->get_owner()->m_topic_list.push_front(topic);
-                    m_topic_list.push_front(topic);
-                    uint64 balance = topic->get_balance();
-                        
-                    if(balance > 0)
-                    {
-                        m_reserve_fund_account->sub_balance(balance);
-                    }
-
-                    for(auto &p : topic->m_members)
-                    {
-                        p.second->m_joined_topic_list.push_front(topic);
-                    }
-                }
-
-                auto tx_pair = m_rollback_txs[cur_block_id - 4321];
-                
-                for(auto _tx_id : tx_pair.second)
-                {
-                    m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
-                }
-                
-                m_rollback_topics.erase(cur_block_id - 4321);
-                m_rollback_txs.erase(cur_block_id - 4321);
-            }
         }
         
+    proc_tx_end:
+        if(cur_block_id > 4321)
+        {
+            auto &topic_list = m_rollback_topics[cur_block_id - 4321];
+
+            for(auto topic : topic_list)
+            {
+                m_topics.insert(std::make_pair(topic->key(), topic));
+                topic->get_owner()->m_topic_list.push_front(topic);
+                m_topic_list.push_front(topic);
+                uint64 balance = topic->get_balance();
+                        
+                if(balance > 0)
+                {
+                    m_reserve_fund_account->sub_balance(balance);
+                }
+
+                for(auto &p : topic->m_members)
+                {
+                    p.second->m_joined_topic_list.push_front(topic);
+                }
+            }
+
+            auto tx_pair = m_rollback_txs[cur_block_id - 4321];
+                
+            for(auto _tx_id : tx_pair.second)
+            {
+                m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
+            }
+                
+            m_rollback_topics.erase(cur_block_id - 4321);
+            m_rollback_txs.erase(cur_block_id - 4321);
+        }
+
         m_cur_block = m_cur_block->get_parent();
         cur_block_id  = m_cur_block->id();
     }
-
+    
     if(cur_block_id > block_id)
     {
         uint64 iter_id = cur_block_id;
@@ -3376,7 +3407,6 @@ void Blockchain::rollback(uint64 block_id)
                         reply->set_reply_to(reply_to);
                         topic->sub_balance(amount);
                         reply_to->add_balance(amount);
-                        reply_to->get_owner()->add_balance(amount);
                         reply->add_balance(amount);
                         topic->m_reply_list.push_back(reply);
                     }
@@ -3511,7 +3541,6 @@ void Blockchain::rollback(uint64 block_id)
                         reply->set_reply_to(reply_to);
                         topic->sub_balance(amount);
                         reply_to->add_balance(amount);
-                        reply_to->get_owner()->add_balance(amount);
                         reply->add_balance(amount);
                         topic->m_reply_list.push_back(reply);
                     }
@@ -3554,27 +3583,32 @@ void Blockchain::rollback(uint64 block_id)
             const rapidjson::Value &data = doc["data"];
             const rapidjson::Value &tx_ids = data["tx_ids"];
             const rapidjson::Value &tx = doc["tx"];
-            uint32 tx_num = tx_ids.Size();
+            int32 tx_num = tx_ids.Size();
         
             if(tx.Size() != tx_num)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
         
-            std::shared_ptr<Account> miner = iter_block->get_miner();
-
+            std::shared_ptr<Account> miner = m_cur_block->get_miner();
+            
             if(!miner)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-        
+            
             if(m_cur_block->m_miner_reward)
             {
                 m_reserve_fund_account->add_balance(5000);
                 miner->sub_balance(5000);
             }
-        
-            for(uint32 i = 0; i < tx_num; ++i)
+
+            if(tx_num <= 0)
+            {
+                goto proc_tx_end_1;
+            }
+
+            for(int32 i = tx_num - 1; i >= 0; --i)
             {
                 std::string tx_id = tx_ids[i].GetString();
                 const rapidjson::Value &tx_node = tx[i];
@@ -3713,41 +3747,42 @@ void Blockchain::rollback(uint64 block_id)
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
-
-                if(cur_block_id > 4321)
-                {
-                    auto &topic_list = rollback_topics[cur_block_id - 4321];
-                    
-                    for(auto topic : topic_list)
-                    {
-                        m_topics.insert(std::make_pair(topic->key(), topic));
-                        topic->get_owner()->m_topic_list.push_front(topic);
-                        m_topic_list.push_front(topic);
-                        uint64 balance = topic->get_balance();
-                        
-                        if(balance > 0)
-                        {
-                            m_reserve_fund_account->sub_balance(balance);
-                        }
-
-                        for(auto &p : topic->m_members)
-                        {
-                            p.second->m_joined_topic_list.push_front(topic);
-                        }
-                    }
-
-                    auto tx_pair = rollback_txs[cur_block_id - 4321];
-                
-                    for(auto _tx_id : tx_pair.second)
-                    {
-                        m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
-                    }
-                    
-                    rollback_topics.erase(cur_block_id - 4321);
-                    rollback_txs.erase(cur_block_id - 4321);
-                }
             }
-            
+
+        proc_tx_end_1:
+            if(cur_block_id > 4321)
+            {
+                auto &topic_list = rollback_topics[cur_block_id - 4321];
+                    
+                for(auto topic : topic_list)
+                {
+                    m_topics.insert(std::make_pair(topic->key(), topic));
+                    topic->get_owner()->m_topic_list.push_front(topic);
+                    m_topic_list.push_front(topic);
+                    uint64 balance = topic->get_balance();
+                        
+                    if(balance > 0)
+                    {
+                        m_reserve_fund_account->sub_balance(balance);
+                    }
+
+                    for(auto &p : topic->m_members)
+                    {
+                        p.second->m_joined_topic_list.push_front(topic);
+                    }
+                }
+
+                auto tx_pair = rollback_txs[cur_block_id - 4321];
+                
+                for(auto _tx_id : tx_pair.second)
+                {
+                    m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
+                }
+                    
+                rollback_topics.erase(cur_block_id - 4321);
+                rollback_txs.erase(cur_block_id - 4321);
+            }
+
             m_cur_block = m_cur_block->get_parent();
             cur_block_id  = m_cur_block->id();
         }

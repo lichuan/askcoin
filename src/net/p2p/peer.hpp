@@ -22,8 +22,9 @@ public:
     uint64 m_reg_conn_id;
     uint64 m_timer_id;
     uint64 m_ping_timer_id;
+    uint64 m_punish_timer_id;
     std::shared_ptr<fly::net::Connection<Json>> m_connection;
-
+    
 private:
     std::string m_key;
 };

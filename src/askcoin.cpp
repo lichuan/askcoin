@@ -131,7 +131,7 @@ public:
         }
         
         fly::base::Logger::instance()->init(log_level, "askcoin", doc["log_path"].GetString());
-        CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u\n", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
+        CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
         
         if (!AppInitSanityChecks())
         {
