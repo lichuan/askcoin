@@ -1897,6 +1897,13 @@ bool Blockchain::load(std::string db_path)
         }
         
         block_chain.pop_front();
+
+        if(block_chain.empty())
+        {
+            m_broadcast_json.m_hash = doc["hash"];
+            m_broadcast_json.m_sign = doc["sign"];
+            m_broadcast_json.m_data = doc["data"];
+        }
     }
     
     CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());

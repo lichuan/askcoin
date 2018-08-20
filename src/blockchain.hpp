@@ -58,7 +58,8 @@ public:
     void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
     void do_message();
     void stop_do_message();
-
+    void broadcast();
+    
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
     void punish_peer(std::shared_ptr<net::p2p::Peer> peer);
@@ -98,6 +99,12 @@ private:
     std::shared_ptr<Account> m_reserve_fund_account;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Wsock>>> m_wsock_messages;
+    
+    struct {
+        rapidjson::Value m_hash;
+        rapidjson::Value m_sign;
+        rapidjson::Value m_data;
+    } m_broadcast_json;
 };
 
 #endif

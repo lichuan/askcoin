@@ -43,7 +43,8 @@ public:
     bool erase_peer_score(const std::shared_ptr<Peer_Score> &peer_score);
     void connect_proc();
     void timer_proc();
-
+    void broadcast(rapidjson::Document &doc);
+    
 private:
     uint32 m_max_conn = 0;
     std::atomic<bool> m_stop{false};

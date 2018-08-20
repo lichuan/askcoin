@@ -25,7 +25,8 @@ public:
     void set_miner(std::shared_ptr<Account> miner);
     std::shared_ptr<Account> get_miner();
     bool m_miner_reward = true;
-
+    Accum_Pow m_accum_pow;
+    
 private:
     uint64 m_id;
     uint64 m_utc;
@@ -35,7 +36,6 @@ private:
     std::string m_hash;
     std::shared_ptr<Block> m_parent;
     std::shared_ptr<Account> m_miner;
-    Accum_Pow m_accum_pow;
 };
 
 #endif
