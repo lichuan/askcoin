@@ -451,6 +451,58 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     return true;
 }
 
+void Blockchain::do_score()
+{
+    using namespace net::p2p;
+    
+    while(!m_stop.load(std::memory_order_relaxed))
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(30));
+        auto p2p_node = net::p2p::Node::instance();
+        std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
+        auto &peer_scores = p2p_node->m_peer_scores;
+        
+        while(peer_scores.size() > 5000)
+        {
+            auto peer_score = *peer_scores.rbegin();
+            p2p_node->del_peer_score(peer_score);
+        }
+        
+        rapidjson::Document doc;
+        doc.SetObject();
+        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+        rapidjson::Value peers(rapidjson::kArrayType);
+        doc.AddMember("utc", time(NULL), allocator);
+        uint32 count = 0;
+        
+        for(auto iter = peer_scores.begin(); iter != peer_scores.end(); ++iter)
+        {
+            if(++count > 1000)
+            {
+                break;
+            }
+            
+            std::shared_ptr<Peer_Score> peer_score = *iter;
+            rapidjson::Value peer_info(rapidjson::kObjectType);
+            peer_info.AddMember("host", rapidjson::StringRef(peer_score->m_addr.m_host.c_str()), allocator);
+            peer_info.AddMember("port", peer_score->m_addr.m_port, allocator);
+            peer_info.AddMember("score", peer_score->m_score, allocator);
+            peers.PushBack(peer_info, allocator);
+        }
+        
+        doc.AddMember("peers", peers, allocator);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        leveldb::Status s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer.GetString());
+        
+        if(!s.ok())
+        {
+            LOG_FATAL("write peer_score failed, reason: %s", s.ToString().c_str());
+        }
+    }
+}
+
 void Blockchain::do_message()
 {
     while(!m_stop.load(std::memory_order_relaxed))
@@ -496,12 +548,18 @@ void Blockchain::do_message()
     }
 }
 
-void Blockchain::stop_do_message()
+void Blockchain::stop()
 {
     m_stop.store(true, std::memory_order_relaxed);
 }
 
-bool Blockchain::load(std::string db_path)
+void Blockchain::wait()
+{
+    m_msg_thread.join();
+    m_score_thread.join();
+}
+
+bool Blockchain::start(std::string db_path)
 {
     // firstly, we need verify __asic_resistant_data__
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
@@ -1907,7 +1965,10 @@ bool Blockchain::load(std::string db_path)
     }
     
     CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());
-
+    m_timer_ctl.add_timer([=]() {
+            broadcast();
+        }, 15);
+    
     if(!check_balance())
     {
         CONSOLE_LOG_FATAL("check_balance failed");
@@ -1951,6 +2012,11 @@ bool Blockchain::load(std::string db_path)
             ASKCOIN_RETURN false;
         }
 
+        if(!doc["utc"].IsUint64())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
         const rapidjson::Value &peers = doc["peers"];
 
         if(!peers.IsArray())
@@ -2098,6 +2164,12 @@ bool Blockchain::load(std::string db_path)
     //     CONSOLE_LOG_INFO("verify failed.................");
     // }
 
+    std::thread msg_thread(std::bind(&Blockchain::do_message, this));
+    m_msg_thread = std::move(msg_thread);
+
+    std::thread score_thread(std::bind(&Blockchain::do_score, this));
+    m_score_thread = std::move(score_thread);
+    
     return true;
 }
 

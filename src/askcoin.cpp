@@ -182,7 +182,7 @@ public:
         
         net::Wsock_Node::instance()->set_max_conn(websocket_max_conn);
 
-        if(!Blockchain::instance()->load(doc["db_path"].GetString()))
+        if(!Blockchain::instance()->start(doc["db_path"].GetString()))
         {
             CONSOLE_LOG_FATAL("load from leveldb failed");
 
@@ -250,8 +250,8 @@ public:
                     }
                     
                     net::p2p::Node::instance()->stop();
-                    Blockchain::instance()->stop_do_message();
-
+                    Blockchain::instance()->stop();
+                    
                     break;
                 }
                 
@@ -270,16 +270,15 @@ public:
             }
         });
 
-        std::thread message_thread(std::bind(&Blockchain::do_message, Blockchain::instance()));
+        cmd_thread.join();
 
         if(open_websocket)
         {
             net::Wsock_Node::instance()->wait();
         }
-        
+
         net::p2p::Node::instance()->wait();
-        message_thread.join();
-        cmd_thread.join();
+        Blockchain::instance()->wait();
         Shutdown();
         CONSOLE_LOG_INFO("stop askcoin success");
 

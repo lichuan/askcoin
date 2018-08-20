@@ -596,6 +596,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         uint16 port_u16 = port.GetUint();
         uint32 key_u32 = key.GetUint();
         LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u16);
+        // todo, version?
         if(!version_compatible(version_u32, ASKCOIN_VERSION))
         {
             LOG_DEBUG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
@@ -915,12 +916,6 @@ bool Node::add_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 {
     std::string key = peer_score->key();
-    
-    if(m_peer_score_map.find(key) == m_peer_score_map.end())
-    {
-        return false;
-    }
-    
     m_peer_score_map.erase(key);
     auto iter_end = m_peer_scores.upper_bound(peer_score);
     
@@ -933,7 +928,7 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
             return true;
         }
     }
-
+    
     return false;
 }
 
@@ -956,20 +951,19 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
     {
         std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
         auto iter_score = peer_score_map.find(peer->key());
-        
-        if(iter_score == peer_score_map.end())
-        {
-            ASKCOIN_RETURN;
-        }
 
+        if(iter_score != peer_score_map.end())
+        {
+            std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
+            peer_score->sub_score(1000);
+        }
+        
         if(peer->m_punish_timer_id > 0)
         {
             p2p_node->m_timer_ctl.del_timer(peer->m_punish_timer_id);
         }
         
         LOG_DEBUG_INFO("punish_peer + banned, peer: %s", peer->key().c_str());
-        std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
-        peer_score->sub_score(1000);
         p2p_node->m_banned_peers.insert(peer->key());
         peer->m_punish_timer_id = p2p_node->m_timer_ctl.add_timer([=]() {
                 std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
@@ -3603,6 +3597,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     {
                         iter = m_brief_chains.erase(iter);
                         m_pending_peer_keys.erase(peer->key());
+                        std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
+                        std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
+                        auto iter_score = peer_score_map.find(peer->key());
+                        
+                        if(iter_score != peer_score_map.end())
+                        {
+                            std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
+                            peer_score->add_score(10);
+                        }
+                        
                         continue;
                     }
                     

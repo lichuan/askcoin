@@ -7,6 +7,7 @@
 #include <set>
 #include <unordered_set>
 #include <unordered_map>
+#include <thread>
 #include "leveldb/db.h"
 #include "fly/base/singleton.hpp"
 #include "fly/base/lock_queue.hpp"
@@ -41,7 +42,7 @@ class Blockchain : public fly::base::Singleton<Blockchain>
 public:
     Blockchain();
     ~Blockchain();
-    bool load(std::string db_path);
+    bool start(std::string db_path);
     bool get_account(std::string pubkey, std::shared_ptr<Account> &account);
     std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
@@ -57,8 +58,10 @@ public:
     void dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message);
     void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
     void do_message();
-    void stop_do_message();
+    void do_score();
+    void stop();
     void broadcast();
+    void wait();
     
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
@@ -72,6 +75,8 @@ private:
     void switch_chain(std::shared_ptr<Pending_Chain> pending_chain);
     void rollback(uint64 block_id);
     std::atomic<bool> m_stop{false};
+    std::thread m_msg_thread;
+    std::thread m_score_thread;
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;

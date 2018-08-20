@@ -26,11 +26,11 @@ public:
     void add_score(uint64 score);
     void sub_score(uint64 score);
     std::atomic<uint8> m_state{0};
+    fly::net::Addr m_addr;
+    uint64 m_score;
     
 private:
-    uint64 m_score;
     std::string m_key;
-    fly::net::Addr m_addr;
 };
 
 }
