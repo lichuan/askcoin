@@ -131,7 +131,8 @@ public:
         }
         
         fly::base::Logger::instance()->init(log_level, "askcoin", doc["log_path"].GetString());
-        CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION);
+        std::string git_sha1_of_current_code = "";
+        CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u, git_sha1: %s", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION, git_sha1_of_current_code.c_str());
         
         if (!AppInitSanityChecks())
         {
@@ -258,6 +259,10 @@ public:
                 {
                     std::cout << cmd_tips << std::endl;
                 }
+                else if(cmd_string == "ulimit")
+                {
+                    system("ulimit -a");
+                } 
                 else
                 {
                     std::cout << "invalid command: " << vec[0] << std::endl;
