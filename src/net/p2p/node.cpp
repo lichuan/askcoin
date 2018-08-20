@@ -3991,16 +3991,16 @@ void Blockchain::broadcast()
     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
     doc.AddMember("msg_cmd", net::p2p::BLOCK_BROADCAST, allocator);
-    doc.AddMember("hash", doc["hash"], allocator);
-    doc.AddMember("sign", doc["sign"], allocator);
+    doc.AddMember("hash", m_broadcast_json.m_hash, allocator);
+    doc.AddMember("sign", m_broadcast_json.m_sign, allocator);
     rapidjson::Value pow_arr(rapidjson::kArrayType);
-
+    
     for(int32 i = 0; i < 9; ++i)
     {
-        pow_arr.PushBack(m_cur_block->m_accum_pow.m_n32[i], doc.GetAllocator());
+        pow_arr.PushBack(m_cur_block->m_accum_pow.m_n32[i], allocator);
     }
     
     doc.AddMember("pow", pow_arr, allocator);
-    doc.AddMember("data", doc["data"], allocator);
+    doc.AddMember("data", m_broadcast_json.m_data, allocator);
     net::p2p::Node::instance()->broadcast(doc);
 }
