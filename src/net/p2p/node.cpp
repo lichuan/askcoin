@@ -86,7 +86,7 @@ void Node::connect_proc()
         if(peer_num >= m_max_conn)
         {
             std::this_thread::sleep_for(std::chrono::seconds(5));
-            
+            ASKCOIN_TRACE;
             continue;
         }
         
@@ -2534,24 +2534,28 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!data.HasMember("avatar"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!data["avatar"].IsUint())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(!data.HasMember("sign"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!data["sign"].IsString())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2560,12 +2564,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(get_account(pubkey, exist_account))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(!data.HasMember("sign_data"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
@@ -2574,6 +2580,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!is_base64_char(reg_sign))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
@@ -2582,6 +2589,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!sign_data.IsObject())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2593,48 +2601,56 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!sign_data.HasMember("block_id"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!sign_data["block_id"].IsUint64())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(!sign_data.HasMember("name"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!sign_data["name"].IsString())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(!sign_data.HasMember("referrer"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!sign_data["referrer"].IsString())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(!sign_data.HasMember("fee"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!sign_data["fee"].IsUint64())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2646,30 +2662,35 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(block_id == 0)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(fee != 2)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(!is_base64_char(referrer_pubkey))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(referrer_pubkey.length() != 88)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
@@ -2678,35 +2699,41 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!get_account(referrer_pubkey, referrer))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(referrer->get_balance() < 2)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     if(!is_base64_char(register_name))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(register_name.length() > 20 || register_name.length() < 4)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(account_name_exist(register_name))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2716,6 +2743,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(len > 15 || len == 0)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2724,6 +2752,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         if(std::isspace(static_cast<unsigned char>(raw_name[i])))
                         {
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     }
@@ -2733,6 +2762,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(avatar < 1 || avatar > 100)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2743,6 +2773,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         if(referrer->id() > 1)
                         {
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2765,24 +2796,28 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!data.HasMember("fee"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!data["fee"].IsUint64())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
                     if(!data.HasMember("block_id"))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(!data["block_id"].IsUint64())
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                     
@@ -2792,18 +2827,21 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(block_id == 0)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
                     if(fee != 2)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
@@ -2812,12 +2850,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!get_account(pubkey, account))
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
 
                     if(account->get_balance() < 2)
                     {
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 
@@ -2828,6 +2868,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         if(account->id() > 1)
                         {
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2860,6 +2901,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2867,6 +2909,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2878,6 +2921,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
 
@@ -2885,6 +2929,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
                         }
@@ -2893,6 +2938,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2900,6 +2946,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2909,6 +2956,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -2916,6 +2964,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2923,6 +2972,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2930,6 +2980,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2939,6 +2990,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2946,6 +2998,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -2955,6 +3008,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2967,6 +3021,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2974,6 +3029,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -2983,6 +3039,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2990,6 +3047,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -2999,6 +3057,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3006,6 +3065,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3013,6 +3073,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3022,6 +3083,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3029,6 +3091,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3036,6 +3099,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3052,6 +3116,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3059,6 +3124,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3068,6 +3134,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3075,6 +3142,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3084,6 +3152,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3091,6 +3160,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3098,6 +3168,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3107,6 +3178,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3114,6 +3186,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3124,6 +3197,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3133,6 +3207,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
                             
@@ -3142,6 +3217,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
 
@@ -3149,6 +3225,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
                         
@@ -3158,6 +3235,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 failed_cb();
                                 proc_tx_failed = true;
+                                ASKCOIN_TRACE;
                                 break;
                             }
                         
@@ -3172,6 +3250,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                                 {
                                     failed_cb();
                                     proc_tx_failed = true;
+                                    ASKCOIN_TRACE;
                                     break;
                                 }
                                 
@@ -3188,6 +3267,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3195,6 +3275,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3204,6 +3285,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3211,6 +3293,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3220,6 +3303,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3227,6 +3311,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3237,6 +3322,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3244,6 +3330,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3251,6 +3338,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3260,6 +3348,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3267,6 +3356,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3274,6 +3364,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3281,6 +3372,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3290,6 +3382,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3297,6 +3390,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                     
@@ -3306,6 +3400,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
 
@@ -3313,6 +3408,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             failed_cb();
                             proc_tx_failed = true;
+                            ASKCOIN_TRACE;
                             break;
                         }
                         
@@ -3327,6 +3423,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     {
                         failed_cb();
                         proc_tx_failed = true;
+                        ASKCOIN_TRACE;
                         break;
                     }
                 }
@@ -3569,7 +3666,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
-
+            m_new_block_msg = true;
+            
             if(m_cur_block->difficult_than(m_most_difficult_block))
             {
                 m_most_difficult_block = m_cur_block;
@@ -4051,6 +4149,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 tx_reg->m_register_name = register_name;
                 tx_reg->m_referrer_pubkey = referrer_pubkey;
                 m_uv_tx_ids.insert(tx_id);
+                m_uv_account_names.insert(register_name);
+                m_uv_account_pubkeys.insert(pubkey);
 
                 if(!get_account(referrer_pubkey, referrer))
                 {
@@ -4066,8 +4166,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 
                 m_uv_2_txs.push_back(tx_reg);
                 referrer->m_uv_spend += 2;
-                m_uv_account_names.insert(register_name);
-                m_uv_account_pubkeys.insert(pubkey);
                 net::p2p::Node::instance()->broadcast(doc); // here can broadcast safely
             }
             else
@@ -4293,7 +4391,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     tx_topic->m_doc = message->doc_shared();
                     tx_topic->m_pubkey = pubkey;
                     tx_topic->m_block_id = block_id;
-                    tx_topic->m_topic = topic_data;
                     tx_topic->m_reward = reward;
                     m_uv_tx_ids.insert(tx_id);
                     std::shared_ptr<Account> account;
@@ -4382,7 +4479,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     tx_reply->m_doc = message->doc_shared();
                     tx_reply->m_pubkey = pubkey;
                     tx_reply->m_block_id = block_id;
-                    tx_reply->m_reply = reply_data;
                     tx_reply->m_topic_key = topic_key;
                     m_uv_tx_ids.insert(tx_id);
                     std::shared_ptr<Topic> topic;

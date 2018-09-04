@@ -24,11 +24,13 @@ using fly::net::Wsock;
 
 #define ASKCOIN_EXIT(code) \
     LOG_FATAL("exit(%s) at function: %s", #code, __FUNCTION__); \
-    exit(code);
+    exit(code)
 
 #define ASKCOIN_RETURN \
     LOG_DEBUG_INFO("return at function: %s", __FUNCTION__); \
     return
+
+#define ASKCOIN_TRACE LOG_DEBUG_INFO("trace at function: %s", __FUNCTION__)
 
 namespace net {
 namespace p2p {
@@ -82,6 +84,7 @@ private:
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
+    bool m_new_block_msg = false;
     std::shared_ptr<Block> m_cur_block;
     std::shared_ptr<Block> m_most_difficult_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;

@@ -536,10 +536,15 @@ void Blockchain::do_message()
         {
             wsock_empty = true;
         }
-
+        
         bool called = m_timer_ctl.run();
         do_brief_chain();
-        do_uv_tx();
+
+        if(m_new_block_msg)
+        {
+            do_uv_tx();
+            m_new_block_msg = false;
+        }
         
         if(peer_empty && wsock_empty && !called)
         {
@@ -988,13 +993,18 @@ bool Blockchain::start(std::string db_path)
     
         std::string block_hash = doc["hash"].GetString();
         std::string block_sign = doc["sign"].GetString();
-
+        
         if(!is_base64_char(block_hash))
         {
             ASKCOIN_RETURN false;
         }
 
         if(block_hash.length() != 44)
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(block_hash != child_block.m_hash)
         {
             ASKCOIN_RETURN false;
         }
@@ -2188,33 +2198,628 @@ void Blockchain::do_uv_tx()
         auto tx = *iter;
         auto tx_type = tx->m_type;
         auto block_id = tx->m_block_id;
-        
-        if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
-        {
-            iter = m_uv_1_txs.erase(iter);
-            ASKCOIN_RETURN;
-        }
-        
+        auto tx_id = tx->m_id;
+        auto pubkey = tx->m_pubkey;
+
         if(tx_type == 1)
         {
             std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            auto register_name = tx_reg->m_register_name;
+            std::shared_ptr<Account> exist_account;
+
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+        
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            if(get_account(pubkey, exist_account))
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            if(account_name_exist(register_name))
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            std::shared_ptr<Account> referrer;
+            
+            if(!get_account(tx_reg->m_referrer_pubkey, referrer))
+            {
+                ++iter;
+                continue;
+            }
+            
+            if(referrer->get_balance() < 2 + referrer->m_uv_spend)
+            {
+                ++iter;
+                continue;
+            }
+
+            referrer->m_uv_spend += 2;
+        }
+        else
+        {
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+        
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_1_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(tx_type == 2)
+            {
+                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                std::shared_ptr<Account> account;
+            
+                if(!get_account(pubkey, account))
+                {
+                    ++iter;
+                    continue;
+                }
+            
+                if(account->get_balance() < tx_send->m_amount + 2 + account->m_uv_spend)
+                {
+                    ++iter;
+                    continue;
+                }
+            
+                std::shared_ptr<Account> receiver;
+            
+                if(!get_account(tx_send->m_receiver_pubkey, receiver))
+                {
+                    ++iter;
+                    continue;
+                }
+
+                account->m_uv_spend += tx_send->m_amount + 2;
+            }
+            else if(tx_type == 3)
+            {
+                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                uint64 reward = tx_topic->m_reward;
+                std::shared_ptr<Topic> exist_topic;
+                
+                if(get_topic(tx_id, exist_topic))
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(account->m_topic_list.size() + account->m_uv_topic >= 100)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                if(account->get_balance() < reward + 2 + account->m_uv_spend)
+                {
+                    ++iter;
+                    continue;
+                }
+
+                account->m_uv_spend += reward + 2;
+                account->m_uv_topic += 1;
+            }
+            else if(tx_type == 4)
+            {
+                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Topic> topic;
+
+                if(!get_topic(tx_reply->m_topic_key, topic))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(!tx_reply->m_reply_to.empty())
+                {
+                    std::shared_ptr<Reply> reply_to;
+                    
+                    if(!topic->get_reply(tx_reply->m_reply_to, reply_to))
+                    {
+                        ++iter;
+                        continue;
+                    }
+                }
+                
+                if(topic->m_reply_list.size() + topic->m_uv_reply >= 1000)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(account->get_balance() < 2 + account->m_uv_spend)
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(topic->get_owner() != account)
+                {
+                    if(!account->joined_topic(topic))
+                    {
+                        if(account->m_joined_topic_list.size() + account->m_uv_join_topic >= 100)
+                        {
+                            iter = m_uv_1_txs.erase(iter);
+                            m_uv_tx_ids.erase(tx_id);
+                            continue;
+                        }
+                        
+                        account->m_uv_join_topic += 1;
+                        tx_reply->m_uv_join_topic = 1;
+                    }
+                }
+                
+                account->m_uv_spend += 2;
+                topic->m_uv_reply += 1;
+            }
+            else if(tx_type == 5)
+            {
+                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Account> account;
+                
+                if(!get_account(pubkey, account))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(account->get_balance() < 2 + account->m_uv_spend + tx_reward->m_amount)
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                std::shared_ptr<Topic> topic;
+                    
+                if(!get_topic(tx_reward->m_topic_key, topic))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(topic->get_owner() != account)
+                {
+                    punish_peer(tx_reward->m_peer);
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                if(topic->m_reply_list.size() + topic->m_uv_reply >= 1000)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                if(topic->get_balance() < tx_reward->m_amount + topic->m_uv_reward)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                std::shared_ptr<Reply> reply_to;
+                    
+                if(!topic->get_reply(tx_reward->m_reply_to, reply_to))
+                {
+                    ++iter;
+                    continue;
+                }
+                
+                if(reply_to->type() != 0)
+                {
+                    punish_peer(tx_reward->m_peer);
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                account->m_uv_spend += 2;
+                topic->m_uv_reward += tx_reward->m_amount;
+                topic->m_uv_reply += 1;
+            }
+        }
+        
+        iter = m_uv_1_txs.erase(iter);
+        m_uv_2_txs.push_back(tx);
+        net::p2p::Node::instance()->broadcast(*tx->m_doc);
+    }
+    
+    for(auto iter = m_uv_2_txs.begin(); iter != m_uv_2_txs.end();)
+    {
+        auto tx = *iter;
+        auto tx_type = tx->m_type;
+        auto block_id = tx->m_block_id;
+        auto tx_id = tx->m_id;
+        auto pubkey = tx->m_pubkey;
+
+        if(tx_type == 1)
+        {
+            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            auto register_name = tx_reg->m_register_name;
+            std::shared_ptr<Account> exist_account;
+            std::shared_ptr<Account> referrer;
+
+            if(!get_account(tx_reg->m_referrer_pubkey, referrer))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            fly::base::Scope_CB scb(
+                [&referrer] {
+                    if(referrer->m_uv_spend >= 2)
+                    {
+                        referrer->m_uv_spend -= 2;
+                    }
+                    else
+                    {
+                        referrer->m_uv_spend = 0;
+                    }
+                },[] {});
+            
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+        
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            if(get_account(pubkey, exist_account))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+            
+            if(account_name_exist(register_name))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                m_uv_account_names.erase(register_name);
+                m_uv_account_pubkeys.erase(pubkey);
+                continue;
+            }
+
+            scb.set_cur_cb(1);
         }
         else if(tx_type == 2)
         {
-            std::shared_ptr<tx::Tx_Send> tx_reg = std::static_pointer_cast<tx::Tx_Send>(tx);
+            std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(pubkey, account))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+
+            fly::base::Scope_CB scb(
+                [=, &account] {
+                    if(account->m_uv_spend >= tx_send->m_amount + 2)
+                    {
+                        account->m_uv_spend -= tx_send->m_amount + 2;
+                    }
+                    else
+                    {
+                        account->m_uv_spend = 0;
+                    }
+                },[] {});
+            
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+
+            scb.set_cur_cb(1);
         }
         else if(tx_type == 3)
         {
-            std::shared_ptr<tx::Tx_Topic> tx_reg = std::static_pointer_cast<tx::Tx_Topic>(tx);
+            std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+            uint64 reward = tx_topic->m_reward;
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(pubkey, account))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            fly::base::Scope_CB scb(
+                [=, &account] {
+                    if(account->m_uv_spend >= reward + 2)
+                    {
+                        account->m_uv_spend -= reward + 2;
+                    }
+                    else
+                    {
+                        account->m_uv_spend = 0;
+                    }
+                    
+                    if(account->m_uv_topic >= 1)
+                    {
+                        account->m_uv_topic -= 1;
+                    }
+                },[] {});
+            
+            std::shared_ptr<Topic> exist_topic;
+                
+            if(get_topic(tx_id, exist_topic))
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+
+            scb.set_cur_cb(1);
         }
         else if(tx_type == 4)
         {
-            std::shared_ptr<tx::Tx_Reply> tx_reg = std::static_pointer_cast<tx::Tx_Reply>(tx);
+            std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+            std::shared_ptr<Topic> topic;
+            std::shared_ptr<Account> account;
+                
+            if(!get_account(pubkey, account))
+            {
+                if(get_topic(tx_reply->m_topic_key, topic))
+                {
+                    if(topic->m_uv_reply >= 1)
+                    {
+                        topic->m_uv_reply -= 1;
+                    }
+                }
+                
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(!get_topic(tx_reply->m_topic_key, topic))
+            {
+                if(account->m_uv_spend >= 2)
+                {
+                    account->m_uv_spend -= 2;
+                }
+                else
+                {
+                    account->m_uv_spend = 0;
+                }
+                
+                if(tx_reply->m_uv_join_topic > 0)
+                {
+                    if(account->m_uv_join_topic >= 1)
+                    {
+                        account->m_uv_join_topic -= 1;
+                    }
+                }
+                
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            fly::base::Scope_CB scb(
+                [=, &account, &topic] {
+                    if(account->m_uv_spend >= 2)
+                    {
+                        account->m_uv_spend -= 2;
+                    }
+                    else
+                    {
+                        account->m_uv_spend = 0;
+                    }
+                
+                    if(tx_reply->m_uv_join_topic > 0)
+                    {
+                        if(account->m_uv_join_topic >= 1)
+                        {
+                            account->m_uv_join_topic -= 1;
+                        }
+                    }
+
+                    if(topic->m_uv_reply >= 1)
+                    {
+                        topic->m_uv_reply -= 1;
+                    }
+                },[] {});
+            
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            scb.set_cur_cb(1);
         }
         else if(tx_type == 5)
         {
-            std::shared_ptr<tx::Tx_Reward> tx_reg = std::static_pointer_cast<tx::Tx_Reward>(tx);
+            std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+            std::shared_ptr<Account> account;
+            std::shared_ptr<Topic> topic;
+            
+            if(!get_account(pubkey, account))
+            {
+                if(get_topic(tx_reward->m_topic_key, topic))
+                {
+                    if(topic->m_uv_reply >= 1)
+                    {
+                        topic->m_uv_reply -= 1;
+                    }
+
+                    if(topic->m_uv_reward >= tx_reward->m_amount)
+                    {
+                        topic->m_uv_reward -= tx_reward->m_amount;
+                    }
+                    else
+                    {
+                        topic->m_uv_reward = 0;
+                    }
+                }
+
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(!get_topic(tx_reward->m_topic_key, topic))
+            {
+                if(account->m_uv_spend >= 2)
+                {
+                    account->m_uv_spend -= 2;
+                }
+                else
+                {
+                    account->m_uv_spend = 0;
+                }
+
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+
+            fly::base::Scope_CB scb(
+                [=, &account, &topic] {
+                    if(account->m_uv_spend >= 2)
+                    {
+                        account->m_uv_spend -= 2;
+                    }
+                    else
+                    {
+                        account->m_uv_spend = 0;
+                    }
+
+                    if(topic->m_uv_reply >= 1)
+                    {
+                        topic->m_uv_reply -= 1;
+                    }
+                    
+                    if(topic->m_uv_reward >= tx_reward->m_amount)
+                    {
+                        topic->m_uv_reward -= tx_reward->m_amount;
+                    }
+                    else
+                    {
+                        topic->m_uv_reward = 0;
+                    }
+                },[] {});
+            
+            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                iter = m_uv_2_txs.erase(iter);
+                m_uv_tx_ids.erase(tx_id);
+                continue;
+            }
+            
+            scb.set_cur_cb(1);
         }
+        
+        ++iter;
     }
 }
 
@@ -3261,6 +3866,7 @@ void Blockchain::rollback(uint64 block_id)
 
         if(tx_num <= 0)
         {
+            ASKCOIN_TRACE;
             goto proc_tx_end;
         }
         
@@ -3842,6 +4448,7 @@ void Blockchain::rollback(uint64 block_id)
 
             if(tx_num <= 0)
             {
+                ASKCOIN_TRACE;
                 goto proc_tx_end_1;
             }
 

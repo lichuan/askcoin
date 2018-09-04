@@ -35,7 +35,6 @@ public:
 class Tx_Topic : public Tx
 {
 public:
-    std::string m_topic;
     uint64 m_reward;
 };
 
@@ -43,7 +42,6 @@ class Tx_Reply : public Tx
 {
 public:
     std::string m_topic_key;
-    std::string m_reply;
     std::string m_reply_to;
     uint32 m_uv_join_topic = 0;
 };
