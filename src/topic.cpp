@@ -7,6 +7,8 @@ Topic::Topic(std::string key, std::string data, uint64 block_id, uint64 balance)
     m_block_id = block_id;
     m_balance = balance;
     m_total = balance;
+    m_uv_reply = 0;
+    m_uv_reward = 0;
 }
 
 Topic::~Topic()

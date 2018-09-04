@@ -26,6 +26,8 @@ public:
     uint64 get_total();
     std::list<std::shared_ptr<Reply>> m_reply_list;
     std::list<std::pair<std::string, std::shared_ptr<Account>>> m_members;
+    uint32 m_uv_reply;
+    uint64 m_uv_reward;
     
 private:
     std::string m_data;

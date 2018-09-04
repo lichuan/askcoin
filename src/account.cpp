@@ -9,6 +9,9 @@ Account::Account(uint64 id, std::string name, std::string pubkey, uint32 avatar)
     m_pubkey = pubkey;
     m_balance = 0;
     m_avatar = avatar;
+    m_uv_spend = 0;
+    m_uv_topic = 0;
+    m_uv_join_topic = 0;
 }
 
 Account::~Account()

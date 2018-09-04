@@ -459,7 +459,13 @@ void Blockchain::do_score()
     {
         std::this_thread::sleep_for(std::chrono::seconds(30));
         auto p2p_node = net::p2p::Node::instance();
-        std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
+        rapidjson::Document doc;
+        doc.SetObject();
+        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+        rapidjson::Value peers(rapidjson::kArrayType);
+        doc.AddMember("utc", time(NULL), allocator);
+        uint32 count = 0;
+        std::unique_lock<std::mutex> lock(p2p_node->m_score_mutex);
         auto &peer_scores = p2p_node->m_peer_scores;
         
         while(peer_scores.size() > 5000)
@@ -467,14 +473,7 @@ void Blockchain::do_score()
             auto peer_score = *peer_scores.rbegin();
             p2p_node->del_peer_score(peer_score);
         }
-        
-        rapidjson::Document doc;
-        doc.SetObject();
-        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-        rapidjson::Value peers(rapidjson::kArrayType);
-        doc.AddMember("utc", time(NULL), allocator);
-        uint32 count = 0;
-        
+
         for(auto iter = peer_scores.begin(); iter != peer_scores.end(); ++iter)
         {
             if(++count > 1000)
@@ -490,6 +489,7 @@ void Blockchain::do_score()
             peers.PushBack(peer_info, allocator);
         }
         
+        lock.unlock();
         doc.AddMember("peers", peers, allocator);
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -539,6 +539,7 @@ void Blockchain::do_message()
 
         bool called = m_timer_ctl.run();
         do_brief_chain();
+        do_uv_tx();
         
         if(peer_empty && wsock_empty && !called)
         {
@@ -593,9 +594,8 @@ bool Blockchain::start(std::string db_path)
     options.create_if_missing = true;
 
     // todo, set this param?
-    // options.max_open_files = 20000;
-    // options.max_file_size = 50 << 20;
-    
+    options.max_open_files = 100000;
+    options.max_file_size = 50 * (1 << 20);
     leveldb::Status s = leveldb::DB::Open(options, db_path, &m_db);
     
     if(!s.ok())
@@ -1602,7 +1602,7 @@ bool Blockchain::start(std::string db_path)
                 
                 uint32 avatar = data["avatar"].GetUint();
                 
-                if(avatar >= 8)
+                if(avatar < 1 || avatar > 100)
                 {
                     ASKCOIN_RETURN false;
                 }
@@ -2179,6 +2179,45 @@ bool Blockchain::check_balance()
     return true;
 }
 
+void Blockchain::do_uv_tx()
+{
+    uint64 cur_block_id  = m_cur_block->id();
+
+    for(auto iter = m_uv_1_txs.begin(); iter != m_uv_1_txs.end();)
+    {
+        auto tx = *iter;
+        auto tx_type = tx->m_type;
+        auto block_id = tx->m_block_id;
+        
+        if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+        {
+            iter = m_uv_1_txs.erase(iter);
+            ASKCOIN_RETURN;
+        }
+        
+        if(tx_type == 1)
+        {
+            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+        }
+        else if(tx_type == 2)
+        {
+            std::shared_ptr<tx::Tx_Send> tx_reg = std::static_pointer_cast<tx::Tx_Send>(tx);
+        }
+        else if(tx_type == 3)
+        {
+            std::shared_ptr<tx::Tx_Topic> tx_reg = std::static_pointer_cast<tx::Tx_Topic>(tx);
+        }
+        else if(tx_type == 4)
+        {
+            std::shared_ptr<tx::Tx_Reply> tx_reg = std::static_pointer_cast<tx::Tx_Reply>(tx);
+        }
+        else if(tx_type == 5)
+        {
+            std::shared_ptr<tx::Tx_Reward> tx_reg = std::static_pointer_cast<tx::Tx_Reward>(tx);
+        }
+    }
+}
+
 void Blockchain::dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message)
 {
     m_peer_messages.push(std::move(message));
@@ -2324,6 +2363,11 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 db_blocks.push_front(iter_block_1);
             }
         }
+    }
+
+    if(cross_id == 0)
+    {
+        ASKCOIN_EXIT(EXIT_FAILURE);
     }
     
     uint64 cur_id  = m_cur_block->id();
@@ -2697,8 +2741,8 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 }
                 
                 uint32 avatar = data["avatar"].GetUint();
-                
-                if(avatar >= 8)
+
+                if(avatar < 1 || avatar > 100)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }

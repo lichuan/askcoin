@@ -2513,7 +2513,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             bool proc_tx_failed = false;
-            int32 rollback_idx = 0;
+            int32 rollback_idx = -1;
             std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
             cur_block->set_parent(parent);
             cur_block->set_miner(miner);
@@ -2729,9 +2729,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     }
                     
                     uint32 avatar = data["avatar"].GetUint();
-
-                    // todo, >= 8 ? or >= 100 ?
-                    if(avatar >= 8)
+                    
+                    if(avatar < 1 || avatar > 100)
                     {
                         proc_tx_failed = true;
                         break;
@@ -3505,9 +3504,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(!children.IsArray())
             {
-                ASKCOIN_RETURN false;
+                ASKCOIN_RETURN;
             }
-
+            
             bool exist_in_children = false;
             bool exist_block_hash = true;
             
@@ -3574,11 +3573,10 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             if(m_cur_block->difficult_than(m_most_difficult_block))
             {
                 m_most_difficult_block = m_cur_block;
+                m_broadcast_json.m_hash = doc["hash"];
+                m_broadcast_json.m_sign = doc["sign"];
+                m_broadcast_json.m_data = doc["data"];
             }
-
-            m_broadcast_json.m_hash = doc["hash"];
-            m_broadcast_json.m_sign = doc["sign"];
-            m_broadcast_json.m_data = doc["data"];
             
             auto detail_req_num = owner_chain->m_req_blocks.size();
             m_timer_ctl.del_timer(request->m_timer_id);
@@ -3728,6 +3726,905 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     }
     else if(type == net::p2p::MSG_TX)
     {
+        // attention please, the following contains anti-DDoS logic code.
+        if(cmd == net::p2p::TX_BROADCAST)
+        {
+            if(!doc.HasMember("sign"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["sign"].IsString())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("data"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            std::string tx_sign = doc["sign"].GetString();
+            
+            if(!is_base64_char(tx_sign))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            const rapidjson::Value &data = doc["data"];
+            
+            if(!data.IsObject())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("type"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("pubkey"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data.HasMember("utc"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+            std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
+            if(m_tx_map.find(tx_id) != m_tx_map.end())
+            {
+                ASKCOIN_RETURN;
+            }
+
+            if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            if(!data["pubkey"].IsString())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+                
+            std::string pubkey = data["pubkey"].GetString();
+                
+            if(!is_base64_char(pubkey))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(pubkey.length() != 88)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["type"].IsUint())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["utc"].IsUint64())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!verify_sign(pubkey, tx_id, tx_sign))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            uint32 tx_type = data["type"].GetUint();
+            uint64 utc = data["utc"].GetUint64();
+            uint64 cur_block_id  = m_cur_block->id();
+
+            if(tx_type == 1)
+            {
+                if(!data.HasMember("avatar"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!data["avatar"].IsUint())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!data.HasMember("sign"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!data["sign"].IsString())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                std::shared_ptr<Account> exist_account;
+                
+                if(get_account(pubkey, exist_account))
+                {
+                    ASKCOIN_RETURN;
+                }
+
+                if(m_uv_account_pubkeys.find(pubkey) != m_uv_account_pubkeys.end())
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!data.HasMember("sign_data"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                std::string reg_sign = data["sign"].GetString();
+
+                if(!is_base64_char(reg_sign))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                const rapidjson::Value &sign_data = data["sign_data"];
+
+                if(!sign_data.IsObject())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                sign_data.Accept(writer);
+                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                
+                if(!sign_data.HasMember("block_id"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!sign_data["block_id"].IsUint64())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                if(!sign_data.HasMember("name"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!sign_data["name"].IsString())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                if(!sign_data.HasMember("referrer"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!sign_data["referrer"].IsString())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                if(!sign_data.HasMember("fee"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!sign_data["fee"].IsUint64())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                uint64 block_id = sign_data["block_id"].GetUint64();
+                std::string register_name = sign_data["name"].GetString();
+                std::string referrer_pubkey = sign_data["referrer"].GetString();
+                uint64 fee = sign_data["fee"].GetUint64();
+
+                if(block_id == 0)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                if(fee != 2)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(referrer_pubkey))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(referrer_pubkey.length() != 88)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!is_base64_char(register_name))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(register_name.length() > 20 || register_name.length() < 4)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                if(account_name_exist(register_name))
+                {
+                    ASKCOIN_RETURN;
+                }
+
+                if(m_uv_account_names.find(register_name) != m_uv_account_names.end())
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                char raw_name[15] = {0};
+                uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
+                
+                if(len > 15 || len == 0)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                for(uint32 i = 0; i < len; ++i)
+                {
+                    if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                }
+                
+                uint32 avatar = data["avatar"].GetUint();
+
+                if(avatar < 1 || avatar > 100)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                std::shared_ptr<Account> referrer;
+                std::shared_ptr<tx::Tx_Reg> tx_reg(new tx::Tx_Reg);
+                tx_reg->m_id = tx_id;
+                tx_reg->m_type = 1;
+                tx_reg->m_utc = utc;
+                tx_reg->m_peer = peer;
+                tx_reg->m_doc = message->doc_shared();
+                tx_reg->m_pubkey = pubkey;
+                tx_reg->m_block_id = block_id;
+                tx_reg->m_register_name = register_name;
+                tx_reg->m_referrer_pubkey = referrer_pubkey;
+                m_uv_tx_ids.insert(tx_id);
+
+                if(!get_account(referrer_pubkey, referrer))
+                {
+                    m_uv_1_txs.push_back(tx_reg);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(referrer->get_balance() < 2 + referrer->m_uv_spend)
+                {
+                    m_uv_1_txs.push_back(tx_reg);
+                    ASKCOIN_RETURN;
+                }
+                
+                m_uv_2_txs.push_back(tx_reg);
+                referrer->m_uv_spend += 2;
+                m_uv_account_names.insert(register_name);
+                m_uv_account_pubkeys.insert(pubkey);
+                net::p2p::Node::instance()->broadcast(doc); // here can broadcast safely
+            }
+            else
+            {
+                if(!data.HasMember("fee"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!data["fee"].IsUint64())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                if(!data.HasMember("block_id"))
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(!data["block_id"].IsUint64())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                    
+                uint64 fee = data["fee"].GetUint64();
+                uint64 block_id = data["block_id"].GetUint64();
+                    
+                if(block_id == 0)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                if(fee != 2)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(tx_type == 2) // send coin
+                {
+                    if(!data.HasMember("memo"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    if(!data["memo"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    std::string memo = data["memo"].GetString();
+                        
+                    if(!memo.empty())
+                    {
+                        if(!is_base64_char(memo))
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+
+                        if(memo.length() > 80 || memo.length() < 4)
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                    }
+
+                    if(!data.HasMember("amount"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    if(!data["amount"].IsUint64())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    uint64 amount = data["amount"].GetUint64();
+                        
+                    if(amount == 0)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data.HasMember("receiver"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["receiver"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    std::string receiver_pubkey = data["receiver"].GetString();
+                        
+                    if(!is_base64_char(receiver_pubkey))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(receiver_pubkey.length() != 88)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<tx::Tx_Send> tx_send(new tx::Tx_Send);
+                    tx_send->m_id = tx_id;
+                    tx_send->m_type = 2;
+                    tx_send->m_utc = utc;
+                    tx_send->m_peer = peer;
+                    tx_send->m_doc = message->doc_shared();
+                    tx_send->m_pubkey = pubkey;
+                    tx_send->m_block_id = block_id;
+                    tx_send->m_receiver_pubkey = receiver_pubkey;
+                    tx_send->m_amount = amount;
+                    m_uv_tx_ids.insert(tx_id);
+                    std::shared_ptr<Account> account;
+
+                    if(!get_account(pubkey, account))
+                    {
+                        m_uv_1_txs.push_back(tx_send);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(account->get_balance() < amount + 2 + account->m_uv_spend)
+                    {
+                        m_uv_1_txs.push_back(tx_send);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Account> receiver;
+                    
+                    if(!get_account(receiver_pubkey, receiver))
+                    {
+                        m_uv_1_txs.push_back(tx_send);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    m_uv_2_txs.push_back(tx_send);
+                    account->m_uv_spend += amount + 2;
+                    net::p2p::Node::instance()->broadcast(doc);
+                }
+                else if(tx_type == 3)
+                {
+                    if(!data.HasMember("reward"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["reward"].IsUint64())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    uint64 reward = data["reward"].GetUint64();
+
+                    if(reward == 0)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    std::shared_ptr<Topic> exist_topic;
+
+                    if(get_topic(tx_id, exist_topic))
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data.HasMember("topic"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["topic"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    std::string topic_data = data["topic"].GetString();
+                    
+                    if(!is_base64_char(topic_data))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(topic_data.length() < 4 || topic_data.length() > 400)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<tx::Tx_Topic> tx_topic(new tx::Tx_Topic);
+                    tx_topic->m_id = tx_id;
+                    tx_topic->m_type = 2;
+                    tx_topic->m_utc = utc;
+                    tx_topic->m_peer = peer;
+                    tx_topic->m_doc = message->doc_shared();
+                    tx_topic->m_pubkey = pubkey;
+                    tx_topic->m_block_id = block_id;
+                    tx_topic->m_topic = topic_data;
+                    tx_topic->m_reward = reward;
+                    m_uv_tx_ids.insert(tx_id);
+                    std::shared_ptr<Account> account;
+                    
+                    if(!get_account(pubkey, account))
+                    {
+                        m_uv_1_txs.push_back(tx_topic);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(account->m_topic_list.size() + account->m_uv_topic >= 100)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(account->get_balance() < reward + 2 + account->m_uv_spend)
+                    {
+                        m_uv_1_txs.push_back(tx_topic);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    m_uv_2_txs.push_back(tx_topic);
+                    account->m_uv_spend += reward + 2;
+                    account->m_uv_topic += 1;
+                    net::p2p::Node::instance()->broadcast(doc);
+                }
+                else if(tx_type == 4)
+                {
+                    if(!data.HasMember("topic_key"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["topic_key"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    std::string topic_key = data["topic_key"].GetString();
+                        
+                    if(!is_base64_char(topic_key))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(topic_key.length() != 44)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data.HasMember("reply"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["reply"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    std::string reply_data = data["reply"].GetString();
+                    
+                    if(!is_base64_char(reply_data))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(reply_data.length() < 4 || reply_data.length() > 400)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<tx::Tx_Reply> tx_reply(new tx::Tx_Reply);
+                    tx_reply->m_id = tx_id;
+                    tx_reply->m_type = 2;
+                    tx_reply->m_utc = utc;
+                    tx_reply->m_peer = peer;
+                    tx_reply->m_doc = message->doc_shared();
+                    tx_reply->m_pubkey = pubkey;
+                    tx_reply->m_block_id = block_id;
+                    tx_reply->m_reply = reply_data;
+                    tx_reply->m_topic_key = topic_key;
+                    m_uv_tx_ids.insert(tx_id);
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(data.HasMember("reply_to"))
+                    {
+                        if(!data["reply_to"].IsString())
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        std::string reply_to_key = data["reply_to"].GetString();
+                            
+                        if(!is_base64_char(reply_to_key))
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+
+                        if(reply_to_key.length() != 44)
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        tx_reply->m_reply_to = reply_to_key;
+                        std::shared_ptr<Reply> reply_to;
+                        
+                        if(!get_topic(topic_key, topic))
+                        {
+                            m_uv_1_txs.push_back(tx_reply);
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            m_uv_1_txs.push_back(tx_reply);
+                            ASKCOIN_RETURN;
+                        }
+                    }
+                    else
+                    {
+                        if(!get_topic(topic_key, topic))
+                        {
+                            m_uv_1_txs.push_back(tx_reply);
+                            ASKCOIN_RETURN;
+                        }
+                    }
+                    
+                    if(topic->m_reply_list.size() + topic->m_uv_reply >= 1000)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Account> account;
+                    
+                    if(!get_account(pubkey, account))
+                    {
+                        m_uv_1_txs.push_back(tx_reply);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(account->get_balance() < 2 + account->m_uv_spend)
+                    {
+                        m_uv_1_txs.push_back(tx_reply);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(topic->get_owner() != account)
+                    {
+                        if(!account->joined_topic(topic))
+                        {
+                            if(account->m_joined_topic_list.size() + account->m_uv_join_topic >= 100)
+                            {
+                                ASKCOIN_RETURN;
+                            }
+                            
+                            account->m_uv_join_topic += 1;
+                            tx_reply->m_uv_join_topic = 1;
+                        }
+                    }
+                    
+                    account->m_uv_spend += 2;
+                    topic->m_uv_reply += 1;
+                    m_uv_2_txs.push_back(tx_reply);
+                    net::p2p::Node::instance()->broadcast(doc);
+                }
+                else if(tx_type == 5)
+                {
+                    if(!data.HasMember("topic_key"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data["topic_key"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                        
+                    std::string topic_key = data["topic_key"].GetString();
+                    
+                    if(!is_base64_char(topic_key))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(topic_key.length() != 44)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data.HasMember("amount"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!data["amount"].IsUint64())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    uint64 amount = data["amount"].GetUint64();
+                    
+                    if(amount == 0)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data.HasMember("reply_to"))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!data["reply_to"].IsString())
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::string reply_to_key = data["reply_to"].GetString();
+                        
+                    if(!is_base64_char(reply_to_key))
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(reply_to_key.length() != 44)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<tx::Tx_Reward> tx_reward(new tx::Tx_Reward);
+                    tx_reward->m_id = tx_id;
+                    tx_reward->m_type = 2;
+                    tx_reward->m_utc = utc;
+                    tx_reward->m_peer = peer;
+                    tx_reward->m_doc = message->doc_shared();
+                    tx_reward->m_pubkey = pubkey;
+                    tx_reward->m_block_id = block_id;
+                    tx_reward->m_amount = amount;
+                    tx_reward->m_topic_key = topic_key;
+                    tx_reward->m_reply_to = reply_to_key;
+                    m_uv_tx_ids.insert(tx_id);
+                    std::shared_ptr<Account> account;
+                    
+                    if(!get_account(pubkey, account))
+                    {
+                        m_uv_1_txs.push_back(tx_reward);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(account->get_balance() < 2 + account->m_uv_spend + amount)
+                    {
+                        m_uv_1_txs.push_back(tx_reward);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Topic> topic;
+                    
+                    if(!get_topic(topic_key, topic))
+                    {
+                        m_uv_1_txs.push_back(tx_reward);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(topic->get_owner() != account)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(topic->m_reply_list.size() + topic->m_uv_reply >= 1000)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(topic->get_balance() < amount + topic->m_uv_reward)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Reply> reply_to;
+                    
+                    if(!topic->get_reply(reply_to_key, reply_to))
+                    {
+                        m_uv_1_txs.push_back(tx_reward);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(reply_to->type() != 0)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    account->m_uv_spend += 2;
+                    topic->m_uv_reward += amount;
+                    topic->m_uv_reply += 1;
+                    m_uv_2_txs.push_back(tx_reward);
+                    net::p2p::Node::instance()->broadcast(doc);
+                }
+                else
+                {
+                    punish_peer(peer);
+                }
+            }
+        }
+        else
+        {
+            punish_peer(peer);
+        }
     }
     else if(type == net::p2p::MSG_PROBE)
     {

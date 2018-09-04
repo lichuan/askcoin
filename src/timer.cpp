@@ -96,9 +96,9 @@ void Timer_Controller::reset_timer(uint64 id)
 bool Timer_Controller::run()
 {
     uint64 now = time(NULL);
-    std::list<std::shared_ptr<Timer>> timeout_list;
-    std::lock_guard<std::mutex> guard(m_mutex);
+    std::unique_lock<std::mutex> lock(m_mutex);
     bool called = false;
+    std::list<std::shared_ptr<Timer>> timers;
     
     for(auto iter = m_timers.begin(); iter != m_timers.end();)
     {
@@ -106,19 +106,8 @@ bool Timer_Controller::run()
 
         if(timer->m_utc <= now)
         {
-            timer->m_cb();
+            timers.push_back(timer);
             iter = m_timers.erase(iter);
-            called = true;
-            
-            if(!timer->m_oneshot)
-            {
-                timer->m_utc = now + timer->m_interval;
-                timeout_list.push_back(timer);
-            }
-            else
-            {
-                m_timer_map.erase(timer->m_id);
-            }
         }
         else
         {
@@ -126,9 +115,24 @@ bool Timer_Controller::run()
         }
     }
     
-    for(auto &timer : timeout_list)
+    lock.unlock();
+    
+    for(auto &timer : timers)
     {
-        m_timers.insert(timer);
+        timer->m_cb();
+        called = true;
+            
+        if(!timer->m_oneshot)
+        {
+            timer->m_utc = now + timer->m_interval;
+            lock.lock();
+            m_timers.insert(timer);
+            lock.unlock();
+        }
+        else
+        {
+            m_timer_map.erase(timer->m_id);
+        }
     }
 
     return called;

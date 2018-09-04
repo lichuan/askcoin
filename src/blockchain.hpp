@@ -17,6 +17,7 @@
 #include "pending_brief_request.hpp"
 #include "pending_detail_request.hpp"
 #include "timer.hpp"
+#include "tx/tx.hpp"
 
 using fly::net::Json;
 using fly::net::Wsock;
@@ -70,6 +71,7 @@ private:
     void punish_detail_req(std::shared_ptr<Pending_Detail_Request> request);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
     void do_brief_chain();
+    void do_uv_tx();
     
 private:
     void switch_chain(std::shared_ptr<Pending_Chain> pending_chain);
@@ -84,7 +86,9 @@ private:
     std::shared_ptr<Block> m_most_difficult_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
     std::unordered_set<std::string> m_account_names;
+    std::unordered_set<std::string> m_uv_account_names; //unverified acc names
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
+    std::unordered_set<std::string> m_uv_account_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
@@ -100,6 +104,9 @@ private:
     std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;
     std::unordered_map<uint64, std::pair<std::shared_ptr<Block>, std::list<std::string>>> m_rollback_txs;
     std::list<std::shared_ptr<Topic>> m_topic_list;
+    std::list<std::shared_ptr<tx::Tx>> m_uv_1_txs;
+    std::list<std::shared_ptr<tx::Tx>> m_uv_2_txs;
+    std::unordered_set<std::string> m_uv_tx_ids;
     std::array<char, 255> m_b64_table;
     std::shared_ptr<Account> m_reserve_fund_account;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
