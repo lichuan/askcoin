@@ -31,6 +31,7 @@ using fly::net::Wsock;
     return
 
 #define ASKCOIN_TRACE LOG_DEBUG_INFO("trace at function: %s", __FUNCTION__)
+const uint32 TOPIC_LIFE_TIME = 4320;
 
 namespace net {
 namespace p2p {

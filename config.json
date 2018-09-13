@@ -3,8 +3,8 @@
     "log_path": "./log",
     "db_path": "./db",
     "network": {
-        "host": "here should be your host (domain or ip address)",
         "p2p": {
+            "host": "here should be your host (domain or ip address)",
             "port": 18050,
             "max_conn": 100,
             "init_peer": [
@@ -27,6 +27,7 @@
             ]
         },
         "websocket": {
+            "host": "0.0.0.0",
             "port": 18051,
             "max_conn": 5000,
             "open": true

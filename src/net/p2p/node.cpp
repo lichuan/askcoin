@@ -3570,6 +3570,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 cur_block->m_miner_reward = false;
             }
 
+            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
             
@@ -3650,12 +3651,13 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             doc_1.Accept(writer_1);
             leveldb::WriteBatch batch;
             batch.Put(block_hash, leveldb::Slice(buffer_1.GetString(), buffer_1.GetSize()));
-
+            
             children.PushBack(rapidjson::StringRef(block_hash.c_str()), doc_parent.GetAllocator());
             rapidjson::StringBuffer buffer_2;
             rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
             doc_parent.Accept(writer_2);
             batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb begin", block_id, block_hash.c_str());
             s = m_db->Write(leveldb::WriteOptions(), &batch);
             
             if(!s.ok())
@@ -3664,6 +3666,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
 
+            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb end", block_id, block_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
             m_new_block_msg = true;
@@ -4385,7 +4388,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     std::shared_ptr<tx::Tx_Topic> tx_topic(new tx::Tx_Topic);
                     tx_topic->m_id = tx_id;
-                    tx_topic->m_type = 2;
+                    tx_topic->m_type = 3;
                     tx_topic->m_utc = utc;
                     tx_topic->m_peer = peer;
                     tx_topic->m_doc = message->doc_shared();
@@ -4473,7 +4476,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     std::shared_ptr<tx::Tx_Reply> tx_reply(new tx::Tx_Reply);
                     tx_reply->m_id = tx_id;
-                    tx_reply->m_type = 2;
+                    tx_reply->m_type = 4;
                     tx_reply->m_utc = utc;
                     tx_reply->m_peer = peer;
                     tx_reply->m_doc = message->doc_shared();
@@ -4643,7 +4646,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     std::shared_ptr<tx::Tx_Reward> tx_reward(new tx::Tx_Reward);
                     tx_reward->m_id = tx_id;
-                    tx_reward->m_type = 2;
+                    tx_reward->m_type = 5;
                     tx_reward->m_utc = utc;
                     tx_reward->m_peer = peer;
                     tx_reward->m_doc = message->doc_shared();

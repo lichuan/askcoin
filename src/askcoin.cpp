@@ -18,7 +18,7 @@
 #include "rapidjson/error/en.h"
 #include "version.hpp"
 #include "net/p2p/node.hpp"
-#include "net/wsock_node.hpp"
+#include "net/api/wsock_node.hpp"
 #include "blockchain.hpp"
 #include "utilstrencodings.h"
 
@@ -82,21 +82,18 @@ public:
         if(doc.HasParseError())
         {
             std::cout << "parse config.json failed: " << GetParseError_En(doc.GetParseError()) << std::endl;
-
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("log_level"))
         {
             std::cout << "config.json don't contain log_level field!" << std::endl;
-
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("log_path"))
         {
             std::cout << "config.json don't contain log_path field!" << std::endl;
-
             return EXIT_FAILURE;
         }
 
@@ -126,7 +123,6 @@ public:
         else
         {
             std::cout << "config.json log_level invalid!" << std::endl;
-
             return EXIT_FAILURE;
         }
         
@@ -137,55 +133,50 @@ public:
         if (!AppInitSanityChecks())
         {
             CONSOLE_LOG_FATAL("sanity check failed");
-            
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("db_path"))
         {
             CONSOLE_LOG_FATAL("config.json don't contain db_path field!");
-
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("network"))
         {
             CONSOLE_LOG_FATAL("config.json don't contain network field!");
-
             return EXIT_FAILURE;
         }
         
-        std::string host = doc["network"]["host"].GetString();
+        std::string host = doc["network"]["p2p"]["host"].GetString();
         uint16 p2p_port = doc["network"]["p2p"]["port"].GetUint();
         uint32 p2p_max_conn = doc["network"]["p2p"]["max_conn"].GetUint();
         
         if(p2p_max_conn == 0)
         {
-            CONSOLE_LOG_FATAL("p2p max_conn must be greater than 0");
-            
+            CONSOLE_LOG_FATAL("p2p max_conn must be greater than 0");            
             return EXIT_FAILURE;
         }
         
         net::p2p::Node::instance()->set_host(host);
         net::p2p::Node::instance()->set_max_conn(p2p_max_conn);
         const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
+        std::string websocket_host = doc["network"]["websocket"]["host"].GetString();
         uint16 websocket_port = doc["network"]["websocket"]["port"].GetUint();
         bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
         uint32 websocket_max_conn = doc["network"]["websocket"]["max_conn"].GetUint();
         
         if(websocket_max_conn == 0)
         {
-            CONSOLE_LOG_FATAL("websocket max_conn must be greater than 0");
-            
+            CONSOLE_LOG_FATAL("websocket max_conn must be greater than 0");            
             return EXIT_FAILURE;
         }
-        
-        net::Wsock_Node::instance()->set_max_conn(websocket_max_conn);
+
+        net::api::Wsock_Node::instance()->set_max_conn(websocket_max_conn);
 
         if(!Blockchain::instance()->start(doc["db_path"].GetString()))
         {
             CONSOLE_LOG_FATAL("load from leveldb failed");
-
             return EXIT_FAILURE;
         }
         
@@ -204,7 +195,7 @@ public:
 
         if(open_websocket)
         {            
-            if(!net::Wsock_Node::instance()->start(websocket_port))
+            if(!net::api::Wsock_Node::instance()->start(websocket_host, websocket_port))
             {
                 return EXIT_FAILURE;
             }
@@ -246,7 +237,7 @@ public:
                 {
                     if(open_websocket)
                     {
-                        net::Wsock_Node::instance()->stop();
+                        net::api::Wsock_Node::instance()->stop();
                     }
                     
                     net::p2p::Node::instance()->stop();
@@ -274,14 +265,13 @@ public:
 
         if(open_websocket)
         {
-            net::Wsock_Node::instance()->wait();
+            net::api::Wsock_Node::instance()->wait();
         }
 
         net::p2p::Node::instance()->wait();
         Blockchain::instance()->wait();
         Shutdown();
         CONSOLE_LOG_INFO("stop askcoin success");
-
         return EXIT_SUCCESS;
     }
 };

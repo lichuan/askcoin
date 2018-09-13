@@ -1,8 +1,6 @@
 #ifndef NET__P2P__MESSAGE
 #define NET__P2P__MESSAGE
 
-#include "fly/base/common.hpp"
-
 namespace net {
 namespace p2p {
 

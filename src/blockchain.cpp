@@ -282,17 +282,17 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
 {
     uint64 cur_block_id = block->id();
     
-    if(cur_block_id < 4322)
+    if(cur_block_id < (TOPIC_LIFE_TIME + 2))
     {
         return true;
     }
 
-    auto iter = m_rollback_txs.find(cur_block_id - 4321);
+    auto iter = m_rollback_txs.find(cur_block_id - (TOPIC_LIFE_TIME + 1));
     
     if(iter == m_rollback_txs.end())
     {
         std::pair<std::shared_ptr<Block>, std::list<std::string>> value;
-        m_rollback_txs.insert(std::make_pair(cur_block_id - 4321, value));
+        m_rollback_txs.insert(std::make_pair(cur_block_id - (TOPIC_LIFE_TIME + 1), value));
     }
     
     if(cur_block_id > 8641)
@@ -300,7 +300,7 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
         m_rollback_txs.erase(cur_block_id - 8641);
     }
     
-    auto &tx_pair = m_rollback_txs[cur_block_id - 4321];
+    auto &tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
     std::shared_ptr<Block> iter_block = block;
     uint32 count = 0;
     
@@ -308,7 +308,7 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
     {
         iter_block = iter_block->get_parent();
 
-        if(++count > 4320)
+        if(++count > TOPIC_LIFE_TIME)
         {
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
@@ -380,17 +380,17 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
 
 bool Blockchain::proc_topic_expired(uint64 cur_block_id)
 {
-    if(cur_block_id < 4322)
+    if(cur_block_id < (TOPIC_LIFE_TIME + 2))
     {
         return true;
     }
 
-    auto iter = m_rollback_topics.find(cur_block_id - 4321);
+    auto iter = m_rollback_topics.find(cur_block_id - (TOPIC_LIFE_TIME + 1));
     
     if(iter == m_rollback_topics.end())
     {
         std::list<std::shared_ptr<Topic>> value;
-        m_rollback_topics.insert(std::make_pair(cur_block_id - 4321, value));
+        m_rollback_topics.insert(std::make_pair(cur_block_id - (TOPIC_LIFE_TIME + 1), value));
     }
 
     if(cur_block_id > 8641)
@@ -398,13 +398,13 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
         m_rollback_topics.erase(cur_block_id - 8641);
     }
 
-    auto &topic_list = m_rollback_topics[cur_block_id - 4321];
+    auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
     
     while(!m_topic_list.empty())
     {
         std::shared_ptr<Topic> topic = m_topic_list.front();
 
-        if(topic->block_id() + 4320 < cur_block_id)
+        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id)
         {
             m_topics.erase(topic->key());
             topic_list.push_front(topic);
@@ -865,8 +865,8 @@ bool Blockchain::start(std::string db_path)
     std::string account_b64 = fly::base::base64_encode(account.data(), account.length());
     std::string reserve_fund = "reserve_fund";
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
-    m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 0);
-    std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 0));
+    m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 1);
+    std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 1));
     m_cur_account_id = 1;
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
@@ -3800,9 +3800,9 @@ void Blockchain::rollback(uint64 block_id)
     
     while(cur_block_id > block_id)
     {
-        if(cur_block_id > 4321)
+        if(cur_block_id > (TOPIC_LIFE_TIME + 1))
         {
-            auto iter = m_rollback_topics.find(cur_block_id - 4321);
+            auto iter = m_rollback_topics.find(cur_block_id - (TOPIC_LIFE_TIME + 1));
 
             if(iter == m_rollback_topics.end())
             {
@@ -4012,9 +4012,9 @@ void Blockchain::rollback(uint64 block_id)
         }
         
     proc_tx_end:
-        if(cur_block_id > 4321)
+        if(cur_block_id > (TOPIC_LIFE_TIME + 1))
         {
-            auto &topic_list = m_rollback_topics[cur_block_id - 4321];
+            auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
 
             for(auto topic : topic_list)
             {
@@ -4034,15 +4034,15 @@ void Blockchain::rollback(uint64 block_id)
                 }
             }
 
-            auto tx_pair = m_rollback_txs[cur_block_id - 4321];
+            auto tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
                 
             for(auto _tx_id : tx_pair.second)
             {
                 m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
             }
                 
-            m_rollback_topics.erase(cur_block_id - 4321);
-            m_rollback_txs.erase(cur_block_id - 4321);
+            m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+            m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
         }
 
         m_cur_block = m_cur_block->get_parent();
@@ -4065,13 +4065,13 @@ void Blockchain::rollback(uint64 block_id)
             iter_id = iter_block->id();
             block_list.push_front(iter_block);
         
-            if(++count > 4320)
+            if(++count > TOPIC_LIFE_TIME)
             {
                 break;
             }
         }
     
-        if(count > 4320)
+        if(count > TOPIC_LIFE_TIME)
         {
             uint64 diff = cur_block_id - block_id - 1;
         
@@ -4083,14 +4083,14 @@ void Blockchain::rollback(uint64 block_id)
                     iter_id = iter_block->id();
                     block_list.push_front(iter_block);
 
-                    if(++count > 4320 + diff)
+                    if(++count > TOPIC_LIFE_TIME + diff)
                     {
                         break;
                     }
                 }
             }
 
-            for(; count > 4320; --count)
+            for(; count > TOPIC_LIFE_TIME; --count)
             {
                 iter_block = block_list.front();
                 uint64 cur_block_id = iter_block->id();
@@ -4594,9 +4594,9 @@ void Blockchain::rollback(uint64 block_id)
             }
 
         proc_tx_end_1:
-            if(cur_block_id > 4321)
+            if(cur_block_id > (TOPIC_LIFE_TIME + 1))
             {
-                auto &topic_list = rollback_topics[cur_block_id - 4321];
+                auto &topic_list = rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
                     
                 for(auto topic : topic_list)
                 {
@@ -4616,15 +4616,15 @@ void Blockchain::rollback(uint64 block_id)
                     }
                 }
 
-                auto tx_pair = rollback_txs[cur_block_id - 4321];
+                auto tx_pair = rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
                 
                 for(auto _tx_id : tx_pair.second)
                 {
                     m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
                 }
                     
-                rollback_topics.erase(cur_block_id - 4321);
-                rollback_txs.erase(cur_block_id - 4321);
+                rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+                rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
             }
 
             m_cur_block = m_cur_block->get_parent();
