@@ -454,10 +454,18 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
 void Blockchain::do_score()
 {
     using namespace net::p2p;
-    
+    uint32 wait_tick = 0;
+
     while(!m_stop.load(std::memory_order_relaxed))
     {
-        std::this_thread::sleep_for(std::chrono::seconds(30));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        
+        if(++wait_tick < 30)
+        {
+            continue;
+        }
+
+        wait_tick = 0;
         auto p2p_node = net::p2p::Node::instance();
         rapidjson::Document doc;
         doc.SetObject();

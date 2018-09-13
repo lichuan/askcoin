@@ -22,8 +22,7 @@ public:
     void stop();
     void wait();
     void set_max_conn(uint32 num);
-    bool allow(std::shared_ptr<fly::net::Connection<Wsock>> connection);
-    void init(std::shared_ptr<fly::net::Connection<Wsock>> connection);
+    bool init(std::shared_ptr<fly::net::Connection<Wsock>> connection);
     void dispatch(std::unique_ptr<fly::net::Message<Wsock>> message);
     void close(std::shared_ptr<fly::net::Connection<Wsock>> connection);
     void be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection);

@@ -30,7 +30,6 @@ bool Node::start(uint16 port)
     cpu_num = cpu_num < 4 ? 4 : cpu_num;
     m_poller.reset(new fly::net::Poller<Json>(cpu_num));
     std::unique_ptr<fly::net::Server<Json>> server(new fly::net::Server<Json>(fly::net::Addr("0.0.0.0", port),
-                                                                              std::bind(&Node::allow, this, _1),
                                                                               std::bind(&Node::init, this, _1),
                                                                               std::bind(&Node::dispatch, this, _1),
                                                                               std::bind(&Node::close, this, _1),
@@ -165,7 +164,7 @@ uint32 Node::get_max_conn()
     return m_max_conn;
 }
 
-bool Node::allow(std::shared_ptr<fly::net::Connection<Json>> connection)
+bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, uint64 id)
 {
     uint32 peer_num = 0;
     {
@@ -178,31 +177,24 @@ bool Node::allow(std::shared_ptr<fly::net::Connection<Json>> connection)
         return false;
     }
     
-    return true;
-}
-
-void Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, uint64 id)
-{
     uint64 conn_id = connection->id();
     std::shared_ptr<Peer> peer = std::make_shared<Peer>();
-    peer->m_timer_id = m_timer_ctl.add_timer([=]() {
-            connection->close();
-        }, 10, true);
-    peer->m_connection = connection;
     std::unique_lock<std::mutex> lock(m_peer_mutex);
-    m_unreg_peers.insert(std::make_pair(conn_id, peer));
     auto iter_unreg = m_unreg_peers.find(id);
     
     if(iter_unreg == m_unreg_peers.end())
     {
         LOG_DEBUG_ERROR("init_verify unreg peer doesn't exist");
-        connection->close();
-        
-        return;
+        return false;
     }
     
-    std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
+    m_unreg_peers.insert(std::make_pair(conn_id, peer));
     lock.unlock();
+    peer->m_timer_id = m_timer_ctl.add_timer([=]() {
+            connection->close();
+        }, 10, true);
+    peer->m_connection = connection;
+    std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
     rapidjson::Document doc;
     doc.SetObject();
     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -212,10 +204,23 @@ void Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     doc.AddMember("key", peer_unreg->m_remote_key, allocator);
     connection->send(doc);
     peer_unreg->m_state = 4;
+    
+    return true;
 }
 
-void Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
+bool Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
 {
+    uint32 peer_num = 0;
+    {
+        std::lock_guard<std::mutex> guard(m_peer_mutex);
+        peer_num = m_peers.size() + m_unreg_peers.size();
+    }
+    
+    if(peer_num > m_max_conn)
+    {
+        return false;
+    }
+    
     uint64 conn_id = connection->id();
     std::shared_ptr<Peer> peer = std::make_shared<Peer>();
     peer->m_timer_id = m_timer_ctl.add_timer([=]() {
@@ -244,6 +249,8 @@ void Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
         doc.AddMember("version", ASKCOIN_VERSION, allocator);
         connection->send(doc);
     }
+
+    return true;
 }
 
 void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)

@@ -23,7 +23,6 @@ bool Wsock_Node::start(std::string host, uint16 port)
     int32 cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
     cpu_num = cpu_num < 4 ? 4 : cpu_num;
     std::unique_ptr<fly::net::Server<Wsock>> server(new fly::net::Server<Wsock>(fly::net::Addr(host, port),
-                                                                                std::bind(&Wsock_Node::allow, this, _1),
                                                                                 std::bind(&Wsock_Node::init, this, _1),
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
@@ -71,12 +70,7 @@ void Wsock_Node::set_max_conn(uint32 num)
     m_max_conn = num;
 }
 
-bool Wsock_Node::allow(std::shared_ptr<fly::net::Connection<Wsock>> connection)
-{
-    return true;
-}
-
-void Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
+bool Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
 {
     auto user = std::make_shared<User>();
     user->m_connection = connection;
@@ -87,6 +81,7 @@ void Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     user->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
         }, 60, true);
+    return true;
 }
 
 void Wsock_Node::dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
