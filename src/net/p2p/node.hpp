@@ -29,7 +29,6 @@ public:
     void stop();
     void wait();
     void set_max_conn(uint32 num);
-    uint32 get_max_conn();
     bool init(std::shared_ptr<fly::net::Connection<Json>> connection);
     bool init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, uint64 id);
     void dispatch(std::unique_ptr<fly::net::Message<Json>> message);

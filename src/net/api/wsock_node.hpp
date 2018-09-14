@@ -8,12 +8,15 @@
 #include "timer.hpp"
 
 using fly::net::Wsock;
+class Blockchain;
 
 namespace net {
 namespace api {
 
 class Wsock_Node : public fly::base::Singleton<Wsock_Node>
 {
+    friend class ::Blockchain;
+
 public:
     Wsock_Node();
     ~Wsock_Node();

@@ -1,43 +1,72 @@
 var hash = require('hash.js');
 var EC = require('elliptic').ec;
 var ec = new EC('secp256k1');
+var WebSocket = require('ws');
+
+var ws = new WebSocket('ws://172.104.48.244:18051');
+//ws = new WebSocket('ws://192.168.0.122:18051');
+
+ws.on('open', function open() {
+    console.log("reccv open msg");
+    ws.send(JSON.stringify({msg_type:0, msg_cmd: 2}));
+    ws.send(JSON.stringify({msg_type:0, msg_cmd: 0}));
+});
+
+ws.on('error', function(e) {
+    console.log("recv error", e);
+    //ws.send('recv open msg');
+});
+ 
+ws.on('message', function incoming(data) {
+    console.log("recv msg:");
+    console.log(data);
+    
+});
+
+return;
+console.log('bbbbbbbbbbbbbbb');
+
+
+
+
+
 
 while(true) {
-var key = ec.genKeyPair();
-var privstr = key.priv.toString(16, 2);
-var priv2 = key.getPrivate("hex");
-console.log(privstr, privstr.length, typeof privstr);
-console.log(priv2, priv2.length, typeof priv2);
-console.log(key, typeof key);
+    var key = ec.genKeyPair();
+    var privstr = key.priv.toString(16, 2);
+    var priv2 = key.getPrivate("hex");
+    console.log(privstr, privstr.length, typeof privstr);
+    console.log(priv2, priv2.length, typeof priv2);
+    console.log(key, typeof key);
 
 
-var res = hash.sha256().update('a1232323232342342bc').digest();
-// var res = hash.ripemd160().update(hash.sha256().update('a1232323232342342bc').digest()).digest('hex');
-// var res_256 = hash.sha256().update(hash.sha256().update('a1232323232342342bc').digest()).digest('hex');
-// console.log("typeof res: ", typeof res, " typeof res_256: ", typeof res_256);
-// console.log(res,res_256);
-// console.log('hash:', res, typeof res, res.length);
-// console.log('hash_256:', res_256, typeof res_256, res_256.length);
+    var res = hash.sha256().update('a1232323232342342bc').digest();
+    // var res = hash.ripemd160().update(hash.sha256().update('a1232323232342342bc').digest()).digest('hex');
+    // var res_256 = hash.sha256().update(hash.sha256().update('a1232323232342342bc').digest()).digest('hex');
+    // console.log("typeof res: ", typeof res, " typeof res_256: ", typeof res_256);
+    // console.log(res,res_256);
+    // console.log('hash:', res, typeof res, res.length);
+    // console.log('hash_256:', res_256, typeof res_256, res_256.length);
 
 
-var sig = key.sign(res);
-console.log('sig: ', sig, typeof sig);
-sig = sig.toDER();
-console.log('sig der:', sig, typeof sig, sig.length);
-console.log(key.verify(res, sig), typeof sig);
+    var sig = key.sign(res);
+    console.log('sig: ', sig, typeof sig);
+    sig = sig.toDER();
+    console.log('sig der:', sig, typeof sig, sig.length);
+    console.log(key.verify(res, sig), typeof sig);
 
-console.log("pub.....................................");
-var pub = key.getPublic('hex');
-console.log(pub, typeof pub, pub.length);
+    console.log("pub.....................................");
+    var pub = key.getPublic('hex');
+    console.log(pub, typeof pub, pub.length);
 
-var key = ec.keyFromPublic(pub, 'hex');
-console.log("pub end.............................");
+    var key = ec.keyFromPublic(pub, 'hex');
+    console.log("pub end.............................");
 
-console.log(key.verify(res, sig));
+    console.log(key.verify(res, sig));
 
-if(privstr.startsWith('0')) {
-    break;
-}
+    if(privstr.startsWith('0')) {
+        break;
+    }
 
 
 
@@ -47,18 +76,11 @@ if(privstr.startsWith('0')) {
     console.log("lcres: ", lcres, typeof lcres);
     var bf2 = new Buffer(res);
     console.log("lcres2: ", bf2.toString('base64'));
-
-
     
     break;
-    
-    }
-
-
-
+}
 
 var ec = new EC('secp256k1');
-
 var pub2 = "04889eedad4977924cce46baac49e6e58bac17cf7a6eca04da051fcf81cfa896cf093f11c13ff22071b6a58b514df904ce00510f1232c9ba942c0e4218324d8afc";
 var pub2_buf = Buffer(pub2, 'hex').toString('base64');
 console.log("pub2_buf: ", pub2_buf);

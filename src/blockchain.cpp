@@ -557,7 +557,7 @@ void Blockchain::do_message()
         if(peer_empty && wsock_empty && !called)
         {
             RandAddSeedSleep();
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 }
@@ -2825,6 +2825,11 @@ void Blockchain::do_uv_tx()
             }
             
             scb.set_cur_cb(1);
+        }
+        
+        if(tx->m_broadcast_num++ < 5)
+        {
+            net::p2p::Node::instance()->broadcast(*tx->m_doc);
         }
         
         ++iter;

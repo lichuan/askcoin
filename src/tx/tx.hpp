@@ -16,6 +16,7 @@ public:
     std::string m_pubkey;
     std::shared_ptr<net::p2p::Peer> m_peer;
     std::shared_ptr<rapidjson::Document> m_doc;
+    uint8 m_broadcast_num = 0;
 };
 
 class Tx_Reg : public Tx

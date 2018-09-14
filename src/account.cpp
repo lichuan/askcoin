@@ -54,6 +54,11 @@ std::string Account::name()
     return m_name;
 }
 
+uint32 Account::avatar()
+{
+    return m_avatar;
+}
+
 void Account::add_history(History *history)
 {
     m_history.push_back(history);

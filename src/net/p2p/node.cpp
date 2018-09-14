@@ -84,7 +84,7 @@ void Node::connect_proc()
         
         if(peer_num >= m_max_conn)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(10));
             ASKCOIN_TRACE;
             continue;
         }
@@ -96,7 +96,7 @@ void Node::connect_proc()
         {
             std::shared_ptr<Peer_Score> peer_score = *iter;
             uint8 expect = 0;
-
+            
             if(m_banned_peers.find(peer_score->key()) != m_banned_peers.end())
             {
                 LOG_DEBUG_INFO("try to connect banned peer %s, skipped", peer_score->key().c_str());
@@ -136,7 +136,7 @@ void Node::connect_proc()
         if(iter_all)
         {
             lock.unlock();
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::this_thread::sleep_for(std::chrono::seconds(10));
         }
     }
 }
@@ -157,11 +157,6 @@ void Node::set_host(std::string host)
 void Node::set_max_conn(uint32 num)
 {
     m_max_conn = num;
-}
-
-uint32 Node::get_max_conn()
-{
-    return m_max_conn;
 }
 
 bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, uint64 id)

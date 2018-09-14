@@ -23,6 +23,7 @@ public:
     std::string pubkey();
     uint64 id();
     std::string name();
+    uint32 avatar();
     void set_balance(uint64 value);
     void add_balance(uint64 value);
     void sub_balance(uint64 value);
@@ -37,7 +38,7 @@ public:
     uint64 m_uv_spend;
     uint32 m_uv_topic;
     uint32 m_uv_join_topic;
-    
+
 private:
     std::list<History*> m_history;
     std::string m_name;
