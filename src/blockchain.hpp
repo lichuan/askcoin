@@ -43,7 +43,7 @@ class Peer;
 
 class Blockchain : public fly::base::Singleton<Blockchain>
 {
-public:
+public:    
     Blockchain();
     ~Blockchain();
     bool start(std::string db_path);
@@ -111,6 +111,16 @@ private:
     std::list<std::shared_ptr<tx::Tx>> m_uv_1_txs;
     std::list<std::shared_ptr<tx::Tx>> m_uv_2_txs;
     std::unordered_set<std::string> m_uv_tx_ids;
+
+    struct Tx_Comp
+    {
+        bool operator()(const std::shared_ptr<tx::Tx> &a, const std::shared_ptr<tx::Tx> &b)
+        {
+            return a->m_id < b->m_id;
+        }
+    };
+    
+    std::set<std::shared_ptr<tx::Tx>, Tx_Comp> m_uv_3_txs;
     std::array<char, 255> m_b64_table;
     std::shared_ptr<Account> m_reserve_fund_account;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;

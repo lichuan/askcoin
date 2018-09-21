@@ -547,13 +547,13 @@ void Blockchain::do_message()
         
         bool called = m_timer_ctl.run();
         do_brief_chain();
-
+        
         if(m_new_block_msg)
         {
             do_uv_tx();
             m_new_block_msg = false;
         }
-        
+
         if(peer_empty && wsock_empty && !called)
         {
             RandAddSeedSleep();
@@ -1855,6 +1855,11 @@ bool Blockchain::start(std::string db_path)
                         {
                             ASKCOIN_RETURN false;
                         }
+
+                        if(reply_to->type() != 0)
+                        {
+                            ASKCOIN_RETURN false;
+                        }
                         
                         reply->set_reply_to(reply_to);
                     }
@@ -2215,7 +2220,7 @@ void Blockchain::do_uv_tx()
             auto register_name = tx_reg->m_register_name;
             std::shared_ptr<Account> exist_account;
 
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_1_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2269,7 +2274,7 @@ void Blockchain::do_uv_tx()
         }
         else
         {
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_1_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2365,6 +2370,14 @@ void Blockchain::do_uv_tx()
                     if(!topic->get_reply(tx_reply->m_reply_to, reply_to))
                     {
                         ++iter;
+                        continue;
+                    }
+
+                    if(reply_to->type() != 0)
+                    {
+                        punish_peer(tx_reply->m_peer);
+                        iter = m_uv_1_txs.erase(iter);
+                        m_uv_tx_ids.erase(tx_id);
                         continue;
                     }
                 }
@@ -2519,7 +2532,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2527,13 +2540,14 @@ void Blockchain::do_uv_tx()
                 m_uv_account_pubkeys.erase(pubkey);
                 continue;
             }
-        
+
             if(m_tx_map.find(tx_id) != m_tx_map.end())
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
                 m_uv_account_names.erase(register_name);
                 m_uv_account_pubkeys.erase(pubkey);
+                m_uv_3_txs.insert(tx);
                 continue;
             }
             
@@ -2581,7 +2595,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2592,6 +2606,7 @@ void Blockchain::do_uv_tx()
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
+                m_uv_3_txs.insert(tx);
                 continue;
             }
 
@@ -2636,7 +2651,7 @@ void Blockchain::do_uv_tx()
                 continue;
             }
             
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2647,6 +2662,7 @@ void Blockchain::do_uv_tx()
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
+                m_uv_3_txs.insert(tx);
                 continue;
             }
 
@@ -2722,7 +2738,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2733,6 +2749,7 @@ void Blockchain::do_uv_tx()
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
+                m_uv_3_txs.insert(tx);
                 continue;
             }
             
@@ -2810,7 +2827,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2821,6 +2838,7 @@ void Blockchain::do_uv_tx()
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
+                m_uv_3_txs.insert(tx);
                 continue;
             }
             
@@ -2828,6 +2846,30 @@ void Blockchain::do_uv_tx()
         }
         
         if(tx->m_broadcast_num++ < 5)
+        {
+            net::p2p::Node::instance()->broadcast(*tx->m_doc);
+        }
+        
+        ++iter;
+    }
+
+    for(auto iter = m_uv_3_txs.begin(); iter != m_uv_3_txs.end();)
+    {
+        auto tx = *iter;
+        auto block_id = tx->m_block_id;
+        auto tx_id = tx->m_id;
+
+        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+        {
+            iter = m_uv_3_txs.erase(iter);
+            continue;
+        }
+        
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            tx->m_broadcast_num = 0;
+        }
+        else if(tx->m_broadcast_num++ < 5)
         {
             net::p2p::Node::instance()->broadcast(*tx->m_doc);
         }
@@ -3591,6 +3633,11 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                         std::shared_ptr<Reply> reply_to;
                         
                         if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(reply_to->type() != 0)
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }

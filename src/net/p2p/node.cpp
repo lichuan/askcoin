@@ -2025,6 +2025,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
             
+            if(m_cur_block->hash() != block_hash)
+            {
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("data"))
             {
                 punish_peer(peer);
@@ -2085,6 +2090,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(m_cur_block->id() != block_id)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
+            
             if(!data.HasMember("utc"))
             {
                 punish_detail_req(request);
@@ -2522,6 +2533,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             parent->add_my_difficulty_to(cur_block);
             uint64 cur_block_id = block_id;
 
+            if(!proc_topic_expired(cur_block_id))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            if(!proc_tx_map(cur_block))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
             for(uint32 i = 0; i < tx_num; ++i)
             {
                 std::string tx_id = tx_ids[i].GetString();
@@ -3240,7 +3261,15 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                                 ASKCOIN_TRACE;
                                 break;
                             }
-                        
+
+                            if(reply_to->type() != 0)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                            
                             reply->set_reply_to(reply_to);
                         }
 
@@ -3545,18 +3574,41 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     }
                 }
                 
+                if(cur_block_id > (TOPIC_LIFE_TIME + 1))
+                {
+                    auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+
+                    for(auto topic : topic_list)
+                    {
+                        m_topics.insert(std::make_pair(topic->key(), topic));
+                        topic->get_owner()->m_topic_list.push_front(topic);
+                        m_topic_list.push_front(topic);
+                        uint64 balance = topic->get_balance();
+                        
+                        if(balance > 0)
+                        {
+                            m_reserve_fund_account->sub_balance(balance);
+                        }
+
+                        for(auto &p : topic->m_members)
+                        {
+                            p.second->m_joined_topic_list.push_front(topic);
+                        }
+                    }
+
+                    auto tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+                
+                    for(auto _tx_id : tx_pair.second)
+                    {
+                        m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
+                    }
+                
+                    m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+                    m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+                }
+                
                 punish_detail_req(request);
                 ASKCOIN_RETURN;
-            }
-            
-            if(!proc_topic_expired(cur_block_id))
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-
-            if(!proc_tx_map(cur_block))
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
             uint64 remain_balance = m_reserve_fund_account->get_balance();
@@ -3680,7 +3732,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_broadcast_json.m_sign = doc["sign"];
                 m_broadcast_json.m_data = doc["data"];
             }
-            
+
+            broadcast();
             auto detail_req_num = owner_chain->m_req_blocks.size();
             m_timer_ctl.del_timer(request->m_timer_id);
             
@@ -3692,6 +3745,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 {
                     auto &pending_chain = *iter;
                     pending_chain->m_detail_attached = false;
+                    pending_chain->m_start = 0;
                     std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
                     
                     if(pending_chain == owner_chain)
@@ -3720,8 +3774,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     ++iter;
                 }
-
-                broadcast();
             }
             else
             {
@@ -4065,7 +4117,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     ASKCOIN_RETURN;
                 }
 
-                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN;
                 }
@@ -4208,7 +4260,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     ASKCOIN_RETURN;
                 }
 
-                if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN;
                 }
@@ -4522,6 +4574,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         if(!topic->get_reply(reply_to_key, reply_to))
                         {
                             m_uv_1_txs.push_back(tx_reply);
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        if(reply_to->type() != 0)
+                        {
+                            punish_peer(peer);
                             ASKCOIN_RETURN;
                         }
                     }

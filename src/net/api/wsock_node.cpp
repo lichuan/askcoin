@@ -190,8 +190,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     uint32 cmd = message->cmd();
     uint32 msg_length = message->length(); // todo, the following cmd need check length
     rapidjson::Document& doc = message->doc();
-    net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
     uint32 msg_id = doc["msg_id"].GetUint();
+    net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
+    std::unique_lock<std::mutex> lock(wsock_node->m_mutex);
+    auto &users = wsock_node->m_users;
+    auto iter_user = users.find(conn_id);
+    
+    if(iter_user == users.end())
+    {
+        ASKCOIN_RETURN;
+    }
+
+    auto user = iter_user->second;
+    lock.unlock();
     
     if(type == net::api::MSG_ACCOUNT)
     {
@@ -267,9 +278,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->close();
         ASKCOIN_RETURN;
     }
-            
+    
     std::string tx_sign = doc["sign"].GetString();
-            
+    
     if(!is_base64_char(tx_sign))
     {
         connection->close();
@@ -499,7 +510,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             ASKCOIN_RETURN;
         }
 
-        if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
         {
             rsp_doc.AddMember("err_code", net::api::ERR_TX_EXPIRED, allocator);
             connection->send(rsp_doc);
@@ -617,6 +628,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     }
     else
     {
+        if(user->m_state == 0)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
         if(!data.HasMember("fee"))
         {
             connection->close();
@@ -650,7 +667,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             ASKCOIN_RETURN;
         }
         
-        if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
         {
             rsp_doc.AddMember("err_code", net::api::ERR_TX_EXPIRED, allocator);
             connection->send(rsp_doc);
@@ -960,6 +977,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 {
                     rsp_doc.AddMember("err_code", net::api::ERR_REPLY_NOT_EXIST, allocator);
                     connection->send(rsp_doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(reply_to->type() != 0)
+                {
+                    connection->close();
                     ASKCOIN_RETURN;
                 }
             }
