@@ -2362,7 +2362,14 @@ void Blockchain::do_uv_tx()
                     ++iter;
                     continue;
                 }
-                
+
+                if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+
                 if(!tx_reply->m_reply_to.empty())
                 {
                     std::shared_ptr<Reply> reply_to;
@@ -2444,6 +2451,13 @@ void Blockchain::do_uv_tx()
                 if(!get_topic(tx_reward->m_topic_key, topic))
                 {
                     ++iter;
+                    continue;
+                }
+
+                if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                {
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
                     continue;
                 }
                 
@@ -2655,6 +2669,45 @@ void Blockchain::do_uv_tx()
         else if(tx_type == 4)
         {
             std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+            std::shared_ptr<Topic> topic_outer;
+            std::shared_ptr<Account> account_outer;
+            
+            if(get_topic(tx_reply->m_topic_key, topic_outer))
+            {
+                if(topic_outer->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                {
+                    iter = m_uv_2_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+
+                    if(topic_outer->m_uv_reply >= 1)
+                    {
+                        topic_outer->m_uv_reply -= 1;
+                    }
+                    
+                    if(get_account(pubkey, account_outer))
+                    {
+                        if(account_outer->m_uv_spend >= 2)
+                        {
+                            account_outer->m_uv_spend -= 2;
+                        }
+                        else
+                        {
+                            account_outer->m_uv_spend = 0;
+                        }
+
+                        if(tx_reply->m_uv_join_topic > 0)
+                        {
+                            if(account_outer->m_uv_join_topic >= 1)
+                            {
+                                account_outer->m_uv_join_topic -= 1;
+                            }
+                        }
+                    }
+                    
+                    continue;
+                }
+            }
+            
             fly::base::Scope_CB scb(
                 [this, tx_reply, &pubkey] {
                     std::shared_ptr<Topic> topic;
@@ -2735,6 +2788,46 @@ void Blockchain::do_uv_tx()
         else if(tx_type == 5)
         {
             std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+            std::shared_ptr<Topic> topic_outer;
+            std::shared_ptr<Account> account_outer;
+            
+            if(get_topic(tx_reward->m_topic_key, topic_outer))
+            {
+                if(topic_outer->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                {
+                    iter = m_uv_2_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    
+                    if(topic_outer->m_uv_reply >= 1)
+                    {
+                        topic_outer->m_uv_reply -= 1;
+                    }
+
+                    if(topic_outer->m_uv_reward >= tx_reward->m_amount)
+                    {
+                        topic_outer->m_uv_reward -= tx_reward->m_amount;
+                    }
+                    else
+                    {
+                        topic_outer->m_uv_reward = 0;
+                    }
+                    
+                    if(get_account(pubkey, account_outer))
+                    {
+                        if(account_outer->m_uv_spend >= 2)
+                        {
+                            account_outer->m_uv_spend -= 2;
+                        }
+                        else
+                        {
+                            account_outer->m_uv_spend = 0;
+                        }
+                    }
+                    
+                    continue;
+                }
+            }
+            
             fly::base::Scope_CB scb(
                 [this, tx_reward, &pubkey] {
                     std::shared_ptr<Account> account;

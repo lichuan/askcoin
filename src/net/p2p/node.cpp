@@ -4180,7 +4180,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     punish_peer(peer);
                     ASKCOIN_RETURN;
                 }
-                    
+                
                 if(account_name_exist(register_name))
                 {
                     ASKCOIN_RETURN;
@@ -4594,6 +4594,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             ASKCOIN_RETURN;
                         }
                         
+                        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                        {
+                            ASKCOIN_RETURN;
+                        }
+                        
                         if(!topic->get_reply(reply_to_key, reply_to))
                         {
                             m_uv_1_txs.push_back(tx_reply);
@@ -4611,6 +4616,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         if(!get_topic(topic_key, topic))
                         {
                             m_uv_1_txs.push_back(tx_reply);
+                            ASKCOIN_RETURN;
+                        }
+
+                        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                        {
                             ASKCOIN_RETURN;
                         }
                     }
@@ -4758,6 +4768,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!get_topic(topic_key, topic))
                     {
                         m_uv_1_txs.push_back(tx_reward);
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                    {
                         ASKCOIN_RETURN;
                     }
                     

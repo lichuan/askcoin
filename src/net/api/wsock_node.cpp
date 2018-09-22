@@ -946,6 +946,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
+            if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+            {
+                rsp_doc.AddMember("err_code", net::api::ERR_TOPIC_NOT_EXIST, allocator);
+                connection->send(rsp_doc);
+                ASKCOIN_RETURN;
+            }
+            
             std::shared_ptr<tx::Tx_Reply> tx_reply(new tx::Tx_Reply);
             
             if(data.HasMember("reply_to"))
@@ -1115,6 +1122,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             std::shared_ptr<Topic> topic;
             
             if(!get_topic(topic_key, topic))
+            {
+                rsp_doc.AddMember("err_code", net::api::ERR_TOPIC_NOT_EXIST, allocator);
+                connection->send(rsp_doc);
+                ASKCOIN_RETURN;
+            }
+            
+            if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
             {
                 rsp_doc.AddMember("err_code", net::api::ERR_TOPIC_NOT_EXIST, allocator);
                 connection->send(rsp_doc);
