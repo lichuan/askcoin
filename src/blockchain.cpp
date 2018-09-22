@@ -548,10 +548,10 @@ void Blockchain::do_message()
         bool called = m_timer_ctl.run();
         do_brief_chain();
         
-        if(m_new_block_msg)
+        if(m_block_changed)
         {
             do_uv_tx();
-            m_new_block_msg = false;
+            m_block_changed = false;
         }
 
         if(peer_empty && wsock_empty && !called)
@@ -3013,6 +3013,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         }
         
         rollback(cross_id);
+        m_block_changed = true;
     }
     
     if(cross_id >= first_pending_block->m_id)
@@ -3727,6 +3728,8 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         {
             iter_block->m_miner_reward = false;
         }
+
+        m_block_changed = true;
     }
     
     auto pending_block = pending_chain->m_req_blocks[pending_chain->m_start];

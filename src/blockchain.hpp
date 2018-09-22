@@ -85,7 +85,7 @@ private:
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
-    bool m_new_block_msg = false;
+    bool m_block_changed = false;
     std::shared_ptr<Block> m_cur_block;
     std::shared_ptr<Block> m_most_difficult_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
@@ -102,7 +102,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
     std::shared_ptr<Pending_Detail_Request> m_detail_request;
     Timer_Controller m_timer_ctl;
-    std::unordered_set<std::string> m_pending_peer_keys;
+    std::unordered_map<std::string, uint32> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
     std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;

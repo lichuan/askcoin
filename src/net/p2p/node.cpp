@@ -990,7 +990,12 @@ void Blockchain::punish_brief_req(std::shared_ptr<Pending_Brief_Request> request
         std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
         iter = m_pending_brief_chains.erase(iter);
         punish_peer(peer);
-        m_pending_peer_keys.erase(peer->key());
+
+        if(--m_pending_peer_keys[peer->key()] == 0)
+        {
+            m_pending_peer_keys.erase(peer->key());
+        }
+        
         LOG_DEBUG_INFO("punish_brief_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_hash.c_str());
     }
     
@@ -1013,7 +1018,12 @@ void Blockchain::punish_detail_req(std::shared_ptr<Pending_Detail_Request> reque
         std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
         iter = m_brief_chains.erase(iter);
         punish_peer(peer);
-        m_pending_peer_keys.erase(peer->key());
+
+        if(--m_pending_peer_keys[peer->key()] == 0)
+        {
+            m_pending_peer_keys.erase(peer->key());
+        }
+        
         m_is_switching = false;
         std::string block_hash = request->m_owner_chain->m_req_blocks[request->m_owner_chain->m_start]->m_hash;
         LOG_DEBUG_INFO("punish_detail_req, peer key: %s, block_hash: %s", peer->key().c_str(), block_hash.c_str());
@@ -1058,9 +1068,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         {
             if(m_pending_peer_keys.find(peer->key()) != m_pending_peer_keys.end())
             {
-                ASKCOIN_RETURN;
+                if(m_pending_peer_keys[peer->key()] >= 10)
+                {
+                    ASKCOIN_RETURN;
+                }
             }
-
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1420,8 +1433,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     m_pending_block_hashes.pop_front();
                 }
             }
-            
-            m_pending_peer_keys.insert(peer->key());
+
+            ++m_pending_peer_keys[peer->key()];
             uint64 now = time(NULL);
             
             if(utc > now)
@@ -3723,7 +3736,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb end", block_id, block_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
-            m_new_block_msg = true;
+            m_block_changed = true;
             
             if(m_cur_block->difficult_than(m_most_difficult_block))
             {
@@ -3731,9 +3744,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_broadcast_json.m_hash = doc["hash"];
                 m_broadcast_json.m_sign = doc["sign"];
                 m_broadcast_json.m_data = doc["data"];
+                broadcast();
             }
 
-            broadcast();
             auto detail_req_num = owner_chain->m_req_blocks.size();
             m_timer_ctl.del_timer(request->m_timer_id);
             
@@ -3751,7 +3764,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(pending_chain == owner_chain)
                     {
                         iter = m_brief_chains.erase(iter);
-                        m_pending_peer_keys.erase(peer->key());
+
+                        if(--m_pending_peer_keys[peer->key()] == 0)
+                        {
+                            m_pending_peer_keys.erase(peer->key());
+                        }
+
                         std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
                         std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
                         auto iter_score = peer_score_map.find(peer->key());
@@ -3768,7 +3786,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(!m_most_difficult_block->difficult_than_me(pending_chain->m_declared_pow))
                     {
                         iter = m_brief_chains.erase(iter);
-                        m_pending_peer_keys.erase(peer->key());
+
+                        if(--m_pending_peer_keys[peer->key()] == 0)
+                        {
+                            m_pending_peer_keys.erase(peer->key());
+                        }
+                        
                         continue;
                     }
                     
@@ -4805,7 +4828,11 @@ void Blockchain::do_brief_chain()
         if(!m_most_difficult_block->difficult_than_me(pending_chain->m_declared_pow))
         {
             iter = m_pending_brief_chains.erase(iter);
-            m_pending_peer_keys.erase(peer->key());
+
+            if(--m_pending_peer_keys[peer->key()] == 0)
+            {
+                m_pending_peer_keys.erase(peer->key());
+            }
 
             continue;
         }
@@ -4825,7 +4852,11 @@ void Blockchain::do_brief_chain()
                 if(pending_block->m_id != pre_block->id() + 1)
                 {
                     punish_peer(peer);
-                    m_pending_peer_keys.erase(peer->key());
+
+                    if(--m_pending_peer_keys[peer->key()] == 0)
+                    {
+                        m_pending_peer_keys.erase(peer->key());
+                    }
 
                     break;
                 }
@@ -4833,7 +4864,11 @@ void Blockchain::do_brief_chain()
                 if(!pre_block->difficult_equal(pending_chain->m_remain_pow))
                 {
                     punish_peer(peer);
-                    m_pending_peer_keys.erase(peer->key());
+                    
+                    if(--m_pending_peer_keys[peer->key()] == 0)
+                    {
+                        m_pending_peer_keys.erase(peer->key());
+                    }
 
                     break;
                 }
@@ -4843,6 +4878,35 @@ void Blockchain::do_brief_chain()
                 if(m_is_switching)
                 {
                     std::shared_ptr<Pending_Chain> owner_chain = m_detail_request->m_owner_chain;
+
+                    if(pending_chain->m_declared_pow > owner_chain->m_declared_pow)
+                    {
+                        for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end();)
+                        {
+                            auto &inner_chain = *iter;
+                            inner_chain->m_detail_attached = false;
+                            inner_chain->m_start = 0;
+                            
+                            if(!m_most_difficult_block->difficult_than_me(inner_chain->m_declared_pow))
+                            {
+                                iter = m_brief_chains.erase(iter);
+                                
+                                if(--m_pending_peer_keys[peer->key()] == 0)
+                                {
+                                    m_pending_peer_keys.erase(peer->key());
+                                }
+
+                                continue;
+                            }
+                            
+                            ++iter;
+                        }
+                        
+                        m_timer_ctl.del_timer(m_detail_request->m_timer_id);
+                        switch_chain(pending_chain);
+                        break;
+                    }
+                    
                     auto pending_block = owner_chain->m_req_blocks[owner_chain->m_start];
                     auto pending_id = pending_block->m_id;
                     auto pending_hash = pending_block->m_hash;
@@ -4874,7 +4938,12 @@ void Blockchain::do_brief_chain()
             if(pending_block->m_id <= 1)
             {
                 punish_peer(peer);
-                m_pending_peer_keys.erase(peer->key());
+                
+                if(--m_pending_peer_keys[peer->key()] == 0)
+                {
+                    m_pending_peer_keys.erase(peer->key());
+                }
+                
                 iter = m_pending_brief_chains.erase(iter);
                 continue_if = true;
                 
@@ -4890,7 +4959,12 @@ void Blockchain::do_brief_chain()
                 if(pending_block->m_id != pre_pending_block->m_id + 1)
                 {
                     punish_peer(peer);
-                    m_pending_peer_keys.erase(peer->key());
+
+                    if(--m_pending_peer_keys[peer->key()] == 0)
+                    {
+                        m_pending_peer_keys.erase(peer->key());
+                    }
+
                     iter = m_pending_brief_chains.erase(iter);
                     continue_if = true;
                     
@@ -4900,7 +4974,12 @@ void Blockchain::do_brief_chain()
                 if(!pending_chain->m_remain_pow.sub_pow(pre_pending_block->m_zero_bits))
                 {
                     punish_peer(peer);
-                    m_pending_peer_keys.erase(peer->key());
+
+                    if(--m_pending_peer_keys[peer->key()] == 0)
+                    {
+                        m_pending_peer_keys.erase(peer->key());
+                    }
+
                     iter = m_pending_brief_chains.erase(iter);
                     continue_if = true;
                     
@@ -5025,7 +5104,11 @@ void Blockchain::do_brief_chain()
         if(!m_most_difficult_block->difficult_than_me(pending_chain->m_declared_pow))
         {
             iter = m_brief_chains.erase(iter);
-            m_pending_peer_keys.erase(pending_chain->m_peer->key());
+            
+            if(--m_pending_peer_keys[pending_chain->m_peer->key()] == 0)
+            {
+                m_pending_peer_keys.erase(pending_chain->m_peer->key());
+            }
             
             continue;
         }

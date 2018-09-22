@@ -12,8 +12,8 @@
  -                       ---   ----
  - max version (uint32): 4294967295
  */
-static const uint32 ASKCOIN_VERSION = 10000; //3 3 4
-static const char* ASKCOIN_VERSION_NAME = "0.1.0"; //major.minor.revision: 3 3 4
+static const uint32 ASKCOIN_VERSION = 1; //3 3 4
+static const char* ASKCOIN_VERSION_NAME = "0.0.1"; //major.minor.revision: 3 3 4
 
 static bool version_compatible(uint32 ver_a, uint32 ver_b)
 {
