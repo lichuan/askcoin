@@ -14,6 +14,9 @@ class Peer;
 }
 }
 
+class Pending_Brief_Request;
+class Pending_Detail_Request;
+
 class Pending_Chain
 {
 public:
@@ -26,8 +29,8 @@ public:
     std::shared_ptr<net::p2p::Peer> m_peer;
     Accum_Pow m_remain_pow;
     uint64 m_start;
-    bool m_detail_attached;
-    bool m_brief_attached;
+    std::shared_ptr<Pending_Detail_Request> m_detail_attached;
+    std::shared_ptr<Pending_Brief_Request> m_brief_attached;
 };
 
 #endif

@@ -1990,7 +1990,7 @@ bool Blockchain::start(std::string db_path)
     CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());
     m_timer_ctl.add_timer([=]() {
             broadcast();
-        }, 15);
+        }, 10);
     
     if(!check_balance())
     {
@@ -2916,6 +2916,11 @@ void Blockchain::do_uv_tx()
         ++iter;
     }
 
+    for(auto iter = m_uv_2_txs.begin(); iter != m_uv_2_txs.end();)
+    {
+        // todo mining?
+    }
+
     for(auto iter = m_uv_3_txs.begin(); iter != m_uv_3_txs.end();)
     {
         auto tx = *iter;
@@ -3836,21 +3841,20 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
     doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
     doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-    pending_chain->m_peer->m_connection->send(doc);
     ++request->m_try_num;
     LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pending_id, pending_hash.c_str());
     request->m_timer_id = m_timer_ctl.add_timer([=]() {
-            if(request->m_try_num >= request->m_attached_chains.size() * 2)
+            if(request->m_try_num >= 3 && request->m_try_num >= request->m_attached_chains.size())
             {
                 punish_detail_req(request);
             }
             else
             {
-                auto last_peer = request->m_attached_chains.back()->m_peer;
+                auto last_peer = request->m_attached_chains.front()->m_peer;
                 
                 if(last_peer->m_connection->closed())
                 {
-                    request->m_attached_chains.pop_back();
+                    request->m_attached_chains.pop_front();
                     
                     if(request->m_attached_chains.empty())
                     {
@@ -3862,13 +3866,15 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
 
                 while(true)
                 {
-                    std::random_shuffle(request->m_attached_chains.begin(), request->m_attached_chains.end());
-                    auto last_peer = request->m_attached_chains.back()->m_peer;
-                                
+                    auto pchain = request->m_attached_chains.front();
+                    request->m_attached_chains.pop_front();
+                    request->m_attached_chains.push_back(pchain);
+                    auto last_peer = request->m_attached_chains.front()->m_peer;
+                    
                     if(last_peer->m_connection->closed())
                     {
-                        request->m_attached_chains.pop_back();
-
+                        request->m_attached_chains.pop_front();
+                        
                         if(request->m_attached_chains.empty())
                         {
                             punish_detail_req(request);
@@ -3888,11 +3894,11 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                 doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
                 doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-                request->m_attached_chains.back()->m_peer->m_connection->send(doc);
+                request->m_attached_chains.front()->m_peer->m_connection->send(doc);
                 ++request->m_try_num;
             }
         }, 1);
-    
+
     for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end(); ++iter)
     {
         auto &inner_chain = *iter;
@@ -3906,17 +3912,18 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         }
         
         auto idx = pending_id - start_id;
-            
+        
         if(inner_chain->m_req_blocks[idx]->m_hash != pending_hash)
         {
             continue;
         }
-
+        
         inner_chain->m_start = idx;
-        inner_chain->m_detail_attached = true;
+        inner_chain->m_detail_attached = request;
         request->m_attached_chains.push_back(inner_chain);
     }
     
+    request->m_attached_chains.front()->m_peer->m_connection->send(doc);
     m_detail_request = request;
 }
 

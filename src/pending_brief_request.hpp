@@ -7,7 +7,7 @@ class Pending_Brief_Request
 {
 public:
     Pending_Brief_Request();
-    std::vector<std::shared_ptr<Pending_Chain>> m_attached_chains;
+    std::list<std::shared_ptr<Pending_Chain>> m_attached_chains;
     
 public:
     std::string m_hash;
