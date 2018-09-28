@@ -1066,14 +1066,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     {
         if(cmd == net::p2p::BLOCK_BROADCAST)
         {
-            if(m_pending_peer_keys.find(peer->key()) != m_pending_peer_keys.end())
-            {
-                if(m_pending_peer_keys[peer->key()] >= 3)
-                {
-                    ASKCOIN_RETURN;
-                }
-            }
-            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1190,6 +1182,29 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(m_pending_peer_keys.find(peer->key()) != m_pending_peer_keys.end())
+            {
+                if(m_pending_peer_keys[peer->key()] >= 3)
+                {
+                    if(!m_is_switching)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Pending_Chain> owner_chain = m_detail_request->m_owner_chain;
+
+                    if(owner_chain->m_peer->key() == peer->key())
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    if(!(declared_pow > owner_chain->m_declared_pow))
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                }
+            }
+            
             if(!data.HasMember("id"))
             {
                 punish_peer(peer);
@@ -3724,7 +3739,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
             doc_parent.Accept(writer_2);
             batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
-            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb begin", block_id, block_hash.c_str());
+            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, start write to leveldb", block_id, block_hash.c_str());
             s = m_db->Write(leveldb::WriteOptions(), &batch);
             
             if(!s.ok())
@@ -3733,7 +3748,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
 
-            LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb end", block_id, block_hash.c_str());
+            LOG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb finished", block_id, block_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
             m_block_changed = true;
@@ -3811,62 +3826,54 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
                 doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
                 doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-                ++request->m_try_num;
+                request->m_try_num = 1;
+                request->m_attached_num = 0;
                 LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pending_id, pending_hash.c_str());
                 request->m_timer_id = m_timer_ctl.add_timer([=]() {
-                        if(request->m_try_num >= 3 && request->m_try_num >= request->m_attached_chains.size())
+                        if(request->m_try_num >= 2 && request->m_try_num >= request->m_attached_num)
                         {
                             punish_detail_req(request);
+                            return;
                         }
-                        else
+                        
+                        if(request->m_attached_num < 2)
+                        {
+                            ++request->m_try_num;
+                            ++request->m_attached_num;
+                            return;
+                        }
+                        
+                        request->m_attached_chains.pop_front();
+                        
+                        while(true)
                         {
                             auto last_peer = request->m_attached_chains.front()->m_peer;
-                
+                            
                             if(last_peer->m_connection->closed())
                             {
                                 request->m_attached_chains.pop_front();
-                    
+                                --request->m_attached_num;
+
                                 if(request->m_attached_chains.empty())
                                 {
                                     punish_detail_req(request);
-
                                     return;
                                 }
                             }
-
-                            while(true)
+                            else
                             {
-                                auto pchain = request->m_attached_chains.front();
-                                request->m_attached_chains.pop_front();
-                                request->m_attached_chains.push_back(pchain);
-                                auto last_peer = request->m_attached_chains.front()->m_peer;
-                                
-                                if(last_peer->m_connection->closed())
-                                {
-                                    request->m_attached_chains.pop_front();
-
-                                    if(request->m_attached_chains.empty())
-                                    {
-                                        punish_detail_req(request);
-                            
-                                        return;
-                                    }
-                                }
-                                else
-                                {
-                                    break;
-                                }
+                                break;
                             }
-
-                            rapidjson::Document doc;
-                            doc.SetObject();
-                            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-                            doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-                            doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
-                            doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-                            request->m_attached_chains.front()->m_peer->m_connection->send(doc);
-                            ++request->m_try_num;
                         }
+
+                        rapidjson::Document doc;
+                        doc.SetObject();
+                        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                        doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+                        doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
+                        doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
+                        request->m_attached_chains.front()->m_peer->m_connection->send(doc);
+                        ++request->m_try_num;
                     }, 1);
                 
                 for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end();)
@@ -3911,6 +3918,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     inner_chain->m_detail_attached = request;
                     request->m_attached_chains.push_back(inner_chain);
+                    ++request->m_attached_num;
                     ++iter;
                 }
                 
@@ -4924,7 +4932,7 @@ void Blockchain::do_brief_chain()
                         }
 
                         m_timer_ctl.del_timer(m_detail_request->m_timer_id);
-                        switch_chain(pending_chain);
+                        m_is_switching = false;
                         break;
                     }
                     
@@ -4949,10 +4957,8 @@ void Blockchain::do_brief_chain()
                     
                     pending_chain->m_start = idx;
                     pending_chain->m_detail_attached = m_detail_request;
-                    auto pchain = m_detail_request->m_attached_chains.front();
-                    m_detail_request->m_attached_chains.pop_front();
-                    m_detail_request->m_attached_chains.push_front(pending_chain);
-                    m_detail_request->m_attached_chains.push_front(pchain);
+                    m_detail_request->m_attached_chains.push_back(pending_chain);
+                    ++m_detail_request->m_attached_num;
                 }
                 
                 break;
@@ -5022,6 +5028,7 @@ void Blockchain::do_brief_chain()
                 {
                     request = std::make_shared<Pending_Brief_Request>();
                     request->m_attached_chains.push_back(pending_chain);
+                    request->m_attached_num = 1;
                     request->m_hash = pre_hash;
                     m_pending_brief_reqs.insert(std::make_pair(pre_hash, request));
                     pending_chain->m_brief_attached = request;
@@ -5035,59 +5042,50 @@ void Blockchain::do_brief_chain()
                     ++request->m_try_num;
                     LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
                     request->m_timer_id = m_timer_ctl.add_timer([=]() {
-                            if(request->m_try_num >= 2 && request->m_try_num >= request->m_attached_chains.size())
+                            if(request->m_try_num >= 2 && request->m_try_num >= request->m_attached_num)
                             {
                                 punish_brief_req(request);
+                                return;
                             }
-                            else
+                            
+                            if(request->m_attached_num < 2)
+                            {
+                                ++request->m_try_num;
+                                ++request->m_attached_num;
+                                return;
+                            }
+
+                            request->m_attached_chains.pop_front();
+                            
+                            while(true)
                             {
                                 auto last_peer = request->m_attached_chains.front()->m_peer;
                                 
                                 if(last_peer->m_connection->closed())
                                 {
                                     request->m_attached_chains.pop_front();
+                                    --request->m_attached_num;
                                     
                                     if(request->m_attached_chains.empty())
                                     {
                                         punish_brief_req(request);
-
                                         return;
                                     }
                                 }
-                                
-                                while(true)
+                                else
                                 {
-                                    auto pchain = request->m_attached_chains.front();
-                                    request->m_attached_chains.pop_front();
-                                    request->m_attached_chains.push_back(pchain);
-                                    auto last_peer = request->m_attached_chains.front()->m_peer;
-                                    
-                                    if(last_peer->m_connection->closed())
-                                    {
-                                        request->m_attached_chains.pop_front();
-                                        
-                                        if(request->m_attached_chains.empty())
-                                        {
-                                            punish_brief_req(request);
-
-                                            return;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        break;
-                                    }
+                                    break;
                                 }
-                                
-                                rapidjson::Document doc;
-                                doc.SetObject();
-                                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-                                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-                                doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
-                                doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-                                request->m_attached_chains.front()->m_peer->m_connection->send(doc);
-                                ++request->m_try_num;
                             }
+                            
+                            rapidjson::Document doc;
+                            doc.SetObject();
+                            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                            doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+                            doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
+                            doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
+                            request->m_attached_chains.front()->m_peer->m_connection->send(doc);
+                            ++request->m_try_num;
                         }, 1);
                 }
                 else
@@ -5097,10 +5095,8 @@ void Blockchain::do_brief_chain()
                     if(!pending_chain->m_brief_attached)
                     {
                         pending_chain->m_brief_attached = request;
-                        auto pchain = request->m_attached_chains.front();
-                        request->m_attached_chains.pop_front();
-                        request->m_attached_chains.push_front(pending_chain);
-                        request->m_attached_chains.push_front(pchain);
+                        request->m_attached_chains.push_back(pending_chain);
+                        ++request->m_attached_num;
                     }
                 }
                 

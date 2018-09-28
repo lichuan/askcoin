@@ -13,6 +13,7 @@ public:
     std::string m_hash;
     uint32 m_try_num;
     uint64 m_timer_id;
+    uint32 m_attached_num;
 };
 
 #endif

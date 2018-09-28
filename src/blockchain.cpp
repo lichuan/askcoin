@@ -3844,61 +3844,52 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
     ++request->m_try_num;
     LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pending_id, pending_hash.c_str());
     request->m_timer_id = m_timer_ctl.add_timer([=]() {
-            if(request->m_try_num >= 3 && request->m_try_num >= request->m_attached_chains.size())
+            if(request->m_try_num >= 2 && request->m_try_num >= request->m_attached_num)
             {
                 punish_detail_req(request);
+                return;
             }
-            else
+
+            if(request->m_attached_num < 2)
+            {
+                ++request->m_try_num;
+                ++request->m_attached_num;
+                return;
+            }
+
+            request->m_attached_chains.pop_front();
+
+            while(true)
             {
                 auto last_peer = request->m_attached_chains.front()->m_peer;
                 
                 if(last_peer->m_connection->closed())
                 {
                     request->m_attached_chains.pop_front();
+                    --request->m_attached_num;
                     
                     if(request->m_attached_chains.empty())
                     {
                         punish_detail_req(request);
-
                         return;
                     }
                 }
-
-                while(true)
+                else
                 {
-                    auto pchain = request->m_attached_chains.front();
-                    request->m_attached_chains.pop_front();
-                    request->m_attached_chains.push_back(pchain);
-                    auto last_peer = request->m_attached_chains.front()->m_peer;
-                    
-                    if(last_peer->m_connection->closed())
-                    {
-                        request->m_attached_chains.pop_front();
-                        
-                        if(request->m_attached_chains.empty())
-                        {
-                            punish_detail_req(request);
-                            
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        break;
-                    }
+                    break;
                 }
-
-                rapidjson::Document doc;
-                doc.SetObject();
-                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-                doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
-                doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-                request->m_attached_chains.front()->m_peer->m_connection->send(doc);
-                ++request->m_try_num;
             }
+            
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+            doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
+            doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
+            request->m_attached_chains.front()->m_peer->m_connection->send(doc);
+            ++request->m_try_num;
         }, 1);
-
+    
     for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end(); ++iter)
     {
         auto &inner_chain = *iter;
@@ -3921,6 +3912,7 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
         inner_chain->m_start = idx;
         inner_chain->m_detail_attached = request;
         request->m_attached_chains.push_back(inner_chain);
+        ++request->m_attached_num;
     }
     
     request->m_attached_chains.front()->m_peer->m_connection->send(doc);
