@@ -936,20 +936,18 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 
 void Node::broadcast(rapidjson::Document &doc)
 {
-    bool empty = true;
-    std::unique_lock<std::mutex> lock(m_peer_mutex);
-    
-    for(auto &p : m_peers)
-    {
-        p.second->m_connection->send(doc);
-        empty = false;
-    }
+    std::lock_guard<std::mutex> guard(m_peer_mutex);
 
-    lock.unlock();
-
-    if(empty)
+    if(m_peers.empty())
     {
         LOG_ERROR("Node::broadcast m_peers is empty");
+    }
+    else
+    {
+        for(auto &p : m_peers)
+        {
+            p.second->m_connection->send(doc);
+        }
     }
 }
 
