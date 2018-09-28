@@ -936,9 +936,20 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 
 void Node::broadcast(rapidjson::Document &doc)
 {
+    bool empty = true;
+    std::unique_lock<std::mutex> lock(m_peer_mutex);
+    
     for(auto &p : m_peers)
     {
         p.second->m_connection->send(doc);
+        empty = false;
+    }
+
+    lock.unlock();
+
+    if(empty)
+    {
+        LOG_ERROR("Node::broadcast m_peers is empty");
     }
 }
 
@@ -3748,7 +3759,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
 
-            LOG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, write to leveldb finished", block_id, block_hash.c_str());
+            char hash_raw[32];
+            fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
+            std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
+            LOG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s (hex: %s), write to leveldb finished", block_id, \
+                     block_hash.c_str(), hex_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
             m_block_changed = true;
