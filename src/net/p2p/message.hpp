@@ -17,7 +17,9 @@ enum MSG_CMD
 {
     SYS_PING,
     SYS_PONG,
-
+    SYS_PEER_REQ,
+    SYS_PEER_RSP,
+    
     REG_REQ = 0,
     REG_RSP,
     REG_VERIFY_REQ,

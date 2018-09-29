@@ -472,11 +472,10 @@ void Blockchain::do_score()
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         rapidjson::Value peers(rapidjson::kArrayType);
         doc.AddMember("utc", time(NULL), allocator);
-        uint32 count = 0;
         std::unique_lock<std::mutex> lock(p2p_node->m_score_mutex);
         auto &peer_scores = p2p_node->m_peer_scores;
         
-        while(peer_scores.size() > 5000)
+        while(peer_scores.size() > 1000)
         {
             auto peer_score = *peer_scores.rbegin();
             p2p_node->del_peer_score(peer_score);
@@ -484,11 +483,6 @@ void Blockchain::do_score()
 
         for(auto iter = peer_scores.begin(); iter != peer_scores.end(); ++iter)
         {
-            if(++count > 1000)
-            {
-                break;
-            }
-            
             std::shared_ptr<Peer_Score> peer_score = *iter;
             rapidjson::Value peer_info(rapidjson::kObjectType);
             peer_info.AddMember("host", rapidjson::StringRef(peer_score->m_addr.m_host.c_str()), allocator);
@@ -3849,11 +3843,17 @@ void Blockchain::switch_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 punish_detail_req(request);
                 return;
             }
-
+            
             if(request->m_attached_num < 2)
             {
                 ++request->m_try_num;
                 ++request->m_attached_num;
+                return;
+            }
+
+            if(request->m_try_num >= 7)
+            {
+                punish_detail_req(request);
                 return;
             }
 

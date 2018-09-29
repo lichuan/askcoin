@@ -46,6 +46,21 @@ bool Node::start(uint16 port)
         m_timer_thread = std::move(timer_thread);
         std::thread connect_thread(std::bind(&Node::connect_proc, this));
         m_connect_thread = std::move(connect_thread);
+        m_timer_ctl.add_timer([this]() {
+                static bool get_peer_doc = false;
+                static rapidjson::Document doc;
+                
+                if(!get_peer_doc)
+                {
+                    doc.SetObject();
+                    rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                    doc.AddMember("msg_type", MSG_SYS, allocator);
+                    doc.AddMember("msg_cmd", SYS_PEER_REQ, allocator);
+                    get_peer_doc = true;
+                }
+                
+                broadcast(doc);
+            }, 60);
         
         return true;
     }
@@ -269,6 +284,8 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         }
         else
         {
+            rapidjson::Document& doc = message->doc();
+            
             if(cmd == SYS_PING)
             {
                 if(!connection->is_passive())
@@ -304,6 +321,102 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                     m_timer_ctl.reset_timer(peer->m_timer_id);
                 }
             }
+            else if(cmd == SYS_PEER_REQ)
+            {
+                std::unique_lock<std::mutex> lock(m_score_mutex);
+                std::vector<std::shared_ptr<Peer_Score>> vec;
+                vec.insert(vec.begin(), m_peer_scores.begin(), m_peer_scores.end());
+                lock.unlock();
+                std::random_shuffle(vec.begin(), vec.end());
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", MSG_SYS, allocator);
+                doc.AddMember("msg_cmd", SYS_PEER_RSP, allocator);
+                rapidjson::Value peers(rapidjson::kArrayType);
+                uint32 count = 0;
+                
+                for(auto peer_score : vec)
+                {
+                    rapidjson::Value peer_info(rapidjson::kObjectType);
+                    peer_info.AddMember("host", rapidjson::StringRef(peer_score->m_addr.m_host.c_str()), allocator);
+                    peer_info.AddMember("port", peer_score->m_addr.m_port, allocator);
+                    peers.PushBack(peer_info, allocator);
+
+                    if(++count >= 5)
+                    {
+                        break;
+                    }
+                }
+                
+                doc.AddMember("peers", peers, allocator);
+                connection->send(doc);
+            }
+            else if(cmd == SYS_PEER_RSP)
+            {
+                if(!doc.HasMember("peers"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                const rapidjson::Value &peers = doc["peers"];
+                
+                if(!peers.IsArray())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                auto peer_num = peers.Size();
+
+                if(peer_num > 5)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                std::unique_lock<std::mutex> lock(m_score_mutex);
+
+                for(uint32 i = 0; i < peer_num; ++i)
+                {
+                    auto& pc = peers[i];
+                    
+                    if(!pc.IsObject())
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!pc.HasMember("host"))
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!pc["host"].IsString())
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!pc.HasMember("port"))
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!pc["port"].IsUint())
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    std::shared_ptr<Peer_Score> peer_score(new Peer_Score(fly::net::Addr(pc["host"].GetString(), \
+                        pc["port"].GetUint())));
+                    add_peer_score(peer_score);
+                }
+            }
             else
             {
                 connection->close();
@@ -312,7 +425,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
         ASKCOIN_RETURN;
     }
-
+    
     auto iter_unreg = m_unreg_peers.find(conn_id);
     
     if(iter_unreg == m_unreg_peers.end())
@@ -493,6 +606,9 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             m_timer_ctl.reset_timer(peer_unreg->m_timer_id);
             lock.unlock();
             connection->close();
+            std::shared_ptr<Peer_Score> peer_score = std::make_shared<Peer_Score>(peer_unreg->m_addr);
+            std::lock_guard<std::mutex> guard(m_score_mutex);
+            add_peer_score(peer_score);
         }
         else
         {
@@ -628,11 +744,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             peer_score = iter->second;
         }
-        else
-        {
-            add_peer_score(peer_score);
-        }
-        
+
         lock.unlock();
         uint8 expect = 0;
 
@@ -3853,6 +3965,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         {
                             ++request->m_try_num;
                             ++request->m_attached_num;
+                            return;
+                        }
+
+                        if(request->m_try_num >= 7)
+                        {
+                            punish_detail_req(request);
                             return;
                         }
                         
