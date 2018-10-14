@@ -70,6 +70,7 @@ uint64 Topic::get_total()
     return m_total;
 }
 
+// todo, empty topic tracker
 bool Topic::add_member(std::string tx_id, std::shared_ptr<Account> account)
 {
     for(auto &p : m_members)

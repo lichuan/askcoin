@@ -5,14 +5,7 @@
 #include <deque>
 #include "pending_block.hpp"
 #include "accum_pow.hpp"
-
-namespace net {
-namespace p2p {
-
-class Peer;
-
-}
-}
+#include "net/p2p/peer.hpp"
 
 class Pending_Brief_Request;
 class Pending_Detail_Request;

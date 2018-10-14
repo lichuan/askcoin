@@ -73,11 +73,14 @@ private:
     void punish_brief_req(std::shared_ptr<Pending_Brief_Request> req);
     void punish_detail_req(std::shared_ptr<Pending_Detail_Request> request);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
-    void do_brief_chain();
+    void do_brief_chain(std::shared_ptr<Pending_Chain> chain);
+    void finish_brief(std::shared_ptr<Pending_Brief_Request> request);
+    void finish_detail(std::shared_ptr<Pending_Detail_Request> request);
+    void do_detail_chain(std::shared_ptr<Pending_Chain> chain);
     void do_uv_tx();
     
 private:
-    void switch_chain(std::shared_ptr<Pending_Chain> pending_chain);
+    uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
     void rollback(uint64 block_id);
     std::atomic<bool> m_stop{false};
     std::thread m_msg_thread;
@@ -96,13 +99,10 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
-    bool m_is_switching = false;
-    std::list<std::shared_ptr<Pending_Chain>> m_pending_brief_chains;
-    std::list<std::shared_ptr<Pending_Chain>> m_brief_chains;
+    std::unordered_map<std::string, std::shared_ptr<Pending_Chain>> m_chains_by_peer_key;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
-    std::shared_ptr<Pending_Detail_Request> m_detail_request;
+    std::unordered_map<std::string, std::shared_ptr<Pending_Detail_Request>> m_pending_detail_reqs;
     Timer_Controller m_timer_ctl;
-    std::unordered_map<std::string, uint32> m_pending_peer_keys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
     std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;

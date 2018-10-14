@@ -1,4 +1,5 @@
 #include "block.hpp"
+#include "blockchain.hpp"
 
 Block::Block(uint64 id, uint64 utc, uint32 version, uint32 zero_bits, std::string hash)
 {
@@ -40,14 +41,9 @@ std::string Block::hash()
     return m_hash;
 }
 
-bool Block::is_genesis()
+bool Block::difficult_than_me(std::shared_ptr<Block> other)
 {
-    return m_id == 0 && m_hash == "QKQzeV/UzpDNQDWZGVVU5vyKdTw9MmrTbOD/wfa480Y=";
-}
-
-bool Block::difficult_than(std::shared_ptr<Block> other)
-{
-    return m_accum_pow > other->m_accum_pow;
+    return other->m_accum_pow > m_accum_pow;
 }
 
 bool Block::difficult_than_me(const Accum_Pow &accum_pow)
@@ -60,10 +56,15 @@ bool Block::difficult_equal(const Accum_Pow &accum_pow)
     return m_accum_pow == accum_pow;
 }
 
-void Block::add_my_difficulty_to(std::shared_ptr<Block> other)
+bool Block::difficult_equal(std::shared_ptr<Block> other)
 {
-    other->m_accum_pow = m_accum_pow;
-    other->m_accum_pow.add_pow(other->zero_bits());
+    return m_accum_pow == other->m_accum_pow;
+}
+
+void Block::add_difficulty_from(std::shared_ptr<Block> other)
+{
+    m_accum_pow = other->m_accum_pow;
+    m_accum_pow.add_pow(m_zero_bits);
 }
 
 void Block::set_parent(std::shared_ptr<Block> parent)
@@ -77,12 +78,15 @@ std::shared_ptr<Block> Block::get_parent()
     return m_parent;
 }
 
-void Block::set_miner(std::shared_ptr<Account> miner)
+void Block::set_miner_pubkey(std::string pubkey)
 {
-    m_miner = miner;
+    m_miner_pubkey = pubkey;
 }
 
 std::shared_ptr<Account> Block::get_miner()
 {
-    return m_miner;
+    std::shared_ptr<Account> miner;
+    Blockchain::instance()->get_account(m_miner_pubkey, miner);
+    
+    return miner;
 }
