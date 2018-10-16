@@ -286,20 +286,13 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
     {
         return true;
     }
-
-    auto iter = m_rollback_txs.find(cur_block_id - (TOPIC_LIFE_TIME + 1));
-    
-    if(iter == m_rollback_txs.end())
-    {
-        std::pair<std::shared_ptr<Block>, std::list<std::string>> value;
-        m_rollback_txs.insert(std::make_pair(cur_block_id - (TOPIC_LIFE_TIME + 1), value));
-    }
     
     if(cur_block_id > 8641)
     {
         m_rollback_txs.erase(cur_block_id - 8641);
     }
-    
+
+    m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
     auto &tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
     std::shared_ptr<Block> iter_block = block;
     uint32 count = 0;
@@ -384,20 +377,13 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     {
         return true;
     }
-
-    auto iter = m_rollback_topics.find(cur_block_id - (TOPIC_LIFE_TIME + 1));
     
-    if(iter == m_rollback_topics.end())
-    {
-        std::list<std::shared_ptr<Topic>> value;
-        m_rollback_topics.insert(std::make_pair(cur_block_id - (TOPIC_LIFE_TIME + 1), value));
-    }
-
     if(cur_block_id > 8641)
     {
         m_rollback_topics.erase(cur_block_id - 8641);
     }
 
+    m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
     auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
     
     while(!m_topic_list.empty())
@@ -1679,21 +1665,31 @@ bool Blockchain::start(std::string db_path)
                 
                 if(tx_type == 2) // send coin
                 {
-                    std::string memo = data["memo"].GetString();
-
-                    if(!memo.empty())
+                    if(data.HasMember("memo"))
                     {
+                        if(!data["memo"].IsString())
+                        {
+                            ASKCOIN_RETURN false;
+                        }
+                        
+                        std::string memo = data["memo"].GetString();
+                        
+                        if(memo.empty())
+                        {
+                            ASKCOIN_RETURN false;
+                        }
+                        
                         if(!is_base64_char(memo))
                         {
                             ASKCOIN_RETURN false;
                         }
-
+                        
                         if(memo.length() > 80 || memo.length() < 4)
                         {
                             ASKCOIN_RETURN false;
                         }
                     }
-                    
+
                     uint64 amount = data["amount"].GetUint64();
                     
                     if(amount == 0)
@@ -3531,21 +3527,31 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 
                 if(tx_type == 2) // send coin
                 {
-                    std::string memo = data["memo"].GetString();
-
-                    if(!memo.empty())
+                    if(data.HasMember("memo"))
                     {
+                        if(!data["memo"].IsString())
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        std::string memo = data["memo"].GetString();
+                        
+                        if(memo.empty())
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
                         if(!is_base64_char(memo))
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-
+                        
                         if(memo.length() > 80 || memo.length() < 4)
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
                     }
-                    
+
                     uint64 amount = data["amount"].GetUint64();
                     
                     if(amount == 0)
@@ -3959,6 +3965,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                 m_account_names.erase(register_name);
                 m_account_by_pubkey.erase(pubkey);
+                --m_cur_account_id;
             }
             else
             {
@@ -4542,6 +4549,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                     m_account_names.erase(register_name);
                     m_account_by_pubkey.erase(pubkey);
+                    --m_cur_account_id;
                 }
                 else
                 {

@@ -2132,8 +2132,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             auto request = iter_req->second;
-            auto pending_block = request->m_pb;
-                        
+            
+            if(request->m_chains.empty())
+            {
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("data"))
             {
                 punish_peer(peer);
@@ -2356,8 +2360,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-            
-            pending_block->m_doc = message->doc_shared();
+
+            auto pending_chain = *request->m_chains.begin();
+            pending_chain->m_req_blocks[pending_chain->m_start]->m_doc = message->doc_shared();
             finish_detail(request);
         }
         else
@@ -2759,35 +2764,35 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 
                 if(tx_type == 2) // send coin
                 {
-                    if(!data.HasMember("memo"))
+                    if(data.HasMember("memo"))
                     {
-                        punish_peer(peer);
-                        ASKCOIN_RETURN;
-                    }
-                        
-                    if(!data["memo"].IsString())
-                    {
-                        punish_peer(peer);
-                        ASKCOIN_RETURN;
-                    }
-                        
-                    std::string memo = data["memo"].GetString();
-                        
-                    if(!memo.empty())
-                    {
-                        if(!is_base64_char(memo))
+                        if(!data["memo"].IsString())
                         {
                             punish_peer(peer);
                             ASKCOIN_RETURN;
                         }
 
+                        std::string memo = data["memo"].GetString();
+
+                        if(memo.empty())
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        if(!is_base64_char(memo))
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
                         if(memo.length() > 80 || memo.length() < 4)
                         {
                             punish_peer(peer);
                             ASKCOIN_RETURN;
                         }
                     }
-
+                    
                     if(!data.HasMember("amount"))
                     {
                         punish_peer(peer);
@@ -3737,1678 +3742,1492 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
 
 void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
 {
-    // auto pending_block = request->m_pb;
+    auto pending_chain = *request->m_chains.begin();
+    auto pending_block = pending_chain->m_req_blocks[pending_chain->m_start];
 
-    // if(m_most_difficult_block->difficult_than_me(pending_block->m_accum_pow))
-    // {
-    //     uint64 pending_start = switch_chain(request);
+    if(m_most_difficult_block->difficult_than_me(pending_block->m_accum_pow))
+    {
+        uint64 pending_start = switch_chain(request);
         
-    //     for(auto i = pending_start; i <= pending_chain->m_start; ++i)
-    //     {
-    //         auto pb = pending_chain->m_req_blocks[i];
-    //         auto &doc = *pb->m_doc;
-    //         const rapidjson::Value &data = doc["data"];
-    //         std::string miner_pubkey = data["miner"].GetString();
-    //         std::shared_ptr<Account> miner;
+        for(auto i = pending_start; i <= pending_chain->m_start; ++i)
+        {
+            auto pb = pending_chain->m_req_blocks[i];
+            auto &doc = *pb->m_doc;
+            const rapidjson::Value &data = doc["data"];
+            std::string miner_pubkey = data["miner"].GetString();
+            std::shared_ptr<Account> miner;
             
-    //         if(!get_account(miner_pubkey, miner))
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
+            if(!get_account(miner_pubkey, miner))
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
             
-    //         auto pre_hash = pb->m_pre_hash;
-    //         uint64 block_id = pb->m_id;
-    //         std::shared_ptr<Block> parent = m_blocks[pre_hash];
-    //         uint64 parent_block_id = parent->id();
-    //         uint64 parent_utc = parent->utc();
-    //         std::string parent_hash = parent->hash();
-    //         uint32 parent_zero_bits = parent->zero_bits();
-    //         uint64 utc_diff = parent->utc_diff();
+            auto pre_hash = pb->m_pre_hash;
+            uint64 block_id = pb->m_id;
+            std::string block_hash = pb->m_hash;
+            uint32 version = pb->m_version;
+            uint64 utc = pb->m_utc;
+            uint32 zero_bits = pb->m_zero_bits;
+            std::shared_ptr<Block> parent = m_blocks[pre_hash];
+            uint64 parent_block_id = parent->id();
+            uint64 parent_utc = parent->utc();
+            uint32 parent_zero_bits = parent->zero_bits();
+            uint64 utc_diff = parent->utc_diff();
             
-    //         if(block_id != parent_block_id + 1)
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
-
-    //         if(pre_hash != parent_hash)
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
+            if(block_id != parent_block_id + 1)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
             
-    //         if(utc_diff < 15)
-    //         {
-    //             if(zero_bits != parent_zero_bits + 1)
-    //             {
-    //                 punish_detail_req(request);
-    //                 ASKCOIN_RETURN;
-    //             }
-    //         }
-    //         else if(utc_diff > 35)
-    //         {
-    //             if(parent_zero_bits > 1)
-    //             {
-    //                 if(zero_bits != parent_zero_bits - 1)
-    //                 {
-    //                     punish_detail_req(request);
-    //                     ASKCOIN_RETURN;
-    //                 }
-    //             }
-    //             else if(zero_bits != 1)
-    //             {
-    //                 punish_detail_req(request);
-    //                 ASKCOIN_RETURN;
-    //             }
-    //         }
-    //         else if(zero_bits != parent_zero_bits)
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
+            if(utc_diff < 15)
+            {
+                if(zero_bits != parent_zero_bits + 1)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else if(utc_diff > 35)
+            {
+                if(parent_zero_bits > 1)
+                {
+                    if(zero_bits != parent_zero_bits - 1)
+                    {
+                        punish_detail_req(request);
+                        ASKCOIN_RETURN;
+                    }
+                }
+                else if(zero_bits != 1)
+                {
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else if(zero_bits != parent_zero_bits)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
         
-    //         if(utc < parent_utc)
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
+            if(utc < parent_utc)
+            {
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
             
-    //         uint64 now = time(NULL);
+            uint64 now = time(NULL);
         
-    //         if(utc > now)
-    //         {
-    //             punish_detail_req(request);
-    //             LOG_ERROR("recv BLOCK_DETAIL_RSP, verify utc failed, id: %lu, hash: %s, please check your system time", \
-    //                       block_id, block_hash.c_str());
-    //             return;
-    //         }
-
-    //         if(m_tx_map.find(tx_id) != m_tx_map.end())
-    //         {
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
-
-    //         bool proc_tx_failed = false;
-    //         int32 rollback_idx = -1;
-    //         std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
-    //         cur_block->set_parent(parent);
-    //         cur_block->set_miner_pubkey(miner_pubkey);
-    //         cur_block->add_difficulty_from(parent);
-    //         uint64 cur_block_id = block_id;
-
-    //         if(!proc_topic_expired(cur_block_id))
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
-
-    //         if(!proc_tx_map(cur_block))
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
+            if(utc > now)
+            {
+                punish_detail_req(request);
+                LOG_ERROR("recv BLOCK_DETAIL_RSP, verify utc failed, id: %lu, hash: %s, please check your system time", \
+                          block_id, block_hash.c_str());
+                return;
+            }
             
-    //         for(uint32 i = 0; i < tx_num; ++i)
-    //         {
-    //             std::string tx_id = tx_ids[i].GetString();
-    //             const rapidjson::Value &tx_node = tx[i];
-    //             const rapidjson::Value &data = tx_node["data"];
-    //             std::string pubkey = data["pubkey"].GetString();
-    //             uint32 tx_type = data["type"].GetUint();
-    //             uint64 utc = data["utc"].GetUint64();
-                
-    //             if(tx_type == 1)
-    //             {
-    //                 if(!data.HasMember("avatar"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+            bool proc_tx_failed = false;
+            int32 rollback_idx = -1;
+            std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
+            cur_block->set_parent(parent);
+            cur_block->set_miner_pubkey(miner_pubkey);
+            cur_block->add_difficulty_from(parent);
+            uint64 cur_block_id = block_id;
 
-    //                 if(!data["avatar"].IsUint())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                    
-    //                 if(!data.HasMember("sign"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+            if(!proc_topic_expired(cur_block_id))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
 
-    //                 if(!data["sign"].IsString())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                    
-    //                 std::shared_ptr<Account> exist_account;
-                
-    //                 if(get_account(pubkey, exist_account))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                
-    //                 if(!data.HasMember("sign_data"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+            if(!proc_tx_map(cur_block))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
 
-    //                 std::string reg_sign = data["sign"].GetString();
-
-    //                 if(!is_base64_char(reg_sign))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+            const rapidjson::Value &tx_ids = data["tx_ids"];
+            uint32 tx_num = tx_ids.Size();
+            const rapidjson::Value &tx = doc["tx"];
+            
+            for(uint32 i = 0; i < tx_num; ++i)
+            {
+                std::string tx_id = tx_ids[i].GetString();
+                const rapidjson::Value &tx_node = tx[i];
+                const rapidjson::Value &data = tx_node["data"];
+                std::string pubkey = data["pubkey"].GetString();
+                uint32 tx_type = data["type"].GetUint();
+                uint64 utc = data["utc"].GetUint64();
                 
-    //                 const rapidjson::Value &sign_data = data["sign_data"];
-
-    //                 if(!sign_data.IsObject())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                    
-    //                 rapidjson::StringBuffer buffer;
-    //                 rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-    //                 sign_data.Accept(writer);
-    //                 std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                if(m_tx_map.find(tx_id) != m_tx_map.end())
+                {
+                    proc_tx_failed = true;
+                    ASKCOIN_TRACE;
+                    break;
+                }
                 
-    //                 if(!sign_data.HasMember("block_id"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                if(tx_type == 1)
+                {
+                    if(!data.HasMember("avatar"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(!sign_data["block_id"].IsUint64())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data["avatar"].IsUint())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 if(!sign_data.HasMember("name"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data.HasMember("sign"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(!sign_data["name"].IsString())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data["sign"].IsString())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 if(!sign_data.HasMember("referrer"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    std::shared_ptr<Account> exist_account;
+                
+                    if(get_account(pubkey, exist_account))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    if(!data.HasMember("sign_data"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(!sign_data["referrer"].IsString())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                    
-    //                 if(!sign_data.HasMember("fee"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    std::string reg_sign = data["sign"].GetString();
 
-    //                 if(!sign_data["fee"].IsUint64())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                    
-    //                 uint64 block_id = sign_data["block_id"].GetUint64();
-    //                 std::string register_name = sign_data["name"].GetString();
-    //                 std::string referrer_pubkey = sign_data["referrer"].GetString();
-    //                 uint64 fee = sign_data["fee"].GetUint64();
-                    
-    //                 if(block_id == 0)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!is_base64_char(reg_sign))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    const rapidjson::Value &sign_data = data["sign_data"];
 
-    //                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!sign_data.IsObject())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                    
+                    rapidjson::StringBuffer buffer;
+                    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                    sign_data.Accept(writer);
+                    std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
                 
-    //                 if(fee != 2)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                
-    //                 if(!is_base64_char(referrer_pubkey))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!sign_data.HasMember("block_id"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(referrer_pubkey.length() != 88)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                
-    //                 std::shared_ptr<Account> referrer;
-                
-    //                 if(!get_account(referrer_pubkey, referrer))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                
-    //                 if(referrer->get_balance() < 2)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-                
-    //                 if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-    //                 if(!is_base64_char(register_name))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!sign_data["block_id"].IsUint64())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                    
+                    if(!sign_data.HasMember("name"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(register_name.length() > 20 || register_name.length() < 4)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!sign_data["name"].IsString())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 if(account_name_exist(register_name))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!sign_data.HasMember("referrer"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(!sign_data["referrer"].IsString())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 char raw_name[15] = {0};
-    //                 uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
+                    if(!sign_data.HasMember("fee"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(!sign_data["fee"].IsUint64())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                    
+                    uint64 block_id = sign_data["block_id"].GetUint64();
+                    std::string register_name = sign_data["name"].GetString();
+                    std::string referrer_pubkey = sign_data["referrer"].GetString();
+                    uint64 fee = sign_data["fee"].GetUint64();
+                    
+                    if(block_id == 0)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                 
-    //                 if(len > 15 || len == 0)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(fee != 2)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    if(!is_base64_char(referrer_pubkey))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(referrer_pubkey.length() != 88)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    std::shared_ptr<Account> referrer;
+                
+                    if(!get_account(referrer_pubkey, referrer))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    if(referrer->get_balance() < 2)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                
+                    if(!verify_sign(referrer_pubkey, sign_hash, reg_sign))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(!is_base64_char(register_name))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(register_name.length() > 20 || register_name.length() < 4)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 for(uint32 i = 0; i < len; ++i)
-    //                 {
-    //                     if(std::isspace(static_cast<unsigned char>(raw_name[i])))
-    //                     {
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-    //                 }
+                    if(account_name_exist(register_name))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 uint32 avatar = data["avatar"].GetUint();
+                    char raw_name[15] = {0};
+                    uint32 len = fly::base::base64_decode(register_name.c_str(), register_name.length(), raw_name, 15);
+                
+                    if(len > 15 || len == 0)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 if(avatar < 1 || avatar > 100)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    for(uint32 i = 0; i < len; ++i)
+                    {
+                        if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+                        {
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    }
                     
-    //                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                    uint32 avatar = data["avatar"].GetUint();
                     
-    //                 if(!referrer_referrer)
-    //                 {
-    //                     if(referrer->id() > 1)
-    //                     {
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                    if(avatar < 1 || avatar > 100)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                    
+                    std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                    
+                    if(!referrer_referrer)
+                    {
+                        if(referrer->id() > 1)
+                        {
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
-    //                     m_reserve_fund_account->add_balance(1);
-    //                 }
-    //                 else
-    //                 {
-    //                     referrer_referrer->add_balance(1);
-    //                 }
+                        m_reserve_fund_account->add_balance(1);
+                    }
+                    else
+                    {
+                        referrer_referrer->add_balance(1);
+                    }
                     
-    //                 referrer->sub_balance(2);
-    //                 miner->add_balance(1);
-    //                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
-    //                 m_account_names.insert(register_name);
-    //                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
-    //                 reg_account->set_referrer(referrer);
-    //             }
-    //             else
-    //             {
-    //                 if(!data.HasMember("fee"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    referrer->sub_balance(2);
+                    miner->add_balance(1);
+                    std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
+                    m_account_names.insert(register_name);
+                    m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                    reg_account->set_referrer(referrer);
+                }
+                else
+                {
+                    if(!data.HasMember("fee"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(!data["fee"].IsUint64())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data["fee"].IsUint64())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 if(!data.HasMember("block_id"))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data.HasMember("block_id"))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(!data["block_id"].IsUint64())
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!data["block_id"].IsUint64())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                     
-    //                 uint64 fee = data["fee"].GetUint64();
-    //                 uint64 block_id = data["block_id"].GetUint64();
+                    uint64 fee = data["fee"].GetUint64();
+                    uint64 block_id = data["block_id"].GetUint64();
                     
-    //                 if(block_id == 0)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(block_id == 0)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                 
-    //                 if(fee != 2)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(fee != 2)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 std::shared_ptr<Account> account;
+                    std::shared_ptr<Account> account;
                 
-    //                 if(!get_account(pubkey, account))
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(!get_account(pubkey, account))
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
 
-    //                 if(account->get_balance() < 2)
-    //                 {
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
+                    if(account->get_balance() < 2)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
                 
-    //                 std::shared_ptr<Account> referrer = account->get_referrer();
+                    std::shared_ptr<Account> referrer = account->get_referrer();
                     
-    //                 if(!referrer)
-    //                 {
-    //                     if(account->id() > 1)
-    //                     {
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                    if(!referrer)
+                    {
+                        if(account->id() > 1)
+                        {
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     m_reserve_fund_account->add_balance(1);
-    //                 }
-    //                 else
-    //                 {
-    //                     referrer->add_balance(1);
-    //                 }
+                        m_reserve_fund_account->add_balance(1);
+                    }
+                    else
+                    {
+                        referrer->add_balance(1);
+                    }
                     
-    //                 account->sub_balance(2);
-    //                 miner->add_balance(1);
-    //                 auto failed_cb = [=]() {
-    //                     miner->sub_balance(1);
-    //                     account->add_balance(2);
+                    account->sub_balance(2);
+                    miner->add_balance(1);
+                    auto failed_cb = [=]() {
+                        miner->sub_balance(1);
+                        account->add_balance(2);
 
-    //                     if(!referrer)
-    //                     {
-    //                         m_reserve_fund_account->sub_balance(1);
-    //                     }
-    //                     else
-    //                     {
-    //                         referrer->sub_balance(1);
-    //                     }
-    //                 };
+                        if(!referrer)
+                        {
+                            m_reserve_fund_account->sub_balance(1);
+                        }
+                        else
+                        {
+                            referrer->sub_balance(1);
+                        }
+                    };
                     
-    //                 if(tx_type == 2) // send coin
-    //                 {
-    //                     if(!data.HasMember("memo"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     if(!data["memo"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     std::string memo = data["memo"].GetString();
-                        
-    //                     if(!memo.empty())
-    //                     {
-    //                         if(!is_base64_char(memo))
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
-
-    //                         if(memo.length() > 80 || memo.length() < 4)
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
-    //                     }
-
-    //                     if(!data.HasMember("amount"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     if(!data["amount"].IsUint64())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     uint64 amount = data["amount"].GetUint64();
-                        
-    //                     if(amount == 0)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                    
-    //                     if(account->get_balance() < amount)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data.HasMember("receiver"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data["receiver"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     std::string receiver_pubkey = data["receiver"].GetString();
-                        
-    //                     if(!is_base64_char(receiver_pubkey))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(receiver_pubkey.length() != 88)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                    
-    //                     std::shared_ptr<Account> receiver;
-                    
-    //                     if(!get_account(receiver_pubkey, receiver))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     account->sub_balance(amount);
-    //                     receiver->add_balance(amount);
-    //                 }
-    //                 else if(tx_type == 3) // new topic
-    //                 {
-    //                     if(!data.HasMember("reward"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data["reward"].IsUint64())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     uint64 reward = data["reward"].GetUint64();
-
-    //                     if(reward == 0)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(account->get_balance() < reward)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     std::shared_ptr<Topic> exist_topic;
-
-    //                     if(get_topic(tx_id, exist_topic))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data.HasMember("topic"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data["topic"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     std::string topic_data = data["topic"].GetString();
-                    
-    //                     if(!is_base64_char(topic_data))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(topic_data.length() < 4 || topic_data.length() > 400)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                    
-    //                     if(account->m_topic_list.size() >= 100)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                    
-    //                     account->sub_balance(reward);
-    //                     std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
-    //                     topic->set_owner(account);
-    //                     account->m_topic_list.push_back(topic);
-    //                     m_topic_list.push_back(topic);
-    //                     m_topics.insert(std::make_pair(tx_id, topic));
-    //                 }
-    //                 else if(tx_type == 4) // reply
-    //                 {
-    //                     if(!data.HasMember("topic_key"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data["topic_key"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     std::string topic_key = data["topic_key"].GetString();
-                        
-    //                     if(!is_base64_char(topic_key))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(topic_key.length() != 44)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     std::shared_ptr<Topic> topic;
-                    
-    //                     if(!get_topic(topic_key, topic))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data.HasMember("reply"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(!data["reply"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                        
-    //                     std::string reply_data = data["reply"].GetString();
-                    
-    //                     if(!is_base64_char(reply_data))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(reply_data.length() < 4 || reply_data.length() > 400)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-                    
-    //                     std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
-    //                     reply->set_owner(account);
-                    
-    //                     if(topic->m_reply_list.size() >= 1000)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
-
-    //                     if(data.HasMember("reply_to"))
-    //                     {
-    //                         if(!data["reply_to"].IsString())
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
+                    if(tx_type == 2) // send coin
+                    {
+                        if(data.HasMember("memo"))
+                        {
+                            if(!data["memo"].IsString())
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
                             
-    //                         std::string reply_to_key = data["reply_to"].GetString();
+                            std::string memo = data["memo"].GetString();
+
+                            if(memo.empty())
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
                             
-    //                         if(!is_base64_char(reply_to_key))
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
-
-    //                         if(reply_to_key.length() != 44)
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
-                        
-    //                         std::shared_ptr<Reply> reply_to;
-                        
-    //                         if(!topic->get_reply(reply_to_key, reply_to))
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
-
-    //                         if(reply_to->type() != 0)
-    //                         {
-    //                             failed_cb();
-    //                             proc_tx_failed = true;
-    //                             ASKCOIN_TRACE;
-    //                             break;
-    //                         }
+                            if(!is_base64_char(memo))
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
                             
-    //                         reply->set_reply_to(reply_to);
-    //                     }
+                            if(memo.length() > 80 || memo.length() < 4)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                        }
+                        
+                        if(!data.HasMember("amount"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        if(!data["amount"].IsUint64())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        uint64 amount = data["amount"].GetUint64();
+                        
+                        if(amount == 0)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    
+                        if(account->get_balance() < amount)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(topic->get_owner() != account)
-    //                     {
-    //                         if(!account->joined_topic(topic))
-    //                         {
-    //                             if(account->m_joined_topic_list.size() >= 100)
-    //                             {
-    //                                 failed_cb();
-    //                                 proc_tx_failed = true;
-    //                                 ASKCOIN_TRACE;
-    //                                 break;
-    //                             }
+                        if(!data.HasMember("receiver"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data["receiver"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        std::string receiver_pubkey = data["receiver"].GetString();
+                        
+                        if(!is_base64_char(receiver_pubkey))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(receiver_pubkey.length() != 88)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    
+                        std::shared_ptr<Account> receiver;
+                    
+                        if(!get_account(receiver_pubkey, receiver))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        account->sub_balance(amount);
+                        receiver->add_balance(amount);
+                    }
+                    else if(tx_type == 3) // new topic
+                    {
+                        if(!data.HasMember("reward"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data["reward"].IsUint64())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        uint64 reward = data["reward"].GetUint64();
+
+                        if(reward == 0)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(account->get_balance() < reward)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        std::shared_ptr<Topic> exist_topic;
+
+                        if(get_topic(tx_id, exist_topic))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data.HasMember("topic"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data["topic"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        std::string topic_data = data["topic"].GetString();
+                    
+                        if(!is_base64_char(topic_data))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(topic_data.length() < 4 || topic_data.length() > 400)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    
+                        if(account->m_topic_list.size() >= 100)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    
+                        account->sub_balance(reward);
+                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                        topic->set_owner(account);
+                        account->m_topic_list.push_back(topic);
+                        m_topic_list.push_back(topic);
+                        m_topics.insert(std::make_pair(tx_id, topic));
+                    }
+                    else if(tx_type == 4) // reply
+                    {
+                        if(!data.HasMember("topic_key"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data["topic_key"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        std::string topic_key = data["topic_key"].GetString();
+                        
+                        if(!is_base64_char(topic_key))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(topic_key.length() != 44)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        std::shared_ptr<Topic> topic;
+                    
+                        if(!get_topic(topic_key, topic))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data.HasMember("reply"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(!data["reply"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                        
+                        std::string reply_data = data["reply"].GetString();
+                    
+                        if(!is_base64_char(reply_data))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(reply_data.length() < 4 || reply_data.length() > 400)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+                    
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                        reply->set_owner(account);
+                    
+                        if(topic->m_reply_list.size() >= 1000)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(data.HasMember("reply_to"))
+                        {
+                            if(!data["reply_to"].IsString())
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                            
+                            std::string reply_to_key = data["reply_to"].GetString();
+                            
+                            if(!is_base64_char(reply_to_key))
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+
+                            if(reply_to_key.length() != 44)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                        
+                            std::shared_ptr<Reply> reply_to;
+                        
+                            if(!topic->get_reply(reply_to_key, reply_to))
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+
+                            if(reply_to->type() != 0)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                            
+                            reply->set_reply_to(reply_to);
+                        }
+
+                        if(topic->get_owner() != account)
+                        {
+                            if(!account->joined_topic(topic))
+                            {
+                                if(account->m_joined_topic_list.size() >= 100)
+                                {
+                                    failed_cb();
+                                    proc_tx_failed = true;
+                                    ASKCOIN_TRACE;
+                                    break;
+                                }
                                 
-    //                             account->m_joined_topic_list.push_back(topic);
-    //                             topic->add_member(tx_id, account);
-    //                         }
-    //                     }
+                                account->m_joined_topic_list.push_back(topic);
+                                topic->add_member(tx_id, account);
+                            }
+                        }
                         
-    //                     topic->m_reply_list.push_back(reply);
-    //                 }
-    //                 else if(tx_type == 5) // reward
-    //                 {
-    //                     if(!data.HasMember("topic_key"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        topic->m_reply_list.push_back(reply);
+                    }
+                    else if(tx_type == 5) // reward
+                    {
+                        if(!data.HasMember("topic_key"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(!data["topic_key"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!data["topic_key"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
-    //                     std::string topic_key = data["topic_key"].GetString();
+                        std::string topic_key = data["topic_key"].GetString();
                     
-    //                     if(!is_base64_char(topic_key))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!is_base64_char(topic_key))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(topic_key.length() != 44)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(topic_key.length() != 44)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                     
-    //                     std::shared_ptr<Topic> topic;
+                        std::shared_ptr<Topic> topic;
                     
-    //                     if(!get_topic(topic_key, topic))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!get_topic(topic_key, topic))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(topic->get_owner() != account)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(topic->get_owner() != account)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                     
-    //                     std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
-    //                     reply->set_owner(account);
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                        reply->set_owner(account);
                     
-    //                     if(topic->m_reply_list.size() >= 1000)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(topic->m_reply_list.size() >= 1000)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(!data.HasMember("amount"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!data.HasMember("amount"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(!data["amount"].IsUint64())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!data["amount"].IsUint64())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
-    //                     uint64 amount = data["amount"].GetUint64();
+                        uint64 amount = data["amount"].GetUint64();
                         
-    //                     if(amount == 0)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(amount == 0)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                     
-    //                     if(topic->get_balance() < amount)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(topic->get_balance() < amount)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(!data.HasMember("reply_to"))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!data.HasMember("reply_to"))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(!data["reply_to"].IsString())
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!data["reply_to"].IsString())
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
-    //                     std::string reply_to_key = data["reply_to"].GetString();
+                        std::string reply_to_key = data["reply_to"].GetString();
                         
-    //                     if(!is_base64_char(reply_to_key))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!is_base64_char(reply_to_key))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(reply_to_key.length() != 44)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(reply_to_key.length() != 44)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                     
-    //                     std::shared_ptr<Reply> reply_to;
+                        std::shared_ptr<Reply> reply_to;
                         
-    //                     if(!topic->get_reply(reply_to_key, reply_to))
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(!topic->get_reply(reply_to_key, reply_to))
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
-    //                     if(reply_to->type() != 0)
-    //                     {
-    //                         failed_cb();
-    //                         proc_tx_failed = true;
-    //                         ASKCOIN_TRACE;
-    //                         break;
-    //                     }
+                        if(reply_to->type() != 0)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
-    //                     reply->set_reply_to(reply_to);
-    //                     topic->sub_balance(amount);
-    //                     reply_to->add_balance(amount);
-    //                     reply_to->get_owner()->add_balance(amount);
-    //                     reply->add_balance(amount);
-    //                     topic->m_reply_list.push_back(reply);
-    //                 }
-    //                 else
-    //                 {
-    //                     failed_cb();
-    //                     proc_tx_failed = true;
-    //                     ASKCOIN_TRACE;
-    //                     break;
-    //                 }
-    //             }
+                        reply->set_reply_to(reply_to);
+                        topic->sub_balance(amount);
+                        reply_to->add_balance(amount);
+                        reply_to->get_owner()->add_balance(amount);
+                        reply->add_balance(amount);
+                        topic->m_reply_list.push_back(reply);
+                    }
+                    else
+                    {
+                        failed_cb();
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                }
                 
-    //             m_tx_map.insert(std::make_pair(tx_id, cur_block));
-    //             rollback_idx = i;
-    //         }
+                m_tx_map.insert(std::make_pair(tx_id, cur_block));
+                rollback_idx = i;
+            }
             
-    //         if(proc_tx_failed)
-    //         {
-    //             for(int32 i = rollback_idx; i >= 0; --i)
-    //             {
-    //                 std::string tx_id = tx_ids[i].GetString();
-    //                 const rapidjson::Value &tx_node = tx[i];
-    //                 const rapidjson::Value &data = tx_node["data"];
-    //                 std::string pubkey = data["pubkey"].GetString();
-    //                 uint32 tx_type = data["type"].GetUint();
-    //                 m_tx_map.erase(tx_id);
+            if(proc_tx_failed)
+            {
+                for(int32 i = rollback_idx; i >= 0; --i)
+                {
+                    std::string tx_id = tx_ids[i].GetString();
+                    const rapidjson::Value &tx_node = tx[i];
+                    const rapidjson::Value &data = tx_node["data"];
+                    std::string pubkey = data["pubkey"].GetString();
+                    uint32 tx_type = data["type"].GetUint();
+                    m_tx_map.erase(tx_id);
                     
-    //                 if(tx_type == 1)
-    //                 {
-    //                     const rapidjson::Value &sign_data = data["sign_data"];
-    //                     uint64 block_id = sign_data["block_id"].GetUint64();
-    //                     std::string register_name = sign_data["name"].GetString();
-    //                     std::string referrer_pubkey = sign_data["referrer"].GetString();
-    //                     uint64 fee = sign_data["fee"].GetUint64();
-    //                     std::shared_ptr<Account> referrer;
-    //                     get_account(referrer_pubkey, referrer);
-    //                     std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                    if(tx_type == 1)
+                    {
+                        const rapidjson::Value &sign_data = data["sign_data"];
+                        uint64 block_id = sign_data["block_id"].GetUint64();
+                        std::string register_name = sign_data["name"].GetString();
+                        std::string referrer_pubkey = sign_data["referrer"].GetString();
+                        uint64 fee = sign_data["fee"].GetUint64();
+                        std::shared_ptr<Account> referrer;
+                        get_account(referrer_pubkey, referrer);
+                        std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                         
-    //                     if(!referrer_referrer)
-    //                     {
-    //                         m_reserve_fund_account->sub_balance(1);
-    //                     }
-    //                     else
-    //                     {
-    //                         referrer_referrer->sub_balance(1);
-    //                     }
+                        if(!referrer_referrer)
+                        {
+                            m_reserve_fund_account->sub_balance(1);
+                        }
+                        else
+                        {
+                            referrer_referrer->sub_balance(1);
+                        }
                     
-    //                     referrer->add_balance(2);
-    //                     miner->sub_balance(1);
-    //                     m_account_names.erase(register_name);
-    //                     m_account_by_pubkey.erase(pubkey);
-    //                 }
-    //                 else
-    //                 {
-    //                     uint64 block_id = data["block_id"].GetUint64();
-    //                     std::shared_ptr<Account> account;
-    //                     get_account(pubkey, account);
-    //                     std::shared_ptr<Account> referrer = account->get_referrer();
+                        referrer->add_balance(2);
+                        miner->sub_balance(1);
+                        m_account_names.erase(register_name);
+                        m_account_by_pubkey.erase(pubkey);
+                        --m_cur_account_id;
+                    }
+                    else
+                    {
+                        uint64 block_id = data["block_id"].GetUint64();
+                        std::shared_ptr<Account> account;
+                        get_account(pubkey, account);
+                        std::shared_ptr<Account> referrer = account->get_referrer();
                         
-    //                     if(!referrer)
-    //                     {
-    //                         m_reserve_fund_account->sub_balance(1);
-    //                     }
-    //                     else
-    //                     {
-    //                         referrer->sub_balance(1);
-    //                     }
+                        if(!referrer)
+                        {
+                            m_reserve_fund_account->sub_balance(1);
+                        }
+                        else
+                        {
+                            referrer->sub_balance(1);
+                        }
                     
-    //                     account->add_balance(2);
-    //                     miner->sub_balance(1);
+                        account->add_balance(2);
+                        miner->sub_balance(1);
 
-    //                     if(tx_type == 2) // send coin
-    //                     {
-    //                         uint64 amount = data["amount"].GetUint64();
-    //                         std::string receiver_pubkey = data["receiver"].GetString();
-    //                         std::shared_ptr<Account> receiver;
-    //                         get_account(receiver_pubkey, receiver);
-    //                         account->add_balance(amount);
-    //                         receiver->sub_balance(amount);
-    //                     }
-    //                     else if(tx_type == 3) // new topic
-    //                     {
-    //                         uint64 reward = data["reward"].GetUint64();
-    //                         account->add_balance(reward);
-    //                         account->m_topic_list.pop_back();
-    //                         m_topic_list.pop_back();
-    //                         m_topics.erase(tx_id);
-    //                     }
-    //                     else if(tx_type == 4) // reply
-    //                     {
-    //                         std::string topic_key = data["topic_key"].GetString();
-    //                         std::shared_ptr<Topic> topic;
-    //                         get_topic(topic_key, topic);
-    //                         topic->m_reply_list.pop_back();
+                        if(tx_type == 2) // send coin
+                        {
+                            uint64 amount = data["amount"].GetUint64();
+                            std::string receiver_pubkey = data["receiver"].GetString();
+                            std::shared_ptr<Account> receiver;
+                            get_account(receiver_pubkey, receiver);
+                            account->add_balance(amount);
+                            receiver->sub_balance(amount);
+                        }
+                        else if(tx_type == 3) // new topic
+                        {
+                            uint64 reward = data["reward"].GetUint64();
+                            account->add_balance(reward);
+                            account->m_topic_list.pop_back();
+                            m_topic_list.pop_back();
+                            m_topics.erase(tx_id);
+                        }
+                        else if(tx_type == 4) // reply
+                        {
+                            std::string topic_key = data["topic_key"].GetString();
+                            std::shared_ptr<Topic> topic;
+                            get_topic(topic_key, topic);
+                            topic->m_reply_list.pop_back();
                             
-    //                         if(topic->get_owner() != account)
-    //                         {
-    //                             auto &p = topic->m_members.back();
+                            if(topic->get_owner() != account)
+                            {
+                                auto &p = topic->m_members.back();
                         
-    //                             if(p.first == tx_id)
-    //                             {
-    //                                 account->m_joined_topic_list.pop_back();
-    //                                 topic->m_members.pop_back();
-    //                             }
-    //                         }
-    //                     }
-    //                     else if(tx_type == 5) // reward
-    //                     {
-    //                         std::string topic_key = data["topic_key"].GetString();
-    //                         std::shared_ptr<Topic> topic;
-    //                         get_topic(topic_key, topic);
-    //                         uint64 amount = data["amount"].GetUint64();
-    //                         std::string reply_to_key = data["reply_to"].GetString();
-    //                         std::shared_ptr<Reply> reply_to;
-    //                         topic->get_reply(reply_to_key, reply_to);
-    //                         topic->add_balance(amount);
-    //                         reply_to->sub_balance(amount);
-    //                         reply_to->get_owner()->sub_balance(amount);
-    //                         topic->m_reply_list.pop_back();
-    //                     }
-    //                     else
-    //                     {
-    //                         ASKCOIN_EXIT(EXIT_FAILURE);
-    //                     }
-    //                 }
-    //             }
+                                if(p.first == tx_id)
+                                {
+                                    account->m_joined_topic_list.pop_back();
+                                    topic->m_members.pop_back();
+                                }
+                            }
+                        }
+                        else if(tx_type == 5) // reward
+                        {
+                            std::string topic_key = data["topic_key"].GetString();
+                            std::shared_ptr<Topic> topic;
+                            get_topic(topic_key, topic);
+                            uint64 amount = data["amount"].GetUint64();
+                            std::string reply_to_key = data["reply_to"].GetString();
+                            std::shared_ptr<Reply> reply_to;
+                            topic->get_reply(reply_to_key, reply_to);
+                            topic->add_balance(amount);
+                            reply_to->sub_balance(amount);
+                            reply_to->get_owner()->sub_balance(amount);
+                            topic->m_reply_list.pop_back();
+                        }
+                    }
+                }
                 
-    //             if(cur_block_id > (TOPIC_LIFE_TIME + 1))
-    //             {
-    //                 auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+                if(cur_block_id > (TOPIC_LIFE_TIME + 1))
+                {
+                    auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
 
-    //                 for(auto topic : topic_list)
-    //                 {
-    //                     m_topics.insert(std::make_pair(topic->key(), topic));
-    //                     topic->get_owner()->m_topic_list.push_front(topic);
-    //                     m_topic_list.push_front(topic);
-    //                     uint64 balance = topic->get_balance();
+                    for(auto topic : topic_list)
+                    {
+                        m_topics.insert(std::make_pair(topic->key(), topic));
+                        topic->get_owner()->m_topic_list.push_front(topic);
+                        m_topic_list.push_front(topic);
+                        uint64 balance = topic->get_balance();
                         
-    //                     if(balance > 0)
-    //                     {
-    //                         m_reserve_fund_account->sub_balance(balance);
-    //                     }
+                        if(balance > 0)
+                        {
+                            m_reserve_fund_account->sub_balance(balance);
+                        }
 
-    //                     for(auto &p : topic->m_members)
-    //                     {
-    //                         p.second->m_joined_topic_list.push_front(topic);
-    //                     }
-    //                 }
+                        for(auto &p : topic->m_members)
+                        {
+                            p.second->m_joined_topic_list.push_front(topic);
+                        }
+                    }
 
-    //                 auto tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+                    auto tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
                 
-    //                 for(auto _tx_id : tx_pair.second)
-    //                 {
-    //                     m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
-    //                 }
+                    for(auto _tx_id : tx_pair.second)
+                    {
+                        m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
+                    }
                 
-    //                 m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
-    //                 m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
-    //             }
+                    m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+                    m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+                }
                 
-    //             punish_detail_req(request);
-    //             ASKCOIN_RETURN;
-    //         }
+                punish_detail_req(request);
+                ASKCOIN_RETURN;
+            }
             
-    //         uint64 remain_balance = m_reserve_fund_account->get_balance();
+            uint64 remain_balance = m_reserve_fund_account->get_balance();
 
-    //         if(remain_balance >= 5000)
-    //         {
-    //             m_reserve_fund_account->sub_balance(5000);
-    //             miner->add_balance(5000);
-    //             cur_block->m_miner_reward = true;
-    //         }
-    //         else
-    //         {
-    //             cur_block->m_miner_reward = false;
-    //         }
+            if(remain_balance >= 5000)
+            {
+                m_reserve_fund_account->sub_balance(5000);
+                miner->add_balance(5000);
+                cur_block->m_miner_reward = true;
+            }
+            else
+            {
+                cur_block->m_miner_reward = false;
+            }
 
-    //         LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
-    //         std::string block_data;
-    //         leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
+            LOG_DEBUG_INFO("finish_detail, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
+            std::string block_data;
+            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
             
-    //         if(!s.ok())
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
+            if(!s.ok())
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
             
-    //         rapidjson::Document doc_parent;
-    //         const char *block_data_str = block_data.c_str();
-    //         doc_parent.Parse(block_data_str);
+            rapidjson::Document doc_parent;
+            const char *block_data_str = block_data.c_str();
+            doc_parent.Parse(block_data_str);
             
-    //         if(doc_parent.HasParseError())
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
+            if(doc_parent.HasParseError())
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
 
-    //         if(!doc_parent.IsObject())
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
+            if(!doc_parent.IsObject())
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
 
-    //         if(!doc_parent.HasMember("children"))
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
+            if(!doc_parent.HasMember("children"))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
             
-    //         rapidjson::Value &children = doc_parent["children"];
+            rapidjson::Value &children = doc_parent["children"];
 
-    //         if(!children.IsArray())
-    //         {
-    //             ASKCOIN_RETURN;
-    //         }
+            if(!children.IsArray())
+            {
+                ASKCOIN_RETURN;
+            }
             
-    //         bool exist_in_children = false;
-    //         bool exist_block_hash = true;
+            bool exist_in_children = false;
+            bool exist_block_hash = true;
             
-    //         for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
-    //         {
-    //             if(block_hash == iter->GetString())
-    //             {
-    //                 exist_in_children = true;
-    //                 LOG_DEBUG_INFO("exist_in_children = true, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
-    //                 break;
-    //             }
-    //         }
+            for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
+            {
+                if(block_hash == iter->GetString())
+                {
+                    exist_in_children = true;
+                    LOG_DEBUG_INFO("exist_in_children = true, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
+                    break;
+                }
+            }
             
-    //         {
-    //             std::string block_data;
-    //             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
+            {
+                std::string block_data;
+                leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
             
-    //             if(!s.ok())
-    //             {
-    //                 if(!s.IsNotFound())
-    //                 {
-    //                     CONSOLE_LOG_FATAL("read from leveldb failed, hash: %s, reason: %s", block_hash.c_str(), s.ToString().c_str());
-    //                     ASKCOIN_EXIT(EXIT_FAILURE);
-    //                 }
-
-    //                 exist_block_hash = false;
-    //             }
-    //         }
-            
-    //         if(exist_in_children || exist_block_hash)
-    //         {
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
-            
-    //         rapidjson::Document doc_1;
-    //         doc_1.SetObject();
-    //         rapidjson::Document::AllocatorType &allocator = doc_1.GetAllocator();
-    //         doc_1.AddMember("hash", doc["hash"], allocator);
-    //         doc_1.AddMember("sign", doc["sign"], allocator);
-    //         doc_1.AddMember("data", doc["data"], allocator);
-    //         doc_1.AddMember("tx", doc["tx"], allocator);
-    //         rapidjson::StringBuffer buffer_1;
-    //         rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
-    //         doc_1.Accept(writer_1);
-    //         leveldb::WriteBatch batch;
-    //         batch.Put(block_hash, leveldb::Slice(buffer_1.GetString(), buffer_1.GetSize()));
-            
-    //         children.PushBack(rapidjson::StringRef(block_hash.c_str()), doc_parent.GetAllocator());
-    //         rapidjson::StringBuffer buffer_2;
-    //         rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
-    //         doc_parent.Accept(writer_2);
-    //         batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
-    //         LOG_DEBUG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s, start write to leveldb", block_id, block_hash.c_str());
-    //         s = m_db->Write(leveldb::WriteOptions(), &batch);
-            
-    //         if(!s.ok())
-    //         {
-    //             LOG_DEBUG_FATAL("writebatch failed, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
-    //             ASKCOIN_EXIT(EXIT_FAILURE);
-    //         }
-
-    //         char hash_raw[32];
-    //         fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
-    //         std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-    //         LOG_INFO("BLOCK_DETAIL_RSP, block_id: %lu, block_hash: %s (hex: %s), write to leveldb finished", block_id, \
-    //                  block_hash.c_str(), hex_hash.c_str());
-    //         m_blocks.insert(std::make_pair(block_hash, cur_block));
-    //         m_cur_block = cur_block;
-    //         m_block_changed = true;
-
-    //         if(m_most_difficult_block->difficult_than_me(m_cur_block))
-    //         {
-    //             m_most_difficult_block = m_cur_block;
-    //             m_broadcast_json.m_hash = doc["hash"];
-    //             m_broadcast_json.m_sign = doc["sign"];
-    //             m_broadcast_json.m_data = doc["data"];
-    //             broadcast();
-    //         }
-
-    //         auto detail_req_num = owner_chain->m_req_blocks.size();
-    //         m_timer_ctl.del_timer(request->m_timer_id);
-            
-    //         if(owner_chain->m_start >= detail_req_num - 1)
-    //         {
-    //             for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end();)
-    //             {
-    //                 auto &pending_chain = *iter;
-    //                 pending_chain->m_detail_attached.reset();
-    //                 pending_chain->m_start = 0;
-    //                 std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
+                if(!s.ok())
+                {
+                    if(!s.IsNotFound())
+                    {
+                        CONSOLE_LOG_FATAL("read from leveldb failed, hash: %s, reason: %s", block_hash.c_str(), s.ToString().c_str());
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
                     
-    //                 if(pending_chain == owner_chain)
-    //                 {
-    //                     iter = m_brief_chains.erase(iter);
-    //                     std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
-    //                     std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
-    //                     auto iter_score = peer_score_map.find(peer->key());
-                        
-    //                     if(iter_score != peer_score_map.end())
-    //                     {
-    //                         std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
-    //                         peer_score->add_score(10);
-    //                     }
-
-    //                     continue;
-    //                 }
-                    
-    //                 if(!m_most_difficult_block->difficult_than_me(pending_chain->m_declared_pow))
-    //                 {
-    //                     iter = m_brief_chains.erase(iter);
-    //                     continue;
-    //                 }
-                    
-    //                 ++iter;
-    //             }
-    //         }
-    //         else
-    //         {
-    //             request->m_attached_chains.clear();
-    //             ++owner_chain->m_start;
-    //             auto pending_block = owner_chain->m_req_blocks[owner_chain->m_start];
-    //             auto pending_id = pending_block->m_id;
-    //             auto pending_hash = pending_block->m_hash;
-    //             rapidjson::Document doc;
-    //             doc.SetObject();
-    //             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-    //             doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-    //             doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
-    //             doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-    //             request->m_try_num = 1;
-    //             request->m_attached_num = 0;
-    //             LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pending_id, pending_hash.c_str());
-    //             request->m_timer_id = m_timer_ctl.add_timer([=]() {
-    //                     if(request->m_try_num >= 2 && request->m_try_num >= request->m_attached_num)
-    //                     {
-    //                         punish_detail_req(request);
-    //                         return;
-    //                     }
-                        
-    //                     if(request->m_attached_num < 2)
-    //                     {
-    //                         ++request->m_try_num;
-    //                         ++request->m_attached_num;
-    //                         return;
-    //                     }
-
-    //                     if(request->m_try_num >= 7)
-    //                     {
-    //                         punish_detail_req(request);
-    //                         return;
-    //                     }
-                        
-    //                     request->m_attached_chains.pop_front();
-                        
-    //                     while(true)
-    //                     {
-    //                         auto last_peer = request->m_attached_chains.front()->m_peer;
-                            
-    //                         if(last_peer->m_connection->closed())
-    //                         {
-    //                             request->m_attached_chains.pop_front();
-    //                             --request->m_attached_num;
-
-    //                             if(request->m_attached_chains.empty())
-    //                             {
-    //                                 punish_detail_req(request);
-    //                                 return;
-    //                             }
-    //                         }
-    //                         else
-    //                         {
-    //                             break;
-    //                         }
-    //                     }
-
-    //                     rapidjson::Document doc;
-    //                     doc.SetObject();
-    //                     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-    //                     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-    //                     doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
-    //                     doc.AddMember("hash", rapidjson::StringRef(pending_hash.c_str()), allocator);
-    //                     request->m_attached_chains.front()->m_peer->m_connection->send(doc);
-    //                     ++request->m_try_num;
-    //                 }, 1);
-                
-    //             for(auto iter = m_brief_chains.begin(); iter != m_brief_chains.end();)
-    //             {
-    //                 auto &inner_chain = *iter;
-    //                 auto peer = inner_chain->m_peer;
-
-    //                 if(!m_most_difficult_block->difficult_than_me(inner_chain->m_declared_pow))
-    //                 {
-    //                     iter = m_brief_chains.erase(iter);
-    //                     continue;
-    //                 }
-                    
-    //                 if(!inner_chain->m_detail_attached)
-    //                 {
-    //                     ++iter;
-    //                     continue;
-    //                 }
-                    
-    //                 inner_chain->m_detail_attached.reset();
-    //                 auto num = inner_chain->m_req_blocks.size();
-                    
-    //                 if(inner_chain->m_start >= num - 1)
-    //                 {
-    //                     ++iter;
-    //                     continue;
-    //                 }
-                    
-    //                 ++inner_chain->m_start;
-
-    //                 if(inner_chain->m_req_blocks[inner_chain->m_start]->m_hash != pending_hash)
-    //                 {
-    //                     ++iter;
-    //                     continue;
-    //                 }
-                    
-    //                 inner_chain->m_detail_attached = request;
-    //                 request->m_attached_chains.push_back(inner_chain);
-    //                 ++request->m_attached_num;
-    //                 ++iter;
-    //             }
-                
-    //             request->m_attached_chains.front()->m_peer->m_connection->send(doc);
-    //         }
-    //     }
-    // }
-    
-    // for(auto iter = req->m_chains.begin(); iter != req->m_chains.end();)
-    // {
-    //     auto pending_chain = *iter;
-    //     bool erase_iter = false;
-    //     auto peer = pending_chain->m_peer;
-    //     auto key = peer->key();
-
-    //     if(peer->m_connection->closed())
-    //     {
-    //         m_chains_by_peer_key.erase(key);
-    //         ++iter;
-    //         continue;
-    //     }
+                    exist_block_hash = false;
+                }
+            }
+            
+            if(exist_in_children || exist_block_hash)
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            rapidjson::Document doc_1;
+            doc_1.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc_1.GetAllocator();
+            doc_1.AddMember("hash", doc["hash"], allocator);
+            doc_1.AddMember("sign", doc["sign"], allocator);
+            doc_1.AddMember("data", doc["data"], allocator);
+            doc_1.AddMember("tx", doc["tx"], allocator);
+            rapidjson::Value children_arr(rapidjson::kArrayType);
+            doc_1.AddMember("children", children_arr, allocator);
+            rapidjson::StringBuffer buffer_1;
+            rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
+            doc_1.Accept(writer_1);
+            leveldb::WriteBatch batch;
+            batch.Put(block_hash, leveldb::Slice(buffer_1.GetString(), buffer_1.GetSize()));
+            
+            children.PushBack(rapidjson::StringRef(block_hash.c_str()), doc_parent.GetAllocator());
+            rapidjson::StringBuffer buffer_2;
+            rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
+            doc_parent.Accept(writer_2);
+            batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+            LOG_DEBUG_INFO("finish_detail, block_id: %lu, block_hash: %s, start write to leveldb", block_id, block_hash.c_str());
+            s = m_db->Write(leveldb::WriteOptions(), &batch);
+            
+            if(!s.ok())
+            {
+                LOG_FATAL("writebatch failed, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            char hash_raw[32];
+            fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
+            std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
+            LOG_INFO("finish_detail, block_id: %lu, block_hash: %s (hex: %s), write to leveldb completely", block_id, \
+                     block_hash.c_str(), hex_hash.c_str());
+            m_blocks.insert(std::make_pair(block_hash, cur_block));
+            m_cur_block = cur_block;
+            m_block_changed = true;
+        }
         
-    //     while(true)
-    //     {
-    //         std::shared_ptr<Pending_Block> pending_block = pending_chain->m_req_blocks.front();
-    //         std::string pre_hash = pending_block->m_pre_hash;
-    //         auto iter_1 = m_blocks.find(pre_hash);
-    
-    //         if(iter_1 != m_blocks.end())
-    //         {
-    //             std::shared_ptr<Block> pre_block = iter_1->second;
-
-    //             if(pending_block->m_id != pre_block->id() + 1)
-    //             {
-    //                 punish_brief_req(req);
-    //                 ASKCOIN_RETURN;
-    //             }
-                
-    //             if(!pre_block->difficult_equal(pending_chain->m_remain_pow))
-    //             {
-    //                 m_chains_by_peer_key.erase(key);
-    //                 punish_peer(peer);
-    //                 erase_iter = true;
-    //                 break;
-    //             }
-
-    //             pending_block->add_difficulty_from(pre_block);
-    //             auto last_pb = pending_block;
-    //             auto cur_pb_iter = pending_chain->m_req_blocks.begin();
-    //             ++cur_pb_iter;
-
-    //             for(; cur_pb_iter != pending_chain->m_req_blocks.end(); ++cur_pb_iter)
-    //             {
-    //                 auto pb = *cur_pb_iter;
-    //                 pb->add_difficulty_from(last_pb);
-    //                 last_pb = pb;
-    //             }
-                
-    //             do_detail_chain(pending_chain);
-    //             break;
-    //         }
-    //         else if(pending_block->m_id <= 1)
-    //         {
-    //             punish_brief_req(req);
-    //             ASKCOIN_RETURN;
-    //         }
-            
-    //         auto iter_2 = m_pending_blocks.find(pre_hash);
-    
-    //         if(iter_2 != m_pending_blocks.end())
-    //         {
-    //             std::shared_ptr<Pending_Block> pre_pending_block = iter_2->second;
-
-    //             if(pending_block->m_id != pre_pending_block->m_id + 1)
-    //             {
-    //                 punish_brief_req(req);
-    //                 ASKCOIN_RETURN;
-    //             }
-                
-    //             if(!pending_chain->m_remain_pow.sub_pow(pre_pending_block->m_zero_bits))
-    //             {
-    //                 m_chains_by_peer_key.erase(key);
-    //                 punish_peer(peer);
-    //                 erase_iter = true;
-    //                 break;
-    //             }
-                
-    //             pending_chain->m_req_blocks.push_front(pre_pending_block);
-    //         }
-    //         else
-    //         {
-    //             rapidjson::Document doc;
-    //             doc.SetObject();
-    //             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-    //             doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-    //             doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_REQ, allocator);
-    //             doc.AddMember("hash", rapidjson::StringRef(pre_hash.c_str()), allocator);
-    //             std::shared_ptr<Pending_Brief_Request> request;
-    //             auto iter_3 = m_pending_brief_reqs.find(pre_hash);
-                
-    //             if(iter_3 == m_pending_brief_reqs.end())
-    //             {
-    //                 request = std::make_shared<Pending_Brief_Request>();
-    //                 request->m_send_num = 1;
-    //                 request->m_hash = pre_hash;
-    //                 m_pending_brief_reqs.insert(std::make_pair(pre_hash, request));
-    //                 pending_chain->m_brief_attached = request;
-    //                 request->m_chains.insert(pending_chain);
-    //                 m_chains_by_peer_key.insert(std::make_pair(key, pending_chain));
-    //                 peer->m_connection->send(doc);
-    //                 ++request->m_try_num;
-    //                 LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
-    //                 request->m_timer_id = m_timer_ctl.add_timer([=]() {
-    //                         if(request->m_chains.empty())
-    //                         {
-    //                             m_timer_ctl.del_timer(request->m_timer_id);
-    //                             m_pending_brief_reqs.erase(request->m_hash);
-    //                             return;
-    //                         }
-                        
-    //                         uint64 send_num = 0;
-    //                         ++request->m_try_num;
-                        
-    //                         if(request->m_try_num == 2)
-    //                         {
-    //                             send_num = 4;
-    //                         }
-    //                         else if(request->m_try_num == 3 || request->m_try_num == 4)
-    //                         {
-    //                             send_num = 8;
-    //                         }
-    //                         else if(request->m_try_num == 5 || request->m_try_num == 6)
-    //                         {
-    //                             send_num = 100;
-    //                         }
-    //                         else
-    //                         {
-    //                             punish_brief_req(request);
-    //                             return;
-    //                         }
-                        
-    //                         while(true)
-    //                         {
-    //                             if(request->m_attached_chains.empty())
-    //                             {
-    //                                 return;
-    //                             }
-
-    //                             if(request->m_send_num >= send_num)
-    //                             {
-    //                                 return;
-    //                             }
-                            
-    //                             auto next_chain = request->m_attached_chains.front();
-    //                             auto next_peer = next_chain->m_peer;
-                            
-    //                             if(next_peer->m_connection->closed())
-    //                             {
-    //                                 request->m_attached_chains.pop_front();
-    //                                 request->m_chains.erase(next_chain);
-    //                                 m_chains_by_peer_key.erase(next_peer->key());
-    //                             }
-    //                             else
-    //                             {
-    //                                 next_peer->m_connection->send(doc);
-    //                                 ++request->m_send_num;
-    //                                 request->m_attached_chains.pop_front();
-    //                             }
-    //                         }
-    //                     }, 1);
-    //             }
-    //             else
-    //             {
-    //                 request = iter_3->second;
-    //                 pending_chain->m_brief_attached = request;
-    //                 m_chains_by_peer_key.insert(std::make_pair(key, pending_chain));
-    //                 request->m_chains.insert(pending_chain);
-    //                 uint64 send_num = 0;
-
-    //                 if(request->m_try_num == 1)
-    //                 {
-    //                     send_num = 2;
-    //                 }
-    //                 else if(request->m_try_num == 2)
-    //                 {
-    //                     send_num = 4;
-    //                 }
-    //                 else if(request->m_try_num == 3 || request->m_try_num == 4)
-    //                 {
-    //                     send_num = 8;
-    //                 }
-    //                 else if(request->m_try_num == 5 || request->m_try_num == 6)
-    //                 {
-    //                     send_num = 100;
-    //                 }
-                
-    //                 if(request->m_send_num >= send_num)
-    //                 {
-    //                     request->m_attached_chains.push_back(pending_chain);
-    //                 }
-    //                 else
-    //                 {
-    //                     pending_chain->m_peer->m_connection->send(doc);
-    //                     ++request->m_send_num;
-    //                 }
-    //             }
-            
-    //             break;
-    //         }
-    //     }
+        m_most_difficult_block = m_cur_block;
+        auto &doc = *pending_block->m_doc;
+        m_broadcast_json.m_hash = doc["hash"];
+        m_broadcast_json.m_sign = doc["sign"];
+        m_broadcast_json.m_data = doc["data"];
+        broadcast();
+        net::p2p::Node *p2p_node = net::p2p::Node::instance();
+        std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
+        std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
         
-    //     if(erase_iter)
-    //     {
-    //         iter = request->m_chains.erase(iter);
-    //     }
-    //     else
-    //     {
-    //         ++iter;
-    //     }
-    // }
+        for(auto pending_chain : request->m_chains)
+        {
+            auto peer = pending_chain->m_peer;
+            
+            for(auto i = 0; i <= pending_chain->m_start; ++i)
+            {
+                pending_chain->m_req_blocks[i]->m_doc.reset();
+            }
+            
+            auto iter_score = peer_score_map.find(peer->key());
+            
+            if(iter_score != peer_score_map.end())
+            {
+                std::shared_ptr<net::p2p::Peer_Score> peer_score = iter_score->second;
+                peer_score->add_score(10);
+            }
+        }
+    }
+    else
+    {
+        for(auto pending_chain : request->m_chains)
+        {
+            pending_chain->m_req_blocks[pending_chain->m_start]->m_doc = pending_block->m_doc;
+        }
+    }
     
-    // m_pending_brief_reqs.erase(req->m_hash);
-    // m_timer_ctl.del_timer(req->m_timer_id);
+    m_pending_detail_reqs.erase(request->m_pb->m_hash);
+    m_timer_ctl.del_timer(request->m_timer_id);
+    
+    for(auto pending_chain : request->m_chains)
+    {
+        auto peer = pending_chain->m_peer;
+        
+        if(++pending_chain->m_start == pending_chain->m_req_blocks.size())
+        {
+            m_chains_by_peer_key.erase(peer->key());
+            continue;
+        }
+        
+        if(peer->m_connection->closed())
+        {
+            m_chains_by_peer_key.erase(peer->key());
+            continue;
+        }
+        
+        if(!m_most_difficult_block->difficult_than_me(pending_chain->m_declared_pow))
+        {
+            m_chains_by_peer_key.erase(peer->key());
+            continue;
+        }
+
+        auto pb = pending_chain->m_req_blocks[pending_chain->m_start];
+        auto block_hash = pb->m_hash;
+        auto iter_detail = m_pending_detail_reqs.find(block_hash);
+        std::shared_ptr<Pending_Detail_Request> request;
+        rapidjson::Document doc;
+        doc.SetObject();
+        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+        doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+        doc.AddMember("msg_cmd", net::p2p::BLOCK_DETAIL_REQ, allocator);
+        doc.AddMember("hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+
+        if(iter_detail == m_pending_detail_reqs.end())
+        {
+            request = std::make_shared<Pending_Detail_Request>();
+            request->m_send_num = 1;
+            request->m_pb = pb;
+            m_pending_detail_reqs.insert(std::make_pair(block_hash, request));
+            pending_chain->m_detail_attached = request;
+            request->m_chains.insert(pending_chain);
+            peer->m_connection->send(doc);
+            ++request->m_try_num;
+            LOG_DEBUG_INFO("finish_detail pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
+            request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
+                    if(request->m_chains.empty())
+                    {
+                        m_timer_ctl.del_timer(request->m_timer_id);
+                        m_pending_detail_reqs.erase(block_hash);
+                        return;
+                    }
+                    
+                    uint64 send_num = 0;
+                    ++request->m_try_num;
+                        
+                    if(request->m_try_num == 2)
+                    {
+                        send_num = 4;
+                    }
+                    else if(request->m_try_num == 3 || request->m_try_num == 4)
+                    {
+                        send_num = 8;
+                    }
+                    else if(request->m_try_num == 5 || request->m_try_num == 6)
+                    {
+                        send_num = 100;
+                    }
+                    else
+                    {
+                        punish_detail_req(request);
+                        return;
+                    }
+
+                    while(true)
+                    {
+                        if(request->m_attached_chains.empty())
+                        {
+                            return;
+                        }
+
+                        if(request->m_send_num >= send_num)
+                        {
+                            return;
+                        }
+                            
+                        auto next_chain = request->m_attached_chains.front();
+                        auto next_peer = next_chain->m_peer;
+                    
+                        if(!m_most_difficult_block->difficult_than_me(next_chain->m_declared_pow))
+                        {
+                            request->m_attached_chains.pop_front();
+                            request->m_chains.erase(next_chain);
+                            m_chains_by_peer_key.erase(next_peer->key());
+                            continue;
+                        }
+                    
+                        if(next_peer->m_connection->closed())
+                        {
+                            request->m_attached_chains.pop_front();
+                            request->m_chains.erase(next_chain);
+                            m_chains_by_peer_key.erase(next_peer->key());
+                        }
+                        else
+                        {
+                            next_peer->m_connection->send(doc);
+                            ++request->m_send_num;
+                            request->m_attached_chains.pop_front();
+                        }
+                    }
+                }, 1);
+        }
+        else
+        {
+            request = iter_detail->second;
+            pending_chain->m_detail_attached = request;
+            request->m_chains.insert(pending_chain);
+            uint64 send_num = 0;
+        
+            if(request->m_try_num == 1)
+            {
+                send_num = 2;
+            }
+            else if(request->m_try_num == 2)
+            {
+                send_num = 4;
+            }
+            else if(request->m_try_num == 3 || request->m_try_num == 4)
+            {
+                send_num = 8;
+            }
+            else if(request->m_try_num == 5 || request->m_try_num == 6)
+            {
+                send_num = 100;
+            }
+                
+            if(request->m_send_num >= send_num)
+            {
+                request->m_attached_chains.push_back(pending_chain);
+            }
+            else
+            {
+                pending_chain->m_peer->m_connection->send(doc);
+                ++request->m_send_num;
+            }
+        }
+    }
 }
 
 void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
@@ -5464,7 +5283,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
         request->m_chains.insert(pending_chain);
         peer->m_connection->send(doc);
         ++request->m_try_num;
-        LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pb->m_id - 1, block_hash.c_str());
+        LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
         request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
                 if(request->m_chains.empty())
                 {

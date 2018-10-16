@@ -87,6 +87,5 @@ std::shared_ptr<Account> Block::get_miner()
 {
     std::shared_ptr<Account> miner;
     Blockchain::instance()->get_account(m_miner_pubkey, miner);
-    
     return miner;
 }

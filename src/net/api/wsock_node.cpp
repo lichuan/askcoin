@@ -691,35 +691,35 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         
         if(tx_type == 2) // send coin
         {
-            if(!data.HasMember("memo"))
+            if(data.HasMember("memo"))
             {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            if(!data["memo"].IsString())
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-                        
-            std::string memo = data["memo"].GetString();
-                        
-            if(!memo.empty())
-            {
-                if(!is_base64_char(memo))
+                if(!data["memo"].IsString())
                 {
                     connection->close();
                     ASKCOIN_RETURN;
                 }
 
+                std::string memo = data["memo"].GetString();
+
+                if(memo.empty())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(memo))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
                 if(memo.length() > 80 || memo.length() < 4)
                 {
                     connection->close();
                     ASKCOIN_RETURN;
                 }
             }
-
+            
             if(!data.HasMember("amount"))
             {
                 connection->close();
