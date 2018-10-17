@@ -24,6 +24,7 @@ class Tx_Reg : public Tx
 public:
     std::string m_register_name;
     std::string m_referrer_pubkey;
+    uint32 m_avatar;
 };
 
 class Tx_Send : public Tx

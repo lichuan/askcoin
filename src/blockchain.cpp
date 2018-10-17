@@ -1543,7 +1543,6 @@ bool Blockchain::start(std::string db_path)
 
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                 referrer->sub_balance(2);
-                miner->add_balance(1);
 
                 if(!referrer_referrer)
                 {
@@ -1647,7 +1646,6 @@ bool Blockchain::start(std::string db_path)
                 
                 std::shared_ptr<Account> referrer = account->get_referrer();
                 account->sub_balance(2);
-                miner->add_balance(1);
                 
                 if(!referrer)
                 {
@@ -1947,7 +1945,8 @@ bool Blockchain::start(std::string db_path)
         }
 
         uint64 remain_balance = m_reserve_fund_account->get_balance();
-
+        miner->add_balance(tx_num);
+        
         if(remain_balance >= 5000)
         {
             m_reserve_fund_account->sub_balance(5000);
@@ -1958,9 +1957,14 @@ bool Blockchain::start(std::string db_path)
         {
             iter_block->m_miner_reward = false;
         }
+
+        if(cur_block_id % 1000 == 0)
+        {
+            printf("load block progress: cur_block_id: %lu, cur_block_hash: %s\n", cur_block_id, iter_block->hash().c_str());
+        }
         
         block_chain.pop_front();
-
+        
         if(block_chain.empty())
         {
             m_broadcast_json.m_hash = doc["hash"];
@@ -2184,6 +2188,525 @@ bool Blockchain::check_balance()
     return true;
 }
 
+void Blockchain::mine_tx()
+{
+    std::list<std::shared_ptr<tx::Tx>> uv_2_txs;
+    std::list<std::shared_ptr<tx::Tx>> mined_txs;
+    uv_2_txs.insert(uv_2_txs.begin(), m_uv_2_txs.begin(), m_uv_2_txs.end());
+    uint64 cnt = 0;
+    uint64 remain_cnt = uv_2_txs.size();
+    uint64 total_cnt = uv_2_txs.size();
+    uint64 last_mined_cnt = 0;
+    uint64 loop_cnt = 0;
+    bool proc_tx_failed = false;
+    int32 rollback_idx = -1;
+    uint64 cur_block_id = m_cur_block->id() + 1;
+    std::shared_ptr<Block> cur_block(new Block(cur_block_id, m_cur_block->utc(), ASKCOIN_VERSION, m_cur_block->zero_bits(), "temp_hash"));
+    cur_block->set_parent(m_cur_block);
+    
+    if(!proc_topic_expired(cur_block_id))
+    {
+        ASKCOIN_EXIT(EXIT_FAILURE);
+    }
+    
+    if(!proc_tx_map(cur_block))
+    {
+        ASKCOIN_EXIT(EXIT_FAILURE);
+    }
+    
+    while(!uv_2_txs.empty())
+    {
+        // because tx may not be in order, so need loop 3 times to resolve dependency problem.
+        if(++cnt > remain_cnt)
+        {
+            if(++loop_cnt >= 3)
+            {
+                break;
+            }
+
+            cnt = 1;
+            uint64 mined_cnt = mined_txs.size();
+
+            if(mined_cnt == last_mined_cnt)
+            {
+                break;
+            }
+
+            last_mined_cnt = mined_cnt;
+            remain_cnt = total_cnt - mined_cnt;
+        }
+        
+        auto tx = uv_2_txs.front();
+        auto tx_type = tx->m_type;
+        auto block_id = tx->m_block_id;
+        auto tx_id = tx->m_id;
+        auto pubkey = tx->m_pubkey;
+        auto &doc = *tx->m_doc;
+        const rapidjson::Value &data = doc["data"];
+        
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            uv_2_txs.push_back(tx);
+            uv_2_txs.pop_front();
+            continue;
+        }
+        
+        if(tx_type == 1)
+        {
+            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            auto register_name = tx_reg->m_register_name;
+            std::shared_ptr<Account> exist_account;
+            
+            if(get_account(pubkey, exist_account))
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            if(account_name_exist(register_name))
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            std::shared_ptr<Account> referrer;
+            
+            if(!get_account(tx_reg->m_referrer_pubkey, referrer))
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            if(referrer->get_balance() < 2)
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+                    
+            if(!referrer_referrer)
+            {
+                if(referrer->id() > 1)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                m_reserve_fund_account->add_balance(1);
+            }
+            else
+            {
+                referrer_referrer->add_balance(1);
+            }
+            
+            referrer->sub_balance(2);
+            std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, tx_reg->m_avatar));
+            m_account_names.insert(register_name);
+            m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+            reg_account->set_referrer(referrer);
+        }
+        else
+        {
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(pubkey, account))
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            if(account->get_balance() < 2)
+            {
+                uv_2_txs.push_back(tx);
+                uv_2_txs.pop_front();
+                continue;
+            }
+            
+            std::shared_ptr<Account> referrer = account->get_referrer();
+                    
+            if(!referrer)
+            {
+                if(account->id() > 1)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                m_reserve_fund_account->add_balance(1);
+            }
+            else
+            {
+                referrer->add_balance(1);
+            }
+            
+            account->sub_balance(2);
+            auto failed_cb = [=]() {
+                account->add_balance(2);
+
+                if(!referrer)
+                {
+                    m_reserve_fund_account->sub_balance(1);
+                }
+                else
+                {
+                    referrer->sub_balance(1);
+                }
+            };
+            
+            if(tx_type == 2) // send coin
+            {
+                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                uint64 amount = tx_send->m_amount;
+
+                if(account->get_balance() < amount)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                std::shared_ptr<Account> receiver;
+                
+                if(!get_account(tx_send->m_receiver_pubkey, receiver))
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                account->sub_balance(amount);
+                receiver->add_balance(amount);
+            }
+            else if(tx_type == 3) // new topic
+            {
+                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                uint64 reward = tx_topic->m_reward;
+                
+                if(account->get_balance() < reward)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                std::shared_ptr<Topic> exist_topic;
+
+                if(get_topic(tx_id, exist_topic))
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+
+                std::string topic_data = data["topic"].GetString();
+                
+                if(account->m_topic_list.size() >= 100)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                account->sub_balance(reward);
+                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                topic->set_owner(account);
+                account->m_topic_list.push_back(topic);
+                m_topic_list.push_back(topic);
+                m_topics.insert(std::make_pair(tx_id, topic));
+            }
+            else if(tx_type == 4) // reply
+            {
+                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Topic> topic;
+                
+                if(!get_topic(tx_reply->m_topic_key, topic))
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+
+                std::string reply_data = data["reply"].GetString();
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                reply->set_owner(account);
+                
+                if(topic->m_reply_list.size() >= 1000)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+
+                if(!tx_reply->m_reply_to.empty())
+                {
+                    std::shared_ptr<Reply> reply_to;
+                    
+                    if(!topic->get_reply(tx_reply->m_reply_to, reply_to))
+                    {
+                        failed_cb();
+                        uv_2_txs.push_back(tx);
+                        uv_2_txs.pop_front();
+                        continue;
+                    }
+                    
+                    if(reply_to->type() != 0)
+                    {
+                        failed_cb();
+                        uv_2_txs.push_back(tx);
+                        uv_2_txs.pop_front();
+                        continue;
+                    }
+                    
+                    reply->set_reply_to(reply_to);
+                }
+                
+                if(topic->get_owner() != account)
+                {
+                    if(!account->joined_topic(topic))
+                    {
+                        if(account->m_joined_topic_list.size() >= 100)
+                        {
+                            failed_cb();
+                            uv_2_txs.push_back(tx);
+                            uv_2_txs.pop_front();
+                            continue;
+                        }
+                        
+                        account->m_joined_topic_list.push_back(topic);
+                        topic->add_member(tx_id, account);
+                    }
+                }
+                        
+                topic->m_reply_list.push_back(reply);
+            }
+            else if(tx_type == 5) // reward
+            {
+                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Topic> topic;
+                uint64 amount = tx_reward->m_amount;
+
+                if(!get_topic(tx_reward->m_topic_key, topic))
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                if(topic->get_owner() != account)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                reply->set_owner(account);
+                    
+                if(topic->m_reply_list.size() >= 1000)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                if(topic->get_balance() < amount)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+
+                std::shared_ptr<Reply> reply_to;
+                
+                if(!topic->get_reply(tx_reward->m_reply_to, reply_to))
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                if(reply_to->type() != 0)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                reply->set_reply_to(reply_to);
+                topic->sub_balance(amount);
+                reply_to->add_balance(amount);
+                reply_to->get_owner()->add_balance(amount);
+                reply->add_balance(amount);
+                topic->m_reply_list.push_back(reply);
+            }
+            else
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+        }
+        
+        m_tx_map.insert(std::make_pair(tx_id, cur_block));
+        mined_txs.push_back(tx);
+
+        if(mined_txs.size() >= 2000)
+        {
+            break;
+        }
+    }
+    
+    for(auto iter = mined_txs.rbegin(); iter != mined_txs.rend(); ++iter)
+    {
+        auto tx = *iter;
+        auto tx_type = tx->m_type;
+        auto block_id = tx->m_block_id;
+        auto tx_id = tx->m_id;
+        auto pubkey = tx->m_pubkey;
+        auto &doc = *tx->m_doc;
+        const rapidjson::Value &data = doc["data"];
+        m_tx_map.erase(tx_id);
+
+        if(tx_type == 1)
+        {
+            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            auto register_name = tx_reg->m_register_name;
+            std::shared_ptr<Account> referrer;
+            get_account(tx_reg->m_referrer_pubkey, referrer);
+            std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
+            
+            if(!referrer_referrer)
+            {
+                m_reserve_fund_account->sub_balance(1);
+            }
+            else
+            {
+                referrer_referrer->sub_balance(1);
+            }
+            
+            referrer->add_balance(2);
+            m_account_names.erase(register_name);
+            m_account_by_pubkey.erase(pubkey);
+            --m_cur_account_id;
+        }
+        else
+        {
+            std::shared_ptr<Account> account;
+            get_account(pubkey, account);
+            std::shared_ptr<Account> referrer = account->get_referrer();
+            
+            if(!referrer)
+            {
+                m_reserve_fund_account->sub_balance(1);
+            }
+            else
+            {
+                referrer->sub_balance(1);
+            }
+            
+            account->add_balance(2);
+            
+            if(tx_type == 2) // send coin
+            {
+                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                uint64 amount = tx_send->m_amount;
+                std::shared_ptr<Account> receiver;
+                get_account(tx_send->m_receiver_pubkey, receiver);
+                account->add_balance(amount);
+                receiver->sub_balance(amount);
+            }
+            else if(tx_type == 3) // new topic
+            {
+                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                uint64 reward = tx_topic->m_reward;
+                account->add_balance(reward);
+                account->m_topic_list.pop_back();
+                m_topic_list.pop_back();
+                m_topics.erase(tx_id);
+            }
+            else if(tx_type == 4) // reply
+            {
+                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Topic> topic;
+                get_topic(tx_reply->m_topic_key, topic);
+                topic->m_reply_list.pop_back();
+                
+                if(topic->get_owner() != account)
+                {
+                    auto &p = topic->m_members.back();
+                        
+                    if(p.first == tx_id)
+                    {
+                        account->m_joined_topic_list.pop_back();
+                        topic->m_members.pop_back();
+                    }
+                }
+            }
+            else if(tx_type == 5) // reward
+            {
+                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Topic> topic;
+                get_topic(tx_reward->m_topic_key, topic);
+                std::shared_ptr<Reply> reply_to;
+                topic->get_reply(tx_reward->m_reply_to, reply_to);
+                uint64 amount = tx_reward->m_amount;
+                topic->add_balance(amount);
+                reply_to->sub_balance(amount);
+                reply_to->get_owner()->sub_balance(amount);
+                topic->m_reply_list.pop_back();
+            }
+        }
+    }
+    
+    if(cur_block_id > (TOPIC_LIFE_TIME + 1))
+    {
+        auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+
+        for(auto topic : topic_list)
+        {
+            m_topics.insert(std::make_pair(topic->key(), topic));
+            topic->get_owner()->m_topic_list.push_front(topic);
+            m_topic_list.push_front(topic);
+            uint64 balance = topic->get_balance();
+                        
+            if(balance > 0)
+            {
+                m_reserve_fund_account->sub_balance(balance);
+            }
+
+            for(auto &p : topic->m_members)
+            {
+                p.second->m_joined_topic_list.push_front(topic);
+            }
+        }
+        
+        auto tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
+                
+        for(auto _tx_id : tx_pair.second)
+        {
+            m_tx_map.insert(std::make_pair(_tx_id, tx_pair.first));
+        }
+        
+        m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+        m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
+    }
+}
+
 void Blockchain::do_uv_tx()
 {
     uint64 cur_block_id  = m_cur_block->id();
@@ -2202,7 +2725,7 @@ void Blockchain::do_uv_tx()
             auto register_name = tx_reg->m_register_name;
             std::shared_ptr<Account> exist_account;
 
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_1_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2256,7 +2779,7 @@ void Blockchain::do_uv_tx()
         }
         else
         {
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_1_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2491,7 +3014,7 @@ void Blockchain::do_uv_tx()
         m_uv_2_txs.push_back(tx);
         net::p2p::Node::instance()->broadcast(*tx->m_doc);
     }
-    
+
     for(auto iter = m_uv_2_txs.begin(); iter != m_uv_2_txs.end();)
     {
         auto tx = *iter;
@@ -2523,7 +3046,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2586,7 +3109,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2631,7 +3154,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
 
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2750,7 +3273,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2872,7 +3395,7 @@ void Blockchain::do_uv_tx()
                     }
                 },[] {});
             
-            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+            if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
             {
                 iter = m_uv_2_txs.erase(iter);
                 m_uv_tx_ids.erase(tx_id);
@@ -2898,18 +3421,13 @@ void Blockchain::do_uv_tx()
         ++iter;
     }
 
-    for(auto iter = m_uv_2_txs.begin(); iter != m_uv_2_txs.end();)
-    {
-        // todo mining?
-    }
-
     for(auto iter = m_uv_3_txs.begin(); iter != m_uv_3_txs.end();)
     {
         auto tx = *iter;
         auto block_id = tx->m_block_id;
         auto tx_id = tx->m_id;
 
-        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
         {
             iter = m_uv_3_txs.erase(iter);
             continue;
@@ -2926,6 +3444,8 @@ void Blockchain::do_uv_tx()
         
         ++iter;
     }
+    
+    mine_tx();
 }
 
 void Blockchain::dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message)
@@ -3406,7 +3926,6 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
 
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                 referrer->sub_balance(2);
-                miner->add_balance(1);
 
                 if(!referrer_referrer)
                 {
@@ -3509,7 +4028,6 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 
                 std::shared_ptr<Account> referrer = account->get_referrer();
                 account->sub_balance(2);
-                miner->add_balance(1);
                 
                 if(!referrer)
                 {
@@ -3809,6 +4327,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
         }
 
         uint64 remain_balance = m_reserve_fund_account->get_balance();
+        miner->add_balance(tx_num);
 
         if(remain_balance >= 5000)
         {
@@ -3820,7 +4339,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
         {
             iter_block->m_miner_reward = false;
         }
-
+        
         m_block_changed = true;
     }
     
@@ -3896,12 +4415,14 @@ void Blockchain::rollback(uint64 block_id)
             m_reserve_fund_account->add_balance(5000);
             miner->sub_balance(5000);
         }
-
+        
         if(tx_num <= 0)
         {
             ASKCOIN_TRACE;
             goto proc_tx_end;
         }
+        
+        miner->sub_balance(tx_num);
         
         for(int32 i = tx_num - 1; i >= 0; --i)
         {
@@ -3947,7 +4468,6 @@ void Blockchain::rollback(uint64 block_id)
                 get_account(referrer_pubkey, referrer);
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                 referrer->add_balance(2);
-                miner->sub_balance(1);
                 
                 if(!referrer_referrer)
                 {
@@ -3973,7 +4493,6 @@ void Blockchain::rollback(uint64 block_id)
                 get_account(pubkey, account);
                 std::shared_ptr<Account> referrer = account->get_referrer();
                 account->add_balance(2);
-                miner->sub_balance(1);
                 
                 if(!referrer)
                 {
@@ -4480,13 +4999,15 @@ void Blockchain::rollback(uint64 block_id)
                 m_reserve_fund_account->add_balance(5000);
                 miner->sub_balance(5000);
             }
-
+            
             if(tx_num <= 0)
             {
                 ASKCOIN_TRACE;
                 goto proc_tx_end_1;
             }
 
+            miner->sub_balance(tx_num);
+            
             for(int32 i = tx_num - 1; i >= 0; --i)
             {
                 std::string tx_id = tx_ids[i].GetString();
@@ -4531,7 +5052,6 @@ void Blockchain::rollback(uint64 block_id)
                     get_account(referrer_pubkey, referrer);
                     std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                     referrer->add_balance(2);
-                    miner->sub_balance(1);
                 
                     if(!referrer_referrer)
                     {
@@ -4557,7 +5077,6 @@ void Blockchain::rollback(uint64 block_id)
                     get_account(pubkey, account);
                     std::shared_ptr<Account> referrer = account->get_referrer();
                     account->add_balance(2);
-                    miner->sub_balance(1);
                 
                     if(!referrer)
                     {

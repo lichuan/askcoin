@@ -82,7 +82,9 @@ private:
 private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
     void rollback(uint64 block_id);
+    void mine_tx();
     std::atomic<bool> m_stop{false};
+    std::atomic<bool> m_need_remine{false};
     std::thread m_msg_thread;
     std::thread m_score_thread;
     bool check_balance();

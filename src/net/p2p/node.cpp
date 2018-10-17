@@ -2694,6 +2694,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 tx_reg->m_doc = message->doc_shared();
                 tx_reg->m_pubkey = pubkey;
                 tx_reg->m_block_id = block_id;
+                tx_reg->m_avatar = avatar;
                 tx_reg->m_register_name = register_name;
                 tx_reg->m_referrer_pubkey = referrer_pubkey;
                 m_uv_tx_ids.insert(tx_id);
@@ -4109,9 +4110,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     {
                         if(referrer->id() > 1)
                         {
-                            proc_tx_failed = true;
-                            ASKCOIN_TRACE;
-                            break;
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
                         
                         m_reserve_fund_account->add_balance(1);
@@ -4122,7 +4121,6 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     
                     referrer->sub_balance(2);
-                    miner->add_balance(1);
                     std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
                     m_account_names.insert(register_name);
                     m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
@@ -4204,11 +4202,9 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     {
                         if(account->id() > 1)
                         {
-                            proc_tx_failed = true;
-                            ASKCOIN_TRACE;
-                            break;
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-
+                        
                         m_reserve_fund_account->add_balance(1);
                     }
                     else
@@ -4217,9 +4213,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     
                     account->sub_balance(2);
-                    miner->add_balance(1);
                     auto failed_cb = [=]() {
-                        miner->sub_balance(1);
                         account->add_balance(2);
 
                         if(!referrer)
@@ -4809,7 +4803,6 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         }
                     
                         referrer->add_balance(2);
-                        miner->sub_balance(1);
                         m_account_names.erase(register_name);
                         m_account_by_pubkey.erase(pubkey);
                         --m_cur_account_id;
@@ -4831,7 +4824,6 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         }
                     
                         account->add_balance(2);
-                        miner->sub_balance(1);
 
                         if(tx_type == 2) // send coin
                         {
@@ -4923,6 +4915,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             }
             
             uint64 remain_balance = m_reserve_fund_account->get_balance();
+            miner->add_balance(tx_num);
 
             if(remain_balance >= 5000)
             {
@@ -4934,7 +4927,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             {
                 cur_block->m_miner_reward = false;
             }
-
+            
             LOG_DEBUG_INFO("finish_detail, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
