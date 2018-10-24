@@ -62,6 +62,7 @@ public:
     void dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message);
     void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
     void do_message();
+    void do_mine();
     void do_score();
     void stop();
     void broadcast();
@@ -81,11 +82,13 @@ private:
     
 private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
+    void switch_to_most_difficult();
     void rollback(uint64 block_id);
     void mine_tx();
+    void mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr);
     std::atomic<bool> m_stop{false};
-    std::atomic<bool> m_need_remine{false};
     std::thread m_msg_thread;
+    std::thread m_mine_thread;
     std::thread m_score_thread;
     bool check_balance();
     uint64 m_cur_account_id = 0;
@@ -112,8 +115,20 @@ private:
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::list<std::shared_ptr<tx::Tx>> m_uv_1_txs;
     std::list<std::shared_ptr<tx::Tx>> m_uv_2_txs;
+    std::list<std::shared_ptr<tx::Tx>> m_mined_txs;
+    std::mutex m_mine_mutex;
+    std::atomic<bool> m_need_remine{false};
+    std::atomic<bool> m_mine_success{false};
+    std::atomic<uint64> m_mine_id_1 {0};
+    std::atomic<uint64> m_mine_id_2 {0};
+    std::shared_ptr<rapidjson::Document> m_mine_doc;
+    uint64 m_mine_cur_block_id;
+    std::string m_mine_cur_block_hash;
+    std::string m_miner_privkey;
+    uint64 m_mine_cur_block_utc;
+    uint32 m_mine_zero_bits;
     std::unordered_set<std::string> m_uv_tx_ids;
-
+    
     struct Tx_Comp
     {
         bool operator()(const std::shared_ptr<tx::Tx> &a, const std::shared_ptr<tx::Tx> &b)

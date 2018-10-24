@@ -2,7 +2,7 @@
 #include "utilstrencodings.h"
 #include "blockchain.hpp"
 
-Account::Account(uint64 id, std::string name, std::string pubkey, uint32 avatar)
+Account::Account(uint64 id, std::string name, std::string pubkey, uint32 avatar, uint64 block_id)
 {
     m_id = id;
     m_name = name;
@@ -12,6 +12,7 @@ Account::Account(uint64 id, std::string name, std::string pubkey, uint32 avatar)
     m_uv_spend = 0;
     m_uv_topic = 0;
     m_uv_join_topic = 0;
+    m_block_id = block_id;
 }
 
 Account::~Account()
@@ -21,6 +22,11 @@ Account::~Account()
 uint64 Account::get_balance()
 {
     return m_balance;
+}
+
+uint64 Account::block_id()
+{
+    return m_block_id;
 }
 
 void Account::add_balance(uint64 value)

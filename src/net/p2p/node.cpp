@@ -2364,6 +2364,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             auto pending_chain = *request->m_chains.begin();
             pending_chain->m_req_blocks[pending_chain->m_start]->m_doc = message->doc_shared();
             finish_detail(request);
+
+            if(m_most_difficult_block->difficult_than_me(m_cur_block))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
+            if(!m_cur_block->difficult_equal(m_most_difficult_block))
+            {
+                switch_to_most_difficult();
+            }
         }
         else
         {
@@ -3303,10 +3313,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
 void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
 {
-    for(auto iter = req->m_chains.begin(); iter != req->m_chains.end();)
+    for(auto iter = req->m_chains.begin(); iter != req->m_chains.end(); ++iter)
     {
         auto pending_chain = *iter;
-        bool erase_iter = false;
         auto peer = pending_chain->m_peer;
         auto key = peer->key();
 
@@ -3337,10 +3346,9 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                 {
                     m_chains_by_peer_key.erase(key);
                     punish_peer(peer);
-                    erase_iter = true;
                     break;
                 }
-
+                
                 pending_block->add_difficulty_from(pre_block);
                 auto last_pb = pending_block;
                 auto cur_pb_iter = pending_chain->m_req_blocks.begin();
@@ -3378,7 +3386,6 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                 {
                     m_chains_by_peer_key.erase(key);
                     punish_peer(peer);
-                    erase_iter = true;
                     break;
                 }
                 
@@ -3505,15 +3512,6 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                 break;
             }
         }
-        
-        if(erase_iter)
-        {
-            iter = req->m_chains.erase(iter);
-        }
-        else
-        {
-            ++iter;
-        }
     }
     
     m_pending_brief_reqs.erase(req->m_hash);
@@ -3544,9 +3542,35 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
         
         if(chain->m_brief_attached)
         {
+            auto request = chain->m_brief_attached;
+
+            for(auto iter = request->m_attached_chains.begin(); iter != request->m_attached_chains.end(); ++iter)
+            {
+                if(*iter == chain)
+                {
+                    request->m_attached_chains.erase(iter);
+                    break;
+                }
+            }
+
+            request->m_chains.erase(chain);
+            m_chains_by_peer_key.erase(key);
         }
         else if(chain->m_detail_attached)
         {
+            auto request = chain->m_brief_attached;
+
+            for(auto iter = request->m_attached_chains.begin(); iter != request->m_attached_chains.end(); ++iter)
+            {
+                if(*iter == chain)
+                {
+                    request->m_attached_chains.erase(iter);
+                    break;
+                }
+            }
+            
+            request->m_chains.erase(chain);
+            m_chains_by_peer_key.erase(key);
         }
         else
         {
@@ -4121,7 +4145,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     
                     referrer->sub_balance(2);
-                    std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar));
+                    std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
                     m_account_names.insert(register_name);
                     m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                     reg_account->set_referrer(referrer);
@@ -5033,15 +5057,20 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                      block_hash.c_str(), hex_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
+
+            if(m_most_difficult_block->difficult_than_me(m_cur_block))
+            {
+                m_most_difficult_block = m_cur_block;
+                auto &doc = *pending_block->m_doc;
+                m_broadcast_json.m_hash = doc["hash"];
+                m_broadcast_json.m_sign = doc["sign"];
+                m_broadcast_json.m_data = doc["data"];
+                broadcast();
+            }
+            
             m_block_changed = true;
         }
         
-        m_most_difficult_block = m_cur_block;
-        auto &doc = *pending_block->m_doc;
-        m_broadcast_json.m_hash = doc["hash"];
-        m_broadcast_json.m_sign = doc["sign"];
-        m_broadcast_json.m_data = doc["data"];
-        broadcast();
         net::p2p::Node *p2p_node = net::p2p::Node::instance();
         std::unordered_map<std::string, std::shared_ptr<net::p2p::Peer_Score>> &peer_score_map = p2p_node->m_peer_score_map;
         std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
@@ -5273,6 +5302,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
         request->m_pb = pb;
         m_pending_detail_reqs.insert(std::make_pair(block_hash, request));
         pending_chain->m_detail_attached = request;
+        pending_chain->m_brief_attached.reset();
         request->m_chains.insert(pending_chain);
         peer->m_connection->send(doc);
         ++request->m_try_num;
@@ -5348,6 +5378,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
     {
         request = iter_detail->second;
         pending_chain->m_detail_attached = request;
+        pending_chain->m_brief_attached.reset();
         request->m_chains.insert(pending_chain);
         uint64 send_num = 0;
         

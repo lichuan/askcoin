@@ -18,7 +18,7 @@ public:
         }
     };
     
-    Account(uint64 id, std::string name, std::string pubkey, uint32 avatar);
+    Account(uint64 id, std::string name, std::string pubkey, uint32 avatar, uint64 block_id);
     ~Account();
     std::string pubkey();
     uint64 id();
@@ -30,6 +30,7 @@ public:
     void set_referrer(std::shared_ptr<Account> account);
     std::shared_ptr<Account> get_referrer();
     uint64 get_balance();
+    uint64 block_id();
     void add_history(History *history);
     bool joined_topic(std::shared_ptr<Topic> topic);
     void leave_topic(std::shared_ptr<Topic> topic);
@@ -43,6 +44,7 @@ private:
     std::list<History*> m_history;
     std::string m_name;
     uint64 m_id;
+    uint64 m_block_id;
     std::string m_pubkey;
     uint64 m_balance;
     std::shared_ptr<Account> m_referrer;
