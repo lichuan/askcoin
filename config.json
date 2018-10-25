@@ -13,8 +13,8 @@
                     "port": 18050
                 },
                 {
-                    "host": "112.25.77.101",
-                    "port": 18050
+                    "host": "192.168.0.122",
+                    "port": 18051
                 },
                 {
                     "host": "node2.askcoin.me",
@@ -28,7 +28,7 @@
         },
         "websocket": {
             "host": "0.0.0.0",
-            "port": 18051,
+            "port": 19050,
             "max_conn": 5000,
             "open": true
         }

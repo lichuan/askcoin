@@ -14,15 +14,15 @@ public:
     {
         bool operator()(const std::shared_ptr<Account> &a, const std::shared_ptr<Account> &b)
         {
-            return a->get_balance() > b->get_balance();
+            return a->get_balance() > b->get_balance() || a->id() < b->id();
         }
     };
     
     Account(uint64 id, std::string name, std::string pubkey, uint32 avatar, uint64 block_id);
     ~Account();
-    std::string pubkey();
+    std::string& pubkey();
     uint64 id();
-    std::string name();
+    std::string& name();
     uint32 avatar();
     void set_balance(uint64 value);
     void add_balance(uint64 value);

@@ -539,7 +539,7 @@ void Blockchain::do_mine()
         data.AddMember("version", ASKCOIN_VERSION, allocator);
         data.AddMember("zero_bits", zero_bits, allocator);
         data.AddMember("pre_hash", rapidjson::Value(cur_block_hash.c_str(), allocator), allocator);
-        data.AddMember("miner", rapidjson::Value(miner_pub_key.begin(), miner_pub_key.size(), allocator), allocator);
+        data.AddMember("miner", rapidjson::Value(miner_pub_key_b64.c_str(), allocator), allocator);
         rapidjson::Value tx_ids(rapidjson::kArrayType);
         
         for(auto tx : mined_txs)
@@ -566,6 +566,8 @@ void Blockchain::do_mine()
                     {
                         if(++iter_count > 1000)
                         {
+                            CONSOLE_LOG_INFO("1000...........................................");
+                            
                             if(m_stop.load(std::memory_order_relaxed))
                             {
                                 return;
@@ -692,6 +694,662 @@ void Blockchain::do_mine()
     }
 }
 
+void Blockchain::do_command(std::shared_ptr<Command> command)
+{
+    fly::base::Scope_CB cb([]() {
+        fflush(stdout);
+    });
+
+    if(command->m_cmd == "top100")
+    {
+        uint32 cnt = 0;
+        char title[5][15] = {"rank", "account_name", "account_id", "avatar", "balance"};
+        printf("-----------------------------------------------------------\n");
+        printf("%-5s\t%-15s\t%-10s\t%-7s\t%-22s\n", title[0], title[1], title[2], title[3], title[4]);
+        printf("-----------------------------------------------------------\n");
+        
+        for(auto iter = m_account_by_rich.begin(); iter != m_account_by_rich.end(); ++iter)
+        {
+            if(++cnt > 100)
+            {
+                break;
+            }
+            
+            auto account = *iter;
+            char raw_name[16] = {0};
+            fly::base::base64_decode(account->name().c_str(), account->name().length(), raw_name, 16);
+            printf("%-5u\t%-15s\t%-10lu\t%-7u\t%-22lu\n", cnt, raw_name, account->id(), account->avatar(), account->get_balance());
+        }
+        
+        printf(">");
+    }
+    else if(command->m_cmd == "enable_mine")
+    {
+        std::string enable = command->m_params[0];
+
+        if(enable != "true" && enable != "false")
+        {
+            printf("the param of enable_mine must be true or false\n>");
+            return;
+        }
+        
+        if(enable == "true")
+        {
+            m_enable_mine.store(true, std::memory_order_relaxed);
+        }
+        else
+        {
+            m_enable_mine.store(false, std::memory_order_relaxed);
+        }
+    }
+    else if(command->m_cmd == "get_balance")
+    {
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
+        std::string miner_privkey = m_miner_privkey;
+        lock.unlock();
+        
+        if(miner_privkey.empty())
+        {
+            printf("you need import_privkey first\n>");
+            return;
+        }
+        
+        char privk[32];
+        fly::base::base64_decode(miner_privkey.c_str(), miner_privkey.length(), privk, 32);
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        std::string miner_pub_key_b64 = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        std::shared_ptr<Account> account;
+        
+        if(!get_account(miner_pub_key_b64, account))
+        {
+            printf("you need reg_account first\n>");
+            return;
+        }
+
+        printf("your account's balance: %lu ASK\n>", account->get_balance());
+    }
+    else if(command->m_cmd == "send_coin")
+    {
+        uint64 account_id;
+        uint64 amount;
+        fly::base::string_to(command->m_params[0], account_id);
+        fly::base::string_to(command->m_params[1], amount);
+        std::string memo;
+        
+        if(command->m_param_num > 2)
+        {
+            memo = command->m_params[2];
+        }
+        
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
+        std::string miner_privkey = m_miner_privkey;
+        lock.unlock();
+        
+        if(miner_privkey.empty())
+        {
+            printf("you need import_privkey first\n>");
+            return;
+        }
+        
+        char privk[32];
+        fly::base::base64_decode(miner_privkey.c_str(), miner_privkey.length(), privk, 32);
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        std::string miner_pub_key_b64 = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        std::shared_ptr<Account> account;
+        
+        if(!get_account(miner_pub_key_b64, account))
+        {
+            printf("you need reg_account first\n>");
+            return;
+        }
+        
+        if(account->get_balance() < amount + 2 + account->m_uv_spend)
+        {
+            printf("your account's balance is insufficient\n>");
+            return;
+        }
+        
+        std::shared_ptr<Account> receiver;
+        auto iter = m_account_by_id.find(account_id);
+        
+        if(iter == m_account_by_id.end())
+        {
+            printf("receiver account doesn't exist\n>");
+            return;
+        }
+
+        receiver = iter->second;
+        uint64 utc = time(NULL);
+        uint64 cur_block_id = m_cur_block->id();
+        auto doc_ptr = std::make_shared<rapidjson::Document>();
+        auto &p2p_doc = *doc_ptr;
+        p2p_doc.SetObject();
+        rapidjson::Document::AllocatorType &p2p_allocator = p2p_doc.GetAllocator();
+        p2p_doc.AddMember("msg_type", net::p2p::MSG_TX, p2p_allocator);
+        p2p_doc.AddMember("msg_cmd", net::p2p::TX_BROADCAST, p2p_allocator);
+        rapidjson::Value data(rapidjson::kObjectType);
+        data.AddMember("type", 1, p2p_allocator);
+        data.AddMember("pubkey", rapidjson::Value(miner_pub_key_b64.c_str(), p2p_allocator), p2p_allocator);
+        data.AddMember("utc", utc, p2p_allocator);
+        data.AddMember("block_id", cur_block_id + 1, p2p_allocator);
+        data.AddMember("fee", 2, p2p_allocator);
+        data.AddMember("amount", amount, p2p_allocator);
+
+        if(!memo.empty())
+        {
+            std::string memo_b64 = fly::base::base64_encode(memo.c_str(), memo.length());
+            data.AddMember("memo", rapidjson::Value(memo_b64.c_str(), p2p_allocator), p2p_allocator);
+        }
+
+        data.AddMember("receiver", rapidjson::Value(receiver->pubkey().c_str(), p2p_allocator), p2p_allocator);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        data.Accept(writer);
+        char raw_hash[32] = {0};
+        coin_hash(buffer.GetString(), buffer.GetSize(), raw_hash);
+        std::string tx_id = fly::base::base64_encode(raw_hash, 32);
+
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            printf("this tx already exist\n>");
+            return;
+        }
+        
+        if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+        {
+            printf("this tx already exist\n>");
+            return;
+        }
+        
+        std::vector<unsigned char> sign_vec;
+        
+        if(!miner_priv_key.Sign(uint256(std::vector<unsigned char>(raw_hash, raw_hash + 32)), sign_vec))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        std::string sign = fly::base::base64_encode(&sign_vec[0], sign_vec.size());
+        p2p_doc.AddMember("sign", rapidjson::Value(sign.c_str(), p2p_allocator), p2p_allocator);
+        p2p_doc.AddMember("data", data, p2p_allocator);
+        
+        std::shared_ptr<tx::Tx_Send> tx_send(new tx::Tx_Send);
+        tx_send->m_id = tx_id;
+        tx_send->m_type = 2;
+        tx_send->m_utc = utc;
+        tx_send->m_doc = doc_ptr;
+        tx_send->m_pubkey = miner_pub_key_b64;
+        tx_send->m_block_id = cur_block_id + 1;
+        tx_send->m_receiver_pubkey = receiver->pubkey();
+        tx_send->m_amount = amount;
+        m_uv_tx_ids.insert(tx_id);
+        m_uv_2_txs.push_back(tx_send);
+        account->m_uv_spend += amount + 2;
+        net::p2p::Node::instance()->broadcast(p2p_doc);
+        printf("send_coin has been successfully broadcast, please wait the miner to confirm\n>");
+    }
+    else if(command->m_cmd == "gen_reg_sign")
+    {
+        auto &raw_name = command->m_params[0];
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
+        std::string miner_privkey = m_miner_privkey;
+        lock.unlock();
+        
+        if(miner_privkey.empty())
+        {
+            printf("you need import_privkey first\n>");
+            return;
+        }
+        
+        uint32 len = raw_name.length();
+
+        if(len > 15 || len == 0)
+        {
+            printf("account_name's length is invalid, can't exceed 15 bytes\n>");
+            return;
+        }
+        
+        for(uint32 i = 0; i < len; ++i)
+        {
+            if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+            {
+                printf("account_name can't contain space\n>");
+                return;
+            }
+        }
+        
+        std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
+        
+        if(account_name_exist(register_name))
+        {
+            printf("account_name already exists\n>");
+            return;
+        }
+        
+        if(m_uv_account_names.find(register_name) != m_uv_account_names.end())
+        {
+            printf("account_name already exists\n>");
+            return;
+        }
+
+        char privk[32];
+        fly::base::base64_decode(miner_privkey.c_str(), miner_privkey.length(), privk, 32);
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        std::string miner_pub_key_b64 = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        std::shared_ptr<Account> referrer;
+        
+        if(!get_account(miner_pub_key_b64, referrer))
+        {
+            printf("you need reg_account first\n>");
+            return;
+        }
+        
+        if(referrer->get_balance() < 2 + referrer->m_uv_spend)
+        {
+            printf("your account's balance is insufficient\n>");
+            return;
+        }
+        
+        uint64 cur_block_id = m_cur_block->id();
+        rapidjson::Document doc;
+        doc.SetObject();
+        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+        rapidjson::Value sign_data(rapidjson::kObjectType);
+        sign_data.AddMember("block_id", cur_block_id + 1, allocator);
+        sign_data.AddMember("fee", 2, allocator);
+        sign_data.AddMember("name", rapidjson::StringRef(register_name.c_str()), allocator);
+        sign_data.AddMember("referrer", rapidjson::StringRef(miner_pub_key_b64.c_str()), allocator);
+
+        {
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            sign_data.Accept(writer);
+            char raw_hash[32] = {0};
+            coin_hash(buffer.GetString(), buffer.GetSize(), raw_hash);
+            std::vector<unsigned char> sign_vec;
+            
+            if(!miner_priv_key.Sign(uint256(std::vector<unsigned char>(raw_hash, raw_hash + 32)), sign_vec))
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+
+            std::string sign = fly::base::base64_encode(&sign_vec[0], sign_vec.size());
+            doc.AddMember("sign", rapidjson::StringRef(sign.c_str()), allocator);
+            doc.AddMember("sign_data", sign_data, allocator);
+        }
+        
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        doc.Accept(writer);
+        printf("gen_reg_sign successfully, reg_sign:\n%s\n>", buffer.GetString());
+    }
+    else if(command->m_cmd == "reg_account")
+    {
+        auto &raw_name = command->m_params[0];
+        uint32 avatar = 0;
+        fly::base::string_to(command->m_params[1], avatar);
+        std::string reg_sign = command->m_params[2];
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
+        std::string miner_privkey = m_miner_privkey;
+        lock.unlock();
+        
+        if(miner_privkey.empty())
+        {
+            printf("you need import_privkey first\n>");
+            return;
+        }
+        
+        uint32 len = raw_name.length();
+
+        if(len > 15 || len == 0)
+        {
+            printf("account_name's length is invalid, can't exceed 15 bytes\n>");
+            return;
+        }
+        
+        for(uint32 i = 0; i < len; ++i)
+        {
+            if(std::isspace(static_cast<unsigned char>(raw_name[i])))
+            {
+                printf("account_name can't contain space\n>");
+                return;
+            }
+        }
+        
+        std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
+        
+        if(account_name_exist(register_name))
+        {
+            printf("account_name already exists\n>");
+            return;
+        }
+        
+        if(m_uv_account_names.find(register_name) != m_uv_account_names.end())
+        {
+            printf("account_name already exists\n>");
+            return;
+        }
+        
+        char privk[32];
+        fly::base::base64_decode(miner_privkey.c_str(), miner_privkey.length(), privk, 32);
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        std::string miner_pub_key_b64 = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        uint64 cur_block_id = m_cur_block->id();
+        std::shared_ptr<Account> exist_account;
+
+        if(get_account(miner_pub_key_b64, exist_account))
+        {
+            printf("your privkey is already registered\n>");
+            return;
+        }
+        
+        if(m_uv_account_pubkeys.find(miner_pub_key_b64) != m_uv_account_pubkeys.end())
+        {
+            printf("your privkey is already registered\n>");
+            return;
+        }
+
+        if(avatar < 1 || avatar > 100)
+        {
+            printf("avatar must be in range from 1 to 100\n>");
+            return;
+        }
+        
+        rapidjson::Document ref_doc;
+        ref_doc.Parse(reg_sign.c_str());
+        
+        if(ref_doc.HasParseError())
+        {
+            printf("parse reg_sign failed, reason: %s\n>", GetParseError_En(ref_doc.GetParseError()));
+            return;
+        }
+        
+        if(!ref_doc.IsObject())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!ref_doc.HasMember("sign"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!ref_doc["sign"].IsString())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+        
+        if(!ref_doc.HasMember("sign_data"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        rapidjson::Value &sign_data = ref_doc["sign_data"];
+        
+        if(!sign_data.IsObject())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+        
+        std::string ref_sign = ref_doc["sign"].GetString();
+        
+        if(!is_base64_char(ref_sign))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        std::string sign_hash;
+        {
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            sign_data.Accept(writer);
+            sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+        }
+
+        if(!sign_data.HasMember("block_id"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!sign_data["block_id"].IsUint64())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+                    
+        if(!sign_data.HasMember("name"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!sign_data["name"].IsString())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+                    
+        if(!sign_data.HasMember("referrer"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!sign_data["referrer"].IsString())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+                    
+        if(!sign_data.HasMember("fee"))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!sign_data["fee"].IsUint64())
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+        
+        uint64 block_id = sign_data["block_id"].GetUint64();
+        std::string reg_name = sign_data["name"].GetString();
+        std::string referrer_pubkey = sign_data["referrer"].GetString();
+        uint64 fee = sign_data["fee"].GetUint64();
+
+        if(block_id == 0)
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
+        {
+            printf("parse reg_sign failed, block_id is expired\n>");
+            return;
+        }
+        
+        if(fee != 2)
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+                
+        if(!is_base64_char(referrer_pubkey))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(referrer_pubkey.length() != 88)
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+                
+        if(!verify_sign(referrer_pubkey, sign_hash, ref_sign))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(!is_base64_char(reg_name))
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(reg_name.length() > 20 || reg_name.length() < 4)
+        {
+            printf("parse reg_sign failed\n>");
+            return;
+        }
+
+        if(reg_name != register_name)
+        {
+            printf("parse reg_sign failed, name is not the same as account_name\n>");
+            return;
+        }
+        
+        std::shared_ptr<Account> referrer;
+        
+        if(!get_account(referrer_pubkey, referrer))
+        {
+            printf("parse reg_sign failed, referrer account does not exist\n>");
+            return;
+        }
+        
+        if(referrer->get_balance() < 2 + referrer->m_uv_spend)
+        {
+            printf("parse reg_sign failed, referrer account's balance is insufficient\n>");
+            return;
+        }
+
+        uint64 utc = time(NULL);
+        auto doc_ptr = std::make_shared<rapidjson::Document>();
+        auto &p2p_doc = *doc_ptr;
+        p2p_doc.SetObject();
+        rapidjson::Document::AllocatorType &p2p_allocator = p2p_doc.GetAllocator();
+        p2p_doc.AddMember("msg_type", net::p2p::MSG_TX, p2p_allocator);
+        p2p_doc.AddMember("msg_cmd", net::p2p::TX_BROADCAST, p2p_allocator);
+        rapidjson::Value data(rapidjson::kObjectType);
+        data.AddMember("type", 1, p2p_allocator);
+        data.AddMember("pubkey", rapidjson::Value(miner_pub_key_b64.c_str(), p2p_allocator), p2p_allocator);
+        data.AddMember("utc", utc, p2p_allocator);
+        data.AddMember("avatar", avatar, p2p_allocator);
+        data.AddMember("sign", ref_doc["sign"], p2p_allocator);
+        data.AddMember("sign_data", sign_data, p2p_allocator);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        data.Accept(writer);
+        char raw_hash[32] = {0};
+        coin_hash(buffer.GetString(), buffer.GetSize(), raw_hash);
+        std::string tx_id = fly::base::base64_encode(raw_hash, 32);
+
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            printf("this tx already exist\n>");
+            return;
+        }
+        
+        if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+        {
+            printf("this tx already exist\n>");
+            return;
+        }
+        
+        std::vector<unsigned char> sign_vec;
+        
+        if(!miner_priv_key.Sign(uint256(std::vector<unsigned char>(raw_hash, raw_hash + 32)), sign_vec))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        std::string sign = fly::base::base64_encode(&sign_vec[0], sign_vec.size());
+        p2p_doc.AddMember("sign", rapidjson::Value(sign.c_str(), p2p_allocator), p2p_allocator);
+        p2p_doc.AddMember("data", data, p2p_allocator);
+        
+        std::shared_ptr<tx::Tx_Reg> tx_reg(new tx::Tx_Reg);
+        tx_reg->m_id = tx_id;
+        tx_reg->m_type = 1;
+        tx_reg->m_utc = utc;
+        tx_reg->m_doc = doc_ptr;
+        tx_reg->m_pubkey = miner_pub_key_b64;
+        tx_reg->m_block_id = block_id;
+        tx_reg->m_register_name = register_name;
+        tx_reg->m_avatar = avatar;
+        tx_reg->m_referrer_pubkey = referrer_pubkey;
+        m_uv_tx_ids.insert(tx_id);
+        m_uv_account_names.insert(register_name);
+        m_uv_account_pubkeys.insert(miner_pub_key_b64);
+        m_uv_2_txs.push_back(tx_reg);
+        referrer->m_uv_spend += 2;
+        net::p2p::Node::instance()->broadcast(p2p_doc);
+        printf("reg_account has been successfully broadcast, please wait the miner to confirm\n>");
+    } 
+    else if(command->m_cmd == "gen_privkey")
+    {
+        CKey key;
+        key.MakeNewKey(false);
+        CPubKey pubkey = key.GetPubKey();
+        std::string key_b64 = fly::base::base64_encode(key.begin(), key.size());
+        std::string pubkey_b64 = fly::base::base64_encode(pubkey.begin(), pubkey.size());
+        printf("please remember your privkey: %s\n>", key_b64.c_str());
+    }
+    else if(command->m_cmd == "import_privkey")
+    {
+        if(command->m_params[0].length() != 44)
+        {
+            printf("your privkey is invalid\n>");
+            return;
+        }
+        
+        char privk[32];
+        uint32 len = fly::base::base64_decode(command->m_params[0].c_str(), command->m_params[0].length(), privk, 32);
+
+        if(len != 32)
+        {
+            printf("your privkey is invalid\n>");
+            return;
+        }
+        
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+
+        if(!miner_priv_key.IsValid())
+        {
+            printf("your privkey is invalid\n>");
+            return;
+        }
+        
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        
+        if(!miner_pub_key.IsFullyValid())
+        {
+            printf("your privkey is invalid\n>");
+            return;
+        }
+
+        m_miner_privkey = command->m_params[0];
+        printf("import_privkey successfully\n>");
+    }
+}
+
 void Blockchain::do_message()
 {
     while(!m_stop.load(std::memory_order_relaxed))
@@ -725,17 +1383,33 @@ void Blockchain::do_message()
         {
             wsock_empty = true;
         }
+
+        bool command_empty = false;
+        std::list<std::shared_ptr<Command>> commands;
         
+        if(m_commands.pop(commands))
+        {
+            for(auto cmd : commands)
+            {
+                do_command(cmd);
+            }
+        }
+        else
+        {
+            command_empty = true;
+        }
+
         bool called = m_timer_ctl.run();
-        
+
         if(m_block_changed)
         {
             do_uv_tx();
             m_block_changed = false;
         }
-        
+
         std::atomic<uint64> mine_id_2 {0};
         std::shared_ptr<rapidjson::Document> doc_ptr;
+        static std::atomic<uint64> last_mine_id {0};
         
         if(m_mine_success.load(std::memory_order_acquire))
         {
@@ -747,10 +1421,14 @@ void Blockchain::do_message()
             
             if(mine_id_2.load(std::memory_order_relaxed) == m_mine_id_1.load(std::memory_order_relaxed))
             {
-                mined_new_block(doc_ptr);
+                if(last_mine_id.load(std::memory_order_relaxed) != mine_id_2.load(std::memory_order_relaxed))
+                {
+                    mined_new_block(doc_ptr);
+                    last_mine_id.store(mine_id_2.load(std::memory_order_relaxed), std::memory_order_relaxed);
+                }
             }
         }
-        else if(peer_empty && wsock_empty && !called)
+        else if(peer_empty && wsock_empty && !called && command_empty)
         {
             RandAddSeedSleep();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -804,7 +1482,7 @@ bool Blockchain::start(std::string db_path)
     options.create_if_missing = true;
 
     // todo, set this param?
-    options.max_open_files = 100000;
+    options.max_open_files = 50000;
     options.max_file_size = 50 * (1 << 20);
     leveldb::Status s = leveldb::DB::Open(options, db_path, &m_db);
     
@@ -1072,6 +1750,8 @@ bool Blockchain::start(std::string db_path)
     std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
     m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 1, 0);
     std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 1, 0));
+    m_account_by_id.insert(std::make_pair(0, m_reserve_fund_account));
+    m_account_by_id.insert(std::make_pair(1, author_account));
     m_cur_account_id = 1;
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
@@ -1817,6 +2497,7 @@ bool Blockchain::start(std::string db_path)
                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
             }
             else
@@ -2411,8 +3092,13 @@ bool Blockchain::check_balance()
 
 void Blockchain::mine_tx()
 {
+    if(!m_enable_mine.load(std::memory_order_relaxed))
+    {
+        return;
+    }
+    
     std::unique_lock<std::mutex> lock(m_mine_mutex);
-
+    
     if(m_miner_privkey.empty())
     {
         return;
@@ -2964,7 +3650,6 @@ void Blockchain::mine_tx()
     m_mine_cur_block_hash = m_cur_block->hash();
     m_mine_cur_block_utc = m_cur_block->utc();
     m_mine_zero_bits = zero_bits;
-    m_miner_privkey = "this is miner key";
     lock.unlock();
     m_need_remine.store(true, std::memory_order_release);
 }
@@ -3224,9 +3909,9 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     
     if(!get_account(miner_pubkey, miner))
     {
-        ASKCOIN_EXIT(EXIT_FAILURE);
+        ASKCOIN_RETURN;
     }
-
+    
     uint64 parent_block_id = m_cur_block->id();
     std::string parent_hash = m_cur_block->hash();
     uint64 parent_utc = m_cur_block->utc();
@@ -3521,6 +4206,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
             m_account_names.insert(register_name);
             m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+            m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
             reg_account->set_referrer(referrer);
         }
         else
@@ -4849,6 +5535,11 @@ void Blockchain::dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>
     m_wsock_messages.push(std::move(message));
 }
 
+void Blockchain::push_command(std::shared_ptr<Command> cmd)
+{
+    m_commands.push(cmd);
+}
+
 void Blockchain::switch_to_most_difficult()
 {
     std::shared_ptr<Block> iter_block = m_cur_block;
@@ -5293,6 +5984,7 @@ void Blockchain::switch_to_most_difficult()
                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
             }
             else
@@ -6179,6 +6871,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
                 m_account_names.insert(register_name);
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
             }
             else
@@ -6682,6 +7375,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                 m_account_names.erase(register_name);
                 m_account_by_pubkey.erase(pubkey);
+                m_account_by_id.erase(m_cur_account_id);
                 --m_cur_account_id;
             }
             else
@@ -7266,6 +7960,7 @@ void Blockchain::rollback(uint64 block_id)
                 
                     m_account_names.erase(register_name);
                     m_account_by_pubkey.erase(pubkey);
+                    m_account_by_id.erase(m_cur_account_id);
                     --m_cur_account_id;
                 }
                 else

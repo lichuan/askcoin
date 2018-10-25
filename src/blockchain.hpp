@@ -18,6 +18,7 @@
 #include "pending_detail_request.hpp"
 #include "timer.hpp"
 #include "tx/tx.hpp"
+#include "command.hpp"
 
 using fly::net::Json;
 using fly::net::Wsock;
@@ -61,6 +62,7 @@ public:
     void add_account_rich(std::shared_ptr<Account> account);
     void dispatch_peer_message(std::unique_ptr<fly::net::Message<Json>> message);
     void dispatch_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> message);
+    void push_command(std::shared_ptr<Command> cmd);
     void do_message();
     void do_mine();
     void do_score();
@@ -85,6 +87,7 @@ private:
     void switch_to_most_difficult();
     void rollback(uint64 block_id);
     void mine_tx();
+    void do_command(std::shared_ptr<Command> cmd);
     void mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr);
     std::atomic<bool> m_stop{false};
     std::thread m_msg_thread;
@@ -100,6 +103,7 @@ private:
     std::unordered_set<std::string> m_account_names;
     std::unordered_set<std::string> m_uv_account_names; //unverified acc names
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
+    std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::unordered_set<std::string> m_uv_account_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
@@ -119,6 +123,7 @@ private:
     std::mutex m_mine_mutex;
     std::atomic<bool> m_need_remine{false};
     std::atomic<bool> m_mine_success{false};
+    std::atomic<bool> m_enable_mine{true};
     std::atomic<uint64> m_mine_id_1 {0};
     std::atomic<uint64> m_mine_id_2 {0};
     std::shared_ptr<rapidjson::Document> m_mine_doc;
@@ -142,6 +147,7 @@ private:
     std::shared_ptr<Account> m_reserve_fund_account;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Wsock>>> m_wsock_messages;
+    fly::base::Lock_Queue<std::shared_ptr<Command>> m_commands;
     
     struct {
         rapidjson::Value m_hash;

@@ -4148,6 +4148,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
                     m_account_names.insert(register_name);
                     m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
+                    m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                     reg_account->set_referrer(referrer);
                 }
                 else
@@ -4829,6 +4830,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         referrer->add_balance(2);
                         m_account_names.erase(register_name);
                         m_account_by_pubkey.erase(pubkey);
+                        m_account_by_id.erase(m_cur_account_id);
                         --m_cur_account_id;
                     }
                     else

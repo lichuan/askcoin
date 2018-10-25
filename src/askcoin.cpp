@@ -20,6 +20,7 @@
 #include "net/p2p/node.hpp"
 #include "net/api/wsock_node.hpp"
 #include "blockchain.hpp"
+#include "command.hpp"
 #include "utilstrencodings.h"
 
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
@@ -203,22 +204,34 @@ public:
         
         std::string cmd_tips = "\nthe following commands are available:\n"
             ">stop\n"
-            ">register_account\n"
-            ">import_account\n"
-            ">register_account_fund_sign\n"
-            ">send_coin\n"
+            ">reg_account [account_name] [avatar] [reg_sign]\n"
+            ">gen_reg_sign [account_name]\n"
+            ">gen_privkey\n"
+            ">import_privkey [privkey]\n"
+            ">send_coin [account_id] [amount] [memo]\n"
+            ">get_balance\n"
+            ">top100\n"
+            ">enable_mine [true|false]\n"
             ">help\n"
             "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
 
         CONSOLE_LOG_INFO("Congratulations, start askcoin success!!!");
         std::cout << cmd_tips << std::endl;
+        bool cmd_pushed = false;
 
         std::thread cmd_thread([&]() {
+            using std::cout;
+            using std::endl;
             while(true) {
-                std::cout << ">";
+                if(!cmd_pushed)
+                {
+                    cout << ">";
+                }
+
+                cmd_pushed = false;
                 std::string cmd_string;
                 getline(std::cin, cmd_string);
-
+                
                 if(cmd_string.empty())
                 {
                     continue;
@@ -227,14 +240,38 @@ public:
                 char *p = NULL;
                 std::vector<std::string> vec;
                 fly::base::split_string(cmd_string, " \t", vec, &p);
-                
-                for(auto token : vec)
+
+                if(vec.empty())
                 {
-                    //cout << "token: " << token << endl;
+                    continue;
                 }
                 
-                if(cmd_string == "stop")
+                auto iter = vec.begin();
+                auto cmd = *iter++;
+                uint32 param_num = 0;
+                std::shared_ptr<Command> command = std::make_shared<Command>();
+                command->m_cmd = cmd;
+                
+                while(iter != vec.end())
                 {
+                    auto param = *iter++;
+                    
+                    if(param_num < 3)
+                    {
+                        command->m_params[command->m_param_num++] = param;
+                    }
+                    
+                    ++param_num;
+                }
+                
+                if(cmd == "stop")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "stop doesn't need any param" << endl;
+                        continue;
+                    }
+                    
                     if(open_websocket)
                     {
                         net::api::Wsock_Node::instance()->stop();
@@ -242,27 +279,96 @@ public:
                     
                     net::p2p::Node::instance()->stop();
                     Blockchain::instance()->stop();
-                    
                     break;
                 }
                 
-                if(cmd_string == "help")
+                if(cmd == "help")
                 {
-                    std::cout << cmd_tips << std::endl;
+                    cout << cmd_tips << endl;
+                    continue;
                 }
-                else if(cmd_string == "ulimit")
+                else if(cmd == "ulimit")
                 {
                     system("ulimit -a");
+                    continue;
                 } 
+                else if(cmd == "gen_privkey")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "gen_privkey doesn't need any param" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "import_privkey")
+                {
+                    if(param_num != 1)
+                    {
+                        cout << "usage: import_privkey [privkey]" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "gen_reg_sign")
+                {
+                    if(param_num != 1)
+                    {
+                        cout << "usage: gen_reg_sign [reg_name]" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "reg_account")
+                {
+                    if(param_num != 3)
+                    {
+                        cout << "usage: reg_account [reg_name] [avatar] [reg_sign]" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "send_coin")
+                {
+                    if(param_num != 2 && param_num != 3)
+                    {
+                        cout << "usage: send_coin [account_id] [amount] [memo]" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "get_balance")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "get_balance doesn't need any param" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "top100")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "get_balance doesn't need any param" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "enable_mine")
+                {
+                    if(param_num != 1)
+                    {
+                        cout << "usage: enable_mine [true|false]" << endl;
+                        continue;
+                    }
+                }
                 else
                 {
-                    std::cout << "invalid command: " << vec[0] << std::endl;
+                    cout << "invalid command: " << cmd << endl;
+                    continue;
                 }
+
+                Blockchain::instance()->push_command(command);
+                cmd_pushed = true;
             }
         });
-
+        
         cmd_thread.join();
-
+        
         if(open_websocket)
         {
             net::api::Wsock_Node::instance()->wait();
