@@ -520,6 +520,7 @@ void Blockchain::do_mine()
             m_need_remine.store(false, std::memory_order_relaxed);
         }
 
+        LOG_DEBUG_INFO("start mine, dst zero_bits: %u, next_block_id: %u", zero_bits, cur_block_id + 1);
         char privk[32];
         fly::base::base64_decode(miner_key.c_str(), miner_key.length(), privk, 32);
         CKey miner_priv_key;
@@ -661,6 +662,7 @@ void Blockchain::do_mine()
         
     mine_success:
         std::string block_hash = fly::base::base64_encode(hash_raw, 32);
+        LOG_DEBUG_INFO("mine successfully, block_hash: %s", block_hash.c_str());
         doc["hash"].SetString(block_hash.c_str(), allocator);
         std::vector<unsigned char> sign_vec;
         
@@ -736,10 +738,13 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         if(enable == "true")
         {
             m_enable_mine.store(true, std::memory_order_relaxed);
+            m_block_changed = true;
+            printf("mine status: enable\n>");
         }
         else
         {
             m_enable_mine.store(false, std::memory_order_relaxed);
+            printf("mine status: disable\n>");
         }
     }
     else if(command->m_cmd == "get_balance")
@@ -1347,6 +1352,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
 
         m_miner_privkey = command->m_params[0];
         printf("import_privkey successfully\n>");
+        m_block_changed = true;
     }
 }
 
@@ -2856,10 +2862,14 @@ bool Blockchain::start(std::string db_path)
         {
             iter_block->m_miner_reward = false;
         }
-
+        
         if(cur_block_id % 1000 == 0)
         {
-            printf("load block progress: cur_block_id: %lu, cur_block_hash: %s\n", cur_block_id, iter_block->hash().c_str());
+            char hash_raw[32];
+            fly::base::base64_decode(iter_block->hash().c_str(), iter_block->hash().length(), hash_raw, 32);
+            std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
+            printf("load block progress: cur_block_id: %lu, cur_block_hash: %s (hex: %s)\n", \
+                   cur_block_id, iter_block->hash().c_str(), hex_hash.c_str());
         }
         
         block_chain.pop_front();
@@ -2872,7 +2882,11 @@ bool Blockchain::start(std::string db_path)
         }
     }
     
-    CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s", m_cur_block->id(), m_cur_block->hash().c_str());
+    char hash_raw[32];
+    fly::base::base64_decode(m_cur_block->hash().c_str(), m_cur_block->hash().length(), hash_raw, 32);
+    std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
+    CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
+                     m_cur_block->id(), m_cur_block->hash().c_str(), hex_hash.c_str());
     m_timer_ctl.add_timer([=]() {
             broadcast();
         }, 10);

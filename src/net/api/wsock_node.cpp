@@ -192,6 +192,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     rapidjson::Document& doc = message->doc();
     uint32 msg_id = doc["msg_id"].GetUint();
     net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
+    LOG_DEBUG_INFO("wsock msg: %s, length: %u, peer addr: %s:%u", message->raw_data().c_str(), msg_length, addr.m_host.c_str(), addr.m_port);
     std::unique_lock<std::mutex> lock(wsock_node->m_mutex);
     auto &users = wsock_node->m_users;
     auto iter_user = users.find(conn_id);

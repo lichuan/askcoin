@@ -119,11 +119,16 @@ void Node::connect_proc()
                 continue;
             }
             
+            const fly::net::Addr &addr = peer_score->addr();
+            
+            if(m_host == addr.m_host && m_port == addr.m_port)
+            {
+                continue;
+            }
+            
             if(peer_score->m_state.compare_exchange_strong(expect, 1))
             {
-                iter_all = false;
                 lock.unlock();
-                const fly::net::Addr &addr = peer_score->addr();
                 std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(addr,
                                                                                           std::bind(&Node::init, this, _1),
                                                                                           std::bind(&Node::dispatch, this, _1),
@@ -135,10 +140,13 @@ void Node::connect_proc()
                 if(client->connect(1000))
                 {
                     LOG_DEBUG_INFO("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
+                    iter_all = false;
                 }
                 else
                 {
                     LOG_DEBUG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
+
+                    // todo, state to 0 ?
                     peer_score->m_state.store(0, std::memory_order_relaxed);
                     lock.lock();
                     peer_score->sub_score(10);
@@ -151,7 +159,7 @@ void Node::connect_proc()
         if(iter_all)
         {
             lock.unlock();
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }
 }
@@ -412,8 +420,15 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                         ASKCOIN_RETURN;
                     }
                     
-                    std::shared_ptr<Peer_Score> peer_score(new Peer_Score(fly::net::Addr(pc["host"].GetString(), \
-                        pc["port"].GetUint())));
+                    std::string host = pc["host"].GetString();
+                    uint32 port = pc["port"].GetUint();
+
+                    if(host == m_host && port == m_port)
+                    {
+                        continue;
+                    }
+                    
+                    std::shared_ptr<Peer_Score> peer_score(new Peer_Score(fly::net::Addr(pc["host"].GetString(), port)));
                     add_peer_score(peer_score);
                 }
             }
@@ -423,7 +438,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             }
         }
         
-        ASKCOIN_RETURN;
+        return;
     }
     
     auto iter_unreg = m_unreg_peers.find(conn_id);
@@ -608,6 +623,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             connection->close();
             std::shared_ptr<Peer_Score> peer_score = std::make_shared<Peer_Score>(peer_unreg->m_addr);
             std::lock_guard<std::mutex> guard(m_score_mutex);
+            peer_score->m_state.store(1, std::memory_order_relaxed);
             add_peer_score(peer_score);
         }
         else
@@ -719,8 +735,13 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             LOG_DEBUG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
             connection->close();
-            
             return;
+        }
+        
+        if(host_str == m_host && port_u16 == m_port)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
         }
         
         peer->m_local_key = fly::base::random_32();
@@ -761,7 +782,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             doc.AddMember("version", ASKCOIN_VERSION, allocator);
             connection->send(doc);
 
-            std::thread tmp_thread([=, &lock]() {
+            std::thread tmp_thread([=]() {
                     std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(peer->m_addr,
                                                                                               std::bind(&Node::init_verify, this, _1, conn_id),
                                                                                               std::bind(&Node::dispatch, this, _1),
@@ -776,7 +797,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                     {
                         LOG_DEBUG_ERROR("unreg peer (m_state:2) connect to peer (%s:%u) failed", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
                         connection->close();
-                        lock.lock();
+                        std::unique_lock<std::mutex> lock(this->m_score_mutex);
                         peer_score->sub_score(100);
                     }
                 });
@@ -914,7 +935,8 @@ void Node::close(std::shared_ptr<fly::net::Connection<Json>> connection)
         if(peer->m_state == 0)
         {
             LOG_DEBUG_INFO("unreg peer (m_state:0) close");
-
+            m_timer_ctl.del_timer(peer->m_timer_id);
+            
             return;
         }
         
@@ -960,7 +982,8 @@ void Node::be_closed(std::shared_ptr<fly::net::Connection<Json>> connection)
         if(peer->m_state == 0)
         {
             LOG_DEBUG_INFO("unreg peer (m_state:0) be closed");
-
+            m_timer_ctl.del_timer(peer->m_timer_id);
+            
             return;
         }
         
@@ -5415,6 +5438,11 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
 
 void Blockchain::broadcast()
 {
+    if(m_broadcast_json.m_hash.IsNull())
+    {
+        return;
+    }
+    
     rapidjson::Document doc;
     doc.SetObject();
     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();

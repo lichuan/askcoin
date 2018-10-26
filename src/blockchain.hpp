@@ -96,7 +96,7 @@ private:
     bool check_balance();
     uint64 m_cur_account_id = 0;
     leveldb::DB *m_db;
-    bool m_block_changed = false;
+    bool m_block_changed = true;
     std::shared_ptr<Block> m_cur_block;
     std::shared_ptr<Block> m_most_difficult_block;
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
