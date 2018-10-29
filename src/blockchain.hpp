@@ -130,6 +130,7 @@ private:
     uint64 m_mine_cur_block_id;
     std::string m_mine_cur_block_hash;
     std::string m_miner_privkey;
+    std::string m_miner_pubkey;
     uint64 m_mine_cur_block_utc;
     uint32 m_mine_zero_bits;
     std::unordered_set<std::string> m_uv_tx_ids;
@@ -148,12 +149,7 @@ private:
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Wsock>>> m_wsock_messages;
     fly::base::Lock_Queue<std::shared_ptr<Command>> m_commands;
-    
-    struct {
-        rapidjson::Value m_hash;
-        rapidjson::Value m_sign;
-        rapidjson::Value m_data;
-    } m_broadcast_json;
+    std::shared_ptr<rapidjson::Document> m_broadcast_doc;
 };
 
 #endif

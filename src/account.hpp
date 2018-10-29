@@ -14,7 +14,17 @@ public:
     {
         bool operator()(const std::shared_ptr<Account> &a, const std::shared_ptr<Account> &b)
         {
-            return a->get_balance() > b->get_balance() || a->id() < b->id();
+            if(a->get_balance() > b->get_balance())
+            {
+                return true;
+            }
+
+            if(a->get_balance() < b->get_balance())
+            {
+                return false;
+            }
+            
+            return a->id() < b->id();
         }
     };
     

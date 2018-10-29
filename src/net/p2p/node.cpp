@@ -1175,6 +1175,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     
     rapidjson::Document& doc = message->doc();
     uint32 msg_length = message->length(); // todo, the following need check length
+    // todo, don't only use msg_length, && use doc->MemberCount ?
     LOG_DEBUG_INFO("peer msg: %s, length: %u, peer key: %s", message->raw_data().c_str(), msg_length, peer->key().c_str());
     
     if(type == net::p2p::MSG_BLOCK)
@@ -1228,9 +1229,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(m_blocks.find(block_hash) != m_blocks.end())
             {
-                ASKCOIN_RETURN;
+                return;
             }
-
+            
             if(!doc.HasMember("data"))
             {
                 punish_peer(peer);
@@ -1249,14 +1250,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             data.Accept(writer);
             std::string data_str(buffer.GetString(), buffer.GetSize());
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            std::string data_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
             
-            if(block_hash != block_hash_verify)
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-
             if(!doc.HasMember("pow"))
             {
                 punish_peer(peer);
@@ -1514,7 +1509,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             else
             {
-                pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash);
+                pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash, data_hash);
                 is_new_pending_block = true;
             }
             
@@ -1630,38 +1625,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
+            
             rapidjson::Value &sign_node = doc["sign"];
-            std::string block_sign = sign_node.GetString();
             rapidjson::Value &data = doc["data"];
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            data.Accept(writer);
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-
-            if(block_hash != block_hash_verify)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
-            std::string miner_pubkey = data["miner"].GetString();
-            
-            if(!is_base64_char(miner_pubkey))
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-
-            if(miner_pubkey.length() != 88)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
-            if(!verify_sign(miner_pubkey, block_hash, block_sign))
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
             {
                 rapidjson::Document doc;
                 doc.SetObject();
@@ -1758,14 +1724,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             data.Accept(writer);
             std::string data_str(buffer.GetString(), buffer.GetSize());
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(block_hash != block_hash_verify)
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-            
+            std::string data_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
             if(!data.HasMember("id"))
             {
                 punish_brief_req(request);
@@ -1980,7 +1940,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
             
-            auto pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash);
+            auto pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash, data_hash);
             m_pending_blocks.insert(std::make_pair(block_hash, pending_block));
             m_pending_block_hashes.push_back(block_hash);
 
@@ -2058,30 +2018,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
 
             rapidjson::Value &sign_node = doc["sign"];
-            std::string block_sign = sign_node.GetString();
             rapidjson::Value &data = doc["data"];
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            data.Accept(writer);
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-
-            if(block_hash != block_hash_verify)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
-            std::string miner_pubkey = data["miner"].GetString();
-            
-            if(miner_pubkey.length() != 88)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
-            if(!verify_sign(miner_pubkey, block_hash, block_sign))
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
-            
+            rapidjson::Value &tx_node = doc["tx"];
             {
                 rapidjson::Document doc;
                 doc.SetObject();
@@ -2091,7 +2029,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 doc.AddMember("hash", hash_node, allocator);
                 doc.AddMember("sign", sign_node, allocator);
                 doc.AddMember("data", data, allocator);
-                doc.AddMember("tx", doc["tx"], allocator);
+                doc.AddMember("tx", tx_node, allocator);
                 connection->send(doc);
             }
         }
@@ -2193,14 +2131,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             data.Accept(writer);
             std::string data_str(buffer.GetString(), buffer.GetSize());
-            std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(block_hash != block_hash_verify)
+            std::string data_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
+            if(data_hash_verify != request->m_pb->m_data_hash)
             {
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-
+            
             uint64 block_id = data["id"].GetUint64();
             uint64 utc = data["utc"].GetUint64();
             // todo, version compatible?
@@ -3799,6 +3737,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
         
         for(auto i = pending_start; i <= pending_chain->m_start; ++i)
         {
+            LOG_DEBUG_INFO("finish_detail, for i: %u...............................", i);
             auto pb = pending_chain->m_req_blocks[i];
             auto &doc = *pb->m_doc;
             const rapidjson::Value &data = doc["data"];
@@ -4976,10 +4915,18 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             {
                 cur_block->m_miner_reward = false;
             }
-            
-            LOG_DEBUG_INFO("finish_detail, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
+
             std::string block_data;
-            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
+            leveldb::Status s;
+            
+            if(block_id == 1)
+            {
+                s = m_db->Get(leveldb::ReadOptions(), "0", &block_data);
+            }
+            else
+            {
+                s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
+            }
             
             if(!s.ok())
             {
@@ -4994,12 +4941,12 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
+            
             if(!doc_parent.IsObject())
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
+            
             if(!doc_parent.HasMember("children"))
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
@@ -5009,7 +4956,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
 
             if(!children.IsArray())
             {
-                ASKCOIN_RETURN;
+                ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
             bool exist_in_children = false;
@@ -5060,12 +5007,23 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             doc_1.Accept(writer_1);
             leveldb::WriteBatch batch;
             batch.Put(block_hash, leveldb::Slice(buffer_1.GetString(), buffer_1.GetSize()));
-            
+            doc["hash"] = doc_1["hash"];
+            doc["sign"] = doc_1["sign"];
+            doc["data"] = doc_1["data"];
             children.PushBack(rapidjson::StringRef(block_hash.c_str()), doc_parent.GetAllocator());
             rapidjson::StringBuffer buffer_2;
             rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
             doc_parent.Accept(writer_2);
-            batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+
+            if(block_id == 1)
+            {
+                batch.Put("0", leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+            }
+            else
+            {
+                batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+            }
+            
             LOG_DEBUG_INFO("finish_detail, block_id: %lu, block_hash: %s, start write to leveldb", block_id, block_hash.c_str());
             s = m_db->Write(leveldb::WriteOptions(), &batch);
             
@@ -5086,10 +5044,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             if(m_most_difficult_block->difficult_than_me(m_cur_block))
             {
                 m_most_difficult_block = m_cur_block;
-                auto &doc = *pending_block->m_doc;
-                m_broadcast_json.m_hash = doc["hash"];
-                m_broadcast_json.m_sign = doc["sign"];
-                m_broadcast_json.m_data = doc["data"];
+                m_broadcast_doc = pb->m_doc;
                 broadcast();
             }
             
@@ -5172,7 +5127,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             request->m_chains.insert(pending_chain);
             peer->m_connection->send(doc);
             ++request->m_try_num;
-            LOG_DEBUG_INFO("finish_detail pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
+            LOG_DEBUG_INFO("finish_detail, pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
             request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
                     if(request->m_chains.empty())
                     {
@@ -5438,26 +5393,30 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
 
 void Blockchain::broadcast()
 {
-    if(m_broadcast_json.m_hash.IsNull())
+    if(!m_broadcast_doc)
     {
-        return;
+        ASKCOIN_RETURN;
     }
-    
+
+    auto &broadcast_doc = *m_broadcast_doc;
     rapidjson::Document doc;
     doc.SetObject();
     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
     doc.AddMember("msg_cmd", net::p2p::BLOCK_BROADCAST, allocator);
-    doc.AddMember("hash", m_broadcast_json.m_hash, allocator);
-    doc.AddMember("sign", m_broadcast_json.m_sign, allocator);
+    doc.AddMember("hash", broadcast_doc["hash"], allocator);
+    doc.AddMember("sign", broadcast_doc["sign"], allocator);
     rapidjson::Value pow_arr(rapidjson::kArrayType);
     
     for(int32 i = 0; i < 9; ++i)
     {
-        pow_arr.PushBack(m_cur_block->m_accum_pow.m_n32[i], allocator);
+        pow_arr.PushBack(m_most_difficult_block->m_accum_pow.m_n32[i], allocator);
     }
     
     doc.AddMember("pow", pow_arr, allocator);
-    doc.AddMember("data", m_broadcast_json.m_data, allocator);
+    doc.AddMember("data", broadcast_doc["data"], allocator);
     net::p2p::Node::instance()->broadcast(doc);
+    broadcast_doc["hash"] = doc["hash"];
+    broadcast_doc["sign"] = doc["sign"];
+    broadcast_doc["data"] = doc["data"];
 }

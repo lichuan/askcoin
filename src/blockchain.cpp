@@ -116,7 +116,7 @@ bool Blockchain::hash_pow(char hash_arr[32], uint32 zero_bits)
         return true;
     }
     
-    return hash_arr[zero_char_num] < 1 << 8 - zero_remain_bit;
+    return (uint8)hash_arr[zero_char_num] < 1 << 8 - zero_remain_bit;
 }
 
 bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits)
@@ -520,7 +520,7 @@ void Blockchain::do_mine()
             m_need_remine.store(false, std::memory_order_relaxed);
         }
 
-        LOG_DEBUG_INFO("start mine, dst zero_bits: %u, next_block_id: %u", zero_bits, cur_block_id + 1);
+        LOG_DEBUG_INFO("start mine, ------- zero_bits: %u -------, next_block_id: %u", zero_bits, cur_block_id + 1);
         char privk[32];
         fly::base::base64_decode(miner_key.c_str(), miner_key.length(), privk, 32);
         CKey miner_priv_key;
@@ -547,7 +547,8 @@ void Blockchain::do_mine()
         {
             tx_ids.PushBack(rapidjson::Value(tx->m_id.c_str(), allocator), allocator);
         }
-        
+
+        data.AddMember("tx_ids", tx_ids, allocator);
         rapidjson::Value nonce(rapidjson::kArrayType);
         nonce.PushBack(0, allocator);
         nonce.PushBack(0, allocator);
@@ -565,10 +566,8 @@ void Blockchain::do_mine()
                 {
                     for(uint64 m = 0; m < (uint64)-1; ++m)
                     {
-                        if(++iter_count > 1000)
+                        if(++iter_count > 100)
                         {
-                            CONSOLE_LOG_INFO("1000...........................................");
-                            
                             if(m_stop.load(std::memory_order_relaxed))
                             {
                                 return;
@@ -624,11 +623,10 @@ void Blockchain::do_mine()
                         {
                             buf[i] = htonl(arr_16[i]);
                         }
-                        
-                        buffer.Pop(16);
-                        ptr = buffer.Push(64);
+
+                        ptr = buffer.Push(88);
                         std::string p_b64 = fly::base::base64_encode(p, 64);
-                        memcpy(ptr, p_b64.data(), 64);
+                        memcpy(ptr, p_b64.data(), 88);
                         coin_hash(buffer.GetString(), buffer.GetSize(), hash_raw);
                         uint32 zero_char_num = zero_bits / 8;
                         uint32 zero_remain_bit = 0;
@@ -648,7 +646,7 @@ void Blockchain::do_mine()
                             goto mine_success;
                         }
                             
-                        if(hash_raw[zero_char_num] < 1 << 8 - zero_remain_bit)
+                        if((uint8)hash_raw[zero_char_num] < 1 << 8 - zero_remain_bit)
                         {
                             goto mine_success;
                         }
@@ -661,11 +659,13 @@ void Blockchain::do_mine()
         }
         
     mine_success:
+        std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
         std::string block_hash = fly::base::base64_encode(hash_raw, 32);
-        LOG_DEBUG_INFO("mine successfully, block_hash: %s", block_hash.c_str());
+        LOG_DEBUG_INFO("mine successfully, zero_bits: %u, block_id: %lu, block_hash: %s (hex: %s)", \
+                       zero_bits, cur_block_id + 1, block_hash.c_str(), hex_hash.c_str());
         doc["hash"].SetString(block_hash.c_str(), allocator);
         std::vector<unsigned char> sign_vec;
-        
+
         if(!miner_priv_key.Sign(uint256(std::vector<unsigned char>(hash_raw, hash_raw + 32)), sign_vec))
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
@@ -925,7 +925,8 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
                 return;
             }
         }
-        
+
+        printf("your input name: %s\n", raw_name.c_str());
         std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
         
         if(account_name_exist(register_name))
@@ -1025,7 +1026,8 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
                 return;
             }
         }
-        
+
+        printf("your input name: %s\n", raw_name.c_str());
         std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
         
         if(account_name_exist(register_name))
@@ -1228,6 +1230,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         if(reg_name != register_name)
         {
             printf("parse reg_sign failed, name is not the same as account_name\n>");
+            printf("reg_name: %s, register_name: %s\n>", reg_name.c_str(), register_name.c_str());
             return;
         }
         
@@ -1349,9 +1352,12 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             printf("your privkey is invalid\n>");
             return;
         }
-
+        
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
         m_miner_privkey = command->m_params[0];
-        printf("import_privkey successfully\n>");
+        lock.unlock();
+        m_miner_pubkey = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        printf("import_privkey successfully, miner_pub_key: %s\n>", m_miner_pubkey.c_str());
         m_block_changed = true;
     }
 }
@@ -1529,11 +1535,40 @@ bool Blockchain::start(std::string db_path)
         rapidjson::StringBuffer buffer_1;
         rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
         data.Accept(writer_1);
-
-        LOG_DEBUG_INFO("genesis -------------------data---------------------: %s", buffer_1.GetString());
+        uint32 buf[16] = {0};
+        char *p = (char*)buf;
+        coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p);
+        char * ptr = buffer_1.Push(16);
+        memcpy(ptr, "another_32_bytes", 16);
+        coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p + 32);
+        uint32 arr_16[16] = {0};
+        
+        for(uint32 i = 0; i < 16; ++i)
+        {
+            arr_16[i] = ntohl(buf[i]);
+        }
+    
+        for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM;)
+        {
+            for(int j = 0; j < 16; ++j)
+            {
+                arr_16[j] = (arr_16[j] + __asic_resistant_data__[i + j]) * (arr_16[j] ^ __asic_resistant_data__[i + j]);
+            }
+        
+            i += 16;
+        }
+    
+        for(uint32 i = 0; i < 16; ++i)
+        {
+            buf[i] = htonl(arr_16[i]);
+        }
+        
+        ptr = buffer_1.Push(88);
+        std::string p_b64 = fly::base::base64_encode(p, 64);
+        memcpy(ptr, p_b64.data(), 88);
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEQCIAtl9A36GVH3/JEKywWnb1qL14o+Hto7qyIt67rGyBbwAiAiZKzMQfPe+juW8sz48P1SFN4Vt0QrYO9qzv+qCY4Uow==";
-        // sign_b64 = sign("", genesis_block_hash);
+        std::string sign_b64 = "MEQCIEtAgYI0zpVZFyQZGpJj3AcAGTrPGIC7J4r682oND2MaAiBs3N62gRc/mOMEA3tPdQfi2vquHTQzNkMbVB/8iGeQ7g==";
+        //sign_b64 = sign("", genesis_block_hash);
         
         doc.AddMember("hash", rapidjson::StringRef(genesis_block_hash.c_str()), allocator);
         doc.AddMember("sign", rapidjson::StringRef(sign_b64.c_str()), allocator);
@@ -1623,7 +1658,7 @@ bool Blockchain::start(std::string db_path)
     std::string block_hash = doc["hash"].GetString();
     std::string block_sign = doc["sign"].GetString();
 
-    if(block_hash != "QKQzeV/UzpDNQDWZGVVU5vyKdTw9MmrTbOD/wfa480Y=")
+    if(block_hash != "00IU34oWhhi75KhL3E8k0IueYCrseZ50Dzg+mHkc8/4=")
     {
         ASKCOIN_RETURN false;
     }
@@ -1713,6 +1748,7 @@ bool Blockchain::start(std::string db_path)
     rapidjson::StringBuffer buffer;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
     data.Accept(writer);
+    std::string data_str(buffer.GetString(), buffer.GetSize());
     
     //base64 44 bytes length
     if(block_hash.length() != 44)
@@ -1722,15 +1758,6 @@ bool Blockchain::start(std::string db_path)
         return false;
     }
 
-    std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-    
-    if(block_hash != block_hash_verify)
-    {
-        CONSOLE_LOG_FATAL("verify leveldb block 0 failed, hash doesn't match");
-        
-        return false;
-    }
-    
     const rapidjson::Value &init_account = data["init_account"];
     std::string account = init_account["account"].GetString();
     std::string pubkey = init_account["pubkey"].GetString();
@@ -1790,8 +1817,14 @@ bool Blockchain::start(std::string db_path)
         ASKCOIN_RETURN false;
     }
 
-    const rapidjson::Value &children = doc["children"];
+    if(!verify_hash(block_hash, data_str, 0))
+    {
+        CONSOLE_LOG_FATAL("verify genesis block hash failed, hash: %s", block_hash.c_str());
+        return false;
+    }
 
+    const rapidjson::Value &children = doc["children"];
+    
     if(!children.IsArray())
     {
         ASKCOIN_RETURN false;
@@ -1964,7 +1997,7 @@ bool Blockchain::start(std::string db_path)
         // todo
         if(block_data.length() > 500 + tx_num * 44)
         {
-            ASKCOIN_RETURN false;
+            //ASKCOIN_RETURN false;
         }
         
         if(!data.HasMember("nonce"))
@@ -1985,17 +2018,8 @@ bool Blockchain::start(std::string db_path)
         }
 
         std::string data_str(buffer.GetString(), buffer.GetSize());
-        std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-        
-        if(block_hash != block_hash_verify)
-        {
-            CONSOLE_LOG_FATAL("verify block data from leveldb failed, hash: %s, hash doesn't match", child_block.m_hash.c_str());
-
-            return false;
-        }
-
         std::string miner_pubkey = data["miner"].GetString();
-
+        
         if(!is_base64_char(miner_pubkey))
         {
             ASKCOIN_RETURN false;
@@ -2166,7 +2190,8 @@ bool Blockchain::start(std::string db_path)
             ASKCOIN_RETURN false;
         }
         
-        rapidjson::Document doc;
+        std::shared_ptr<rapidjson::Document> doc_ptr = std::make_shared<rapidjson::Document>();
+        auto &doc = *doc_ptr;
         const char *block_data_str = block_data.c_str();
         doc.Parse(block_data_str);
         
@@ -2876,18 +2901,16 @@ bool Blockchain::start(std::string db_path)
         
         if(block_chain.empty())
         {
-            m_broadcast_json.m_hash = doc["hash"];
-            m_broadcast_json.m_sign = doc["sign"];
-            m_broadcast_json.m_data = doc["data"];
+            m_broadcast_doc = doc_ptr;
         }
     }
     
     char hash_raw[32];
     fly::base::base64_decode(m_cur_block->hash().c_str(), m_cur_block->hash().length(), hash_raw, 32);
     std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-    CONSOLE_LOG_INFO("load block finished, cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
-                     m_cur_block->id(), m_cur_block->hash().c_str(), hex_hash.c_str());
-    m_timer_ctl.add_timer([=]() {
+    CONSOLE_LOG_INFO("load block finished, zero_bits: %u, cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
+                     m_cur_block->zero_bits(), m_cur_block->id(), m_cur_block->hash().c_str(), hex_hash.c_str());
+    m_timer_ctl.add_timer([&]() {
             broadcast();
         }, 10);
     
@@ -2970,122 +2993,6 @@ bool Blockchain::start(std::string db_path)
         }
     }
     
-    // CKey key;
-    // key.MakeNewKey(false);
-    // CPubKey pubkey = key.GetPubKey();
-    // std::string key_b64 = fly::base::base64_encode(key.begin(), key.size());
-    // std::string pubkey_b64 = fly::base::base64_encode(pubkey.begin(), pubkey.size());
-    // std::string addr = coin_addr(pubkey.begin(), pubkey.size());
-    // CONSOLE_LOG_INFO("key: %s, pubkey: %s, addr: %s", key_b64.c_str(), pubkey_b64.c_str(), addr.c_str());
-
-    // std::string k1 = "fHIT5NNDgMCYC4Yyieu+NOGRaxG8MMX9qAzchPPZ8lc";
-    // char privk[32];
-    // fly::base::base64_decode(k1.c_str(), k1.length(), privk, 32);
-    // CKey ck1;
-    // ck1.Set(privk, privk + 32, false);
-    // CPubKey pubk1 = ck1.GetPubKey();
-    // std::string addr1 = coin_addr(pubk1.begin(), pubk1.size());
-    // std::string pubk_64 = fly::base::base64_encode(pubk1.begin(), pubk1.size());
-    // CONSOLE_LOG_INFO("new pubkey: %s, addr: %s", pubk_64.c_str(), addr1.c_str());
-
-
-    // std::vector<unsigned char> vec1 = {0x04,0xa5,0xc1,0x77,0xb9,0xe4,0xb5,0xda,0x15,0xc5,0x0e,0x75,0x35,0xbf,0xdd,0xac,0xe5,0x91,0x88,0x32,0xb6,0x87,0x8d,0xac,0xab,0x53,0x51,0xe3,0x5e,0x90,0x17,0xda,0x80,0x6d,0x08,0x87,0x31,0xba,0x78,0x3d,0x04,0x27,0xbb,0x68,0x94,0x01,0x47,0x92,0xe8,0x4e,0x71,0xe2,0xca,0xd0,0x11,0x26,0x01,0x0c,0x4c,0x87,0x97,0xb4,0x2d,0xb8,0x29};
-    
-    // CPubKey pub(vec1);
-    // std::vector<unsigned char> vec2 = {0x30,0x45,0x02,0x20,0x1f,0x02,0x39,0x9a,0xae,0x46,0x2c,0x09,0xd5,0x24,0x84,0x0c,0x88,0xc1,0xd5,0x06,0xea,0x7c,0x6c,0xe8,0x6f,0x71,0x03,0x29,0xbe,0x52,0x12,0xc8,0xc1,0x60,0x0e,0xd9,0x02,0x21,0x00,0x83,0x77,0xe8,0x93,0xd9,0xa4,0x74,0xc6,0x4b,0x37,0xb7,0x70,0xf5,0x85,0xa8,0x37,0xe3,0x3d,0x36,0xa1,0xf6,0xf2,0x73,0xfa,0x92,0xb4,0xd0,0x40,0x1e,0x9d,0xb7,0x26};
-    
-    // uint256 msg({0x31,0xcd,0xa2,0xab,0x84,0x52,0xa3,0x3d,0x1f,0x25,0x41,0x2e,0x56,0x8c,0x71,0x6d,0x5b,0xb8,0x01,0x45,0xf6,0xad,0xd2,0x6f,0x5f,0x24,0x70,0xf4,0x64,0x22,0xe6,0xf7});
-    
-    // if(!pub.Verify(msg, vec2)) {
-    //     CONSOLE_LOG_ERROR("sign failed............");
-    //     return false;
-    // }
-
-    // CONSOLE_LOG_INFO("sign success.............");
-
-    // std::string tdata = "a1232323232342342bc";
-    // uint160 u160 = Hash160(tdata.begin(), tdata.end());
-    // uint256 u256 = Hash(tdata.begin(), tdata.end());
-    
-    // std::string b64 = EncodeBase64(u160.begin(), u160.size());
-    // std::string b642 = fly::base::base64_encode(u160.begin(), u160.size());
-    // std::string hex2 = fly::base::byte2hexstr(u160.begin(), u160.size());
-    // CONSOLE_LOG_INFO("u160 hex: %02x, %02x", *u160.begin(), *(u160.begin() + 1));
-    // std::string hex256_2 = fly::base::byte2hexstr(u256.begin(), u256.size());
-    // char buf[CryptoPP::SHA256::DIGESTSIZE] = {0};
-    // CONSOLE_LOG_INFO("SHA256::DIGESTSIZE is: %d", CryptoPP::SHA256::DIGESTSIZE);
-    
-    // if(!fly::base::sha256(tdata.c_str(), tdata.length(), buf, CryptoPP::SHA256::DIGESTSIZE))
-    // {
-    //     CONSOLE_LOG_FATAL("fly sha256 failed");
-    // }
-
-    // char s256[CSHA256::OUTPUT_SIZE] = {0};
-    // CSHA256().Write(tdata.c_str(), tdata.length()).Finalize(s256);
-    // std::string s256_hex = fly::base::byte2hexstr(s256, CSHA256::OUTPUT_SIZE);
-        
-    // std::string hex256_fly = fly::base::byte2hexstr(buf, CryptoPP::SHA256::DIGESTSIZE);
-        
-    // CONSOLE_LOG_INFO("hex: %s", u160.GetHex().c_str());
-    // CONSOLE_LOG_INFO("hex2: %s", hex2.c_str());
-    // CONSOLE_LOG_INFO("hex256: %s", u256.GetHex().c_str());
-    // CONSOLE_LOG_INFO("hex256_2: %s", hex256_2.c_str());
-    // CONSOLE_LOG_INFO("hex256 fly: %s", hex256_fly.c_str());
-    // CONSOLE_LOG_INFO("hex256 once: %s", s256_hex.c_str());
-    // CONSOLE_LOG_INFO("b64: %s", b64.c_str());
-    // CONSOLE_LOG_INFO("b642: %s", b642.c_str());
-    // CONSOLE_LOG_INFO("sanity check success.");
-
-    // char arr[10] = {'a','b','c',0x5,'e','f','g','h','a','a'};
-    // std::string str = fly::base::byte2hexstr(arr, 10);
-    // CONSOLE_LOG_INFO("hexstr: %s", str.c_str());
-
-    // char arr1[11] = {0};
-    // uint32 len = fly::base::hexstr2byte(str.c_str(), str.length(), arr1,10);
-    // CONSOLE_LOG_INFO("hexstr2byte: len: %d, arr1: %s, %02x", len, arr1, arr1[3]);
-
-    // std::string str1 = fly::base::base64_encode(arr1, 10);
-    // std::string str2 = fly::base::base64_encode(arr, 10);
-    // CONSOLE_LOG_INFO("str1: %s", str1.c_str());
-    // CONSOLE_LOG_INFO("str2: %s", str2.c_str());
-
-    // char arr2[11] = {0};
-    // uint32 len2 = fly::base::base64_decode(str1.c_str(), str1.length(), arr2, 10);
-    // CONSOLE_LOG_INFO("len2: %d arr2: %s", len2, arr2);
-    
-    // std::string str_hash = "IJ8NTsepqQTKWi9F2xdY+76H5eiJbElFUrEBNkJu7nw=";
-    // std::string str_pub = "BIie7a1Jd5JMzka6rEnm5YusF896bsoE2gUfz4HPqJbPCT8RwT/yIHG2pYtRTfkEzgBRDxIyybqULA5CGDJNivw=";
-    // std::string str_sig = "MEYCIQCCDPBA2IMRHyNKvsH00LAH7/7bZBmK36AZeBIzSY05CQIhAOepJCA+RRY08JguV5Hx6Ht3fslDYKAc8UymzEwe1Vd7";
-        
-    // char arr_hash[40] = {0};
-    // char arr_pub[70] = {0};
-    // char arr_sig[80] = {0};
-    // uint32 len_hash = fly::base::base64_decode(str_hash.c_str(), str_hash.length(), arr_hash, 40);
-    // CONSOLE_LOG_INFO("len_hash: %d", len_hash);
-    // uint32 len_pub = fly::base::base64_decode(str_pub.c_str(), str_pub.length(), arr_pub, 70);
-    // CONSOLE_LOG_INFO("len_pub: %d", len_pub);
-    // uint32 len_sig = fly::base::base64_decode(str_sig.c_str(), str_sig.length(), arr_sig, 80);
-    // CONSOLE_LOG_INFO("len_sig: %d", len_sig);
-
-    // std::string hex_hash = fly::base::byte2hexstr(arr_hash, 32);
-    // std::string hex_sig = fly::base::byte2hexstr(arr_sig, 72);
-    // std::string hex_pub = fly::base::byte2hexstr(arr_pub, 65);
-    
-    // CONSOLE_LOG_INFO("arr_hash: %s", hex_hash.c_str());
-    // CONSOLE_LOG_INFO("arr_pub: %s", hex_pub.c_str());
-    // CONSOLE_LOG_INFO("arr_sig: %s", hex_sig.c_str());
-
-    // CPubKey pkey;
-    // pkey.Set(arr_pub, arr_pub + len_pub);
-    
-    // if(pkey.Verify(uint256(std::vector<unsigned char>(arr_hash, arr_hash + len_hash)), std::vector<unsigned char>(arr_sig, arr_sig + len_sig)))
-    // {
-    //     CONSOLE_LOG_INFO("verify ok...............");
-    // }
-    // else {
-    //     CONSOLE_LOG_INFO("verify failed.................");
-    // }
-
     std::thread msg_thread(std::bind(&Blockchain::do_message, this));
     m_msg_thread = std::move(msg_thread);
 
@@ -3112,13 +3019,20 @@ void Blockchain::mine_tx()
     }
     
     std::unique_lock<std::mutex> lock(m_mine_mutex);
-    
+
     if(m_miner_privkey.empty())
     {
         return;
     }
-
+    
     lock.unlock();
+    std::shared_ptr<Account> miner;
+    
+    if(!get_account(m_miner_pubkey, miner))
+    {
+        return;
+    }
+    
     std::list<std::shared_ptr<tx::Tx>> uv_2_txs;
     std::list<std::shared_ptr<tx::Tx>> mined_txs;
     uv_2_txs.insert(uv_2_txs.begin(), m_uv_2_txs.begin(), m_uv_2_txs.end());
@@ -3731,13 +3645,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
     data.Accept(writer);
     std::string data_str(buffer.GetString(), buffer.GetSize());
-    std::string block_hash_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-    if(block_hash != block_hash_verify)
-    {
-        ASKCOIN_EXIT(EXIT_FAILURE);
-    }
-            
+
     if(!data.HasMember("id"))
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
@@ -4679,16 +4587,24 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     {
         cur_block->m_miner_reward = false;
     }
-    
-    LOG_DEBUG_INFO("mined_new_block, block_id: %lu, block_hash: %s, check if exist in leveldb", block_id, block_hash.c_str());
+
     std::string block_data;
-    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
-            
+    leveldb::Status s;
+
+    if(block_id == 1)
+    {
+        s = m_db->Get(leveldb::ReadOptions(), "0", &block_data);
+    }
+    else
+    {
+        s = m_db->Get(leveldb::ReadOptions(), pre_hash, &block_data);
+    }
+    
     if(!s.ok())
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
     }
-            
+    
     rapidjson::Document doc_parent;
     const char *block_data_str = block_data.c_str();
     doc_parent.Parse(block_data_str);
@@ -4748,50 +4664,50 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
     }
-    
-    rapidjson::Document doc_1;
-    doc_1.SetObject();
-    rapidjson::Document::AllocatorType &allocator = doc_1.GetAllocator();
-    doc_1.AddMember("hash", doc["hash"], allocator);
-    doc_1.AddMember("sign", doc["sign"], allocator);
-    doc_1.AddMember("data", doc["data"], allocator);
-    doc_1.AddMember("tx", doc["tx"], allocator);
+
     rapidjson::Value children_arr(rapidjson::kArrayType);
-    doc_1.AddMember("children", children_arr, allocator);
+    doc.AddMember("children", children_arr, doc.GetAllocator());
     rapidjson::StringBuffer buffer_1;
     rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
-    doc_1.Accept(writer_1);
+    doc.Accept(writer_1);
     leveldb::WriteBatch batch;
     batch.Put(block_hash, leveldb::Slice(buffer_1.GetString(), buffer_1.GetSize()));
-            
     children.PushBack(rapidjson::StringRef(block_hash.c_str()), doc_parent.GetAllocator());
     rapidjson::StringBuffer buffer_2;
     rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
     doc_parent.Accept(writer_2);
-    batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
-    LOG_DEBUG_INFO("mined_new_block, block_id: %lu, block_hash: %s, start write to leveldb", block_id, block_hash.c_str());
-    s = m_db->Write(leveldb::WriteOptions(), &batch);
-            
-    if(!s.ok())
+    
+    if(block_id == 1)
     {
-        LOG_FATAL("writebatch failed, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
-        ASKCOIN_EXIT(EXIT_FAILURE);
+        batch.Put("0", leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
+    }
+    else
+    {
+        batch.Put(pre_hash, leveldb::Slice(buffer_2.GetString(), buffer_2.GetSize()));
     }
     
     char hash_raw[32];
     fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
     std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-    LOG_INFO("mined_new_block, block_id: %lu, block_hash: %s (hex: %s), write to leveldb completely", block_id, \
-             block_hash.c_str(), hex_hash.c_str());
+    LOG_DEBUG_INFO("mined_new_block, zero_bits: %u, block_id: %lu, block_hash: %s (hex: %s), start write to leveldb", \
+                   zero_bits, block_id, block_hash.c_str(), hex_hash.c_str());
+    s = m_db->Write(leveldb::WriteOptions(), &batch);
+    
+    if(!s.ok())
+    {
+        LOG_FATAL("writebatch failed, block_hash: %s, pre_hash: %s", block_hash.c_str(), pre_hash.c_str());
+        ASKCOIN_EXIT(EXIT_FAILURE);
+    }
+
+    LOG_INFO("mined_new_block, zero_bits: %u, block_id: %lu, block_hash: %s (hex: %s), write to leveldb completely", \
+             zero_bits, block_id, block_hash.c_str(), hex_hash.c_str());
     m_blocks.insert(std::make_pair(block_hash, cur_block));
     m_cur_block = cur_block;
     
     if(m_most_difficult_block->difficult_than_me(m_cur_block))
     {
         m_most_difficult_block = m_cur_block;
-        m_broadcast_json.m_hash = doc["hash"];
-        m_broadcast_json.m_sign = doc["sign"];
-        m_broadcast_json.m_data = doc["data"];
+        m_broadcast_doc = doc_ptr;
         broadcast();
     }
     
@@ -5632,11 +5548,6 @@ void Blockchain::switch_to_most_difficult()
             db_blocks.push_front(iter_block_1);
             iter_block = iter_block->get_parent();
         }
-    }
-    
-    if(cross_id == 0)
-    {
-        ASKCOIN_EXIT(EXIT_FAILURE);
     }
     
     uint64 cur_id  = m_cur_block->id();
@@ -6496,12 +6407,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
             iter_block = iter_block->get_parent();
         }
     }
-    
-    if(cross_id == 0)
-    {
-        ASKCOIN_EXIT(EXIT_FAILURE);
-    }
-    
+
     uint64 cur_id  = m_cur_block->id();
     
     if(cross_id < cur_id)
