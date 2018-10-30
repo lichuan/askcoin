@@ -155,7 +155,7 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     {
         buf[i] = htonl(arr_16[i]);
     }
-
+    
     std::string hash_data = block_data + fly::base::base64_encode(p, 64);
     std::string block_hash_verify = coin_hash_b64(hash_data.c_str(), hash_data.length());
 
@@ -520,7 +520,6 @@ void Blockchain::do_mine()
             m_need_remine.store(false, std::memory_order_relaxed);
         }
 
-        LOG_DEBUG_INFO("start mine, ------- zero_bits: %u -------, next_block_id: %u", zero_bits, cur_block_id + 1);
         char privk[32];
         fly::base::base64_decode(miner_key.c_str(), miner_key.length(), privk, 32);
         CKey miner_priv_key;
@@ -556,7 +555,6 @@ void Blockchain::do_mine()
         nonce.PushBack(0, allocator);
         data.AddMember("nonce", nonce, allocator);
         char hash_raw[32];
-        uint32 iter_count = 0;
         
         for(uint64 i = 0; i < (uint64)-1; ++i)
         {
@@ -566,19 +564,14 @@ void Blockchain::do_mine()
                 {
                     for(uint64 m = 0; m < (uint64)-1; ++m)
                     {
-                        if(++iter_count > 100)
+                        if(m_stop.load(std::memory_order_relaxed))
                         {
-                            if(m_stop.load(std::memory_order_relaxed))
-                            {
-                                return;
-                            }
-                            
-                            if(m_need_remine.load(std::memory_order_acquire))
-                            {
-                                goto remine;
-                            }
-                            
-                            iter_count = 1;
+                            return;
+                        }
+                        
+                        if(m_need_remine.load(std::memory_order_acquire))
+                        {
+                            goto remine;
                         }
                         
                         uint64 utc = time(NULL);
@@ -589,10 +582,10 @@ void Blockchain::do_mine()
                         }
                         
                         data["utc"].SetUint64(utc);
-                        data["nonce"][0] = i;
-                        data["nonce"][1] = j;
-                        data["nonce"][2] = k;
-                        data["nonce"][3] = m;
+                        data["nonce"][0] = m;
+                        data["nonce"][1] = k;
+                        data["nonce"][2] = j;
+                        data["nonce"][3] = i;
                         rapidjson::StringBuffer buffer;
                         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
                         data.Accept(writer);
@@ -630,7 +623,7 @@ void Blockchain::do_mine()
                         coin_hash(buffer.GetString(), buffer.GetSize(), hash_raw);
                         uint32 zero_char_num = zero_bits / 8;
                         uint32 zero_remain_bit = 0;
-                        
+
                         for(uint32 i = 0; i < zero_char_num; ++i)
                         {
                             if(hash_raw[i] != 0)
@@ -781,13 +774,6 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         uint64 amount;
         fly::base::string_to(command->m_params[0], account_id);
         fly::base::string_to(command->m_params[1], amount);
-        std::string memo;
-        
-        if(command->m_param_num > 2)
-        {
-            memo = command->m_params[2];
-        }
-        
         std::unique_lock<std::mutex> lock(m_mine_mutex);
         std::string miner_privkey = m_miner_privkey;
         lock.unlock();
@@ -837,19 +823,28 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         p2p_doc.AddMember("msg_type", net::p2p::MSG_TX, p2p_allocator);
         p2p_doc.AddMember("msg_cmd", net::p2p::TX_BROADCAST, p2p_allocator);
         rapidjson::Value data(rapidjson::kObjectType);
-        data.AddMember("type", 1, p2p_allocator);
+        data.AddMember("type", 2, p2p_allocator);
         data.AddMember("pubkey", rapidjson::Value(miner_pub_key_b64.c_str(), p2p_allocator), p2p_allocator);
         data.AddMember("utc", utc, p2p_allocator);
         data.AddMember("block_id", cur_block_id + 1, p2p_allocator);
         data.AddMember("fee", 2, p2p_allocator);
         data.AddMember("amount", amount, p2p_allocator);
+        std::string memo;
 
-        if(!memo.empty())
+        if(command->m_param_num > 2)
         {
+            memo = command->m_params[2];
+
+            if(memo.length() > 60)
+            {
+                printf("memo is too long\n>");
+                return;
+            }
+            
             std::string memo_b64 = fly::base::base64_encode(memo.c_str(), memo.length());
             data.AddMember("memo", rapidjson::Value(memo_b64.c_str(), p2p_allocator), p2p_allocator);
         }
-
+        
         data.AddMember("receiver", rapidjson::Value(receiver->pubkey().c_str(), p2p_allocator), p2p_allocator);
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -926,7 +921,6 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             }
         }
 
-        printf("your input name: %s\n", raw_name.c_str());
         std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
         
         if(account_name_exist(register_name))
@@ -1027,7 +1021,6 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             }
         }
 
-        printf("your input name: %s\n", raw_name.c_str());
         std::string register_name = fly::base::base64_encode(raw_name.c_str(), len);
         
         if(account_name_exist(register_name))
@@ -1196,7 +1189,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             printf("parse reg_sign failed\n>");
             return;
         }
-                
+        
         if(!is_base64_char(referrer_pubkey))
         {
             printf("parse reg_sign failed\n>");
@@ -1260,8 +1253,8 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         data.AddMember("pubkey", rapidjson::Value(miner_pub_key_b64.c_str(), p2p_allocator), p2p_allocator);
         data.AddMember("utc", utc, p2p_allocator);
         data.AddMember("avatar", avatar, p2p_allocator);
-        data.AddMember("sign", ref_doc["sign"], p2p_allocator);
-        data.AddMember("sign_data", sign_data, p2p_allocator);
+        data.AddMember("sign", rapidjson::Value().CopyFrom(ref_doc["sign"], p2p_allocator), p2p_allocator);
+        data.AddMember("sign_data", rapidjson::Value().CopyFrom(sign_data, p2p_allocator), p2p_allocator);
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
         data.Accept(writer);
@@ -1496,15 +1489,25 @@ bool Blockchain::start(std::string db_path)
     // todo, set this param?
     options.max_open_files = 50000;
     options.max_file_size = 50 * (1 << 20);
+    
+    // leveldb::Status s = leveldb::RepairDB(db_path, options);
+    
+    // if(!s.ok())
+    // {
+    //     CONSOLE_LOG_FATAL("repairdb failed: %s", s.ToString().c_str());
+
+    //     return false;
+    // }
+    
     leveldb::Status s = leveldb::DB::Open(options, db_path, &m_db);
     
     if(!s.ok())
     {
         CONSOLE_LOG_FATAL("open leveldb failed: %s", s.ToString().c_str());
-
+        
         return false;
     }
-
+    
     std::string block_0;
     s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
     
@@ -1518,8 +1521,8 @@ bool Blockchain::start(std::string db_path)
         }
 
         // todo, "this coin" should be changed
-        std::string genesis_block_data = "{\"data\":{\"id\":0,\"utc\":1518926400,\"version\":10000,\"zero_bits\":0,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
-
+        std::string genesis_block_data = "{\"hash\":\"\",\"sign\":\"\",\"data\":{\"id\":0,\"utc\":1518926400,\"version\":1,\"zero_bits\":0,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
+        
         rapidjson::Document doc;
         doc.Parse(genesis_block_data.c_str());
 
@@ -1567,12 +1570,11 @@ bool Blockchain::start(std::string db_path)
         std::string p_b64 = fly::base::base64_encode(p, 64);
         memcpy(ptr, p_b64.data(), 88);
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEQCIEtAgYI0zpVZFyQZGpJj3AcAGTrPGIC7J4r682oND2MaAiBs3N62gRc/mOMEA3tPdQfi2vquHTQzNkMbVB/8iGeQ7g==";
+        std::string sign_b64 = "MEQCIHijGcr4uZU7XOGH3zLz0g3Z0BK+mslSVYFShwH2DtFPAiBzMok2piANQ3l3v7rGy3m/DW4vuxnV+MMZGjSUpNKrNA==";
         //sign_b64 = sign("", genesis_block_hash);
         
-        doc.AddMember("hash", rapidjson::StringRef(genesis_block_hash.c_str()), allocator);
-        doc.AddMember("sign", rapidjson::StringRef(sign_b64.c_str()), allocator);
-        
+        doc["hash"].SetString(genesis_block_hash.c_str(), allocator);
+        doc["sign"].SetString(sign_b64.c_str(), allocator);
         rapidjson::StringBuffer buffer_2;
         rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
         doc.Accept(writer_2);
@@ -1658,7 +1660,7 @@ bool Blockchain::start(std::string db_path)
     std::string block_hash = doc["hash"].GetString();
     std::string block_sign = doc["sign"].GetString();
 
-    if(block_hash != "00IU34oWhhi75KhL3E8k0IueYCrseZ50Dzg+mHkc8/4=")
+    if(block_hash != "uunNiLD8Cvli8EP4p6iIMVq6KThj0iMU9Lu7j/Ga+c8=")
     {
         ASKCOIN_RETURN false;
     }
@@ -1807,11 +1809,11 @@ bool Blockchain::start(std::string db_path)
         ASKCOIN_RETURN false;
     }
 
-    if(version != 10000)
+    if(version != 1)
     {
         ASKCOIN_RETURN false;
     }
-
+    
     if(zero_bits != 0)
     {
         ASKCOIN_RETURN false;
@@ -2041,6 +2043,12 @@ bool Blockchain::start(std::string db_path)
         uint64 utc = data["utc"].GetUint64();
         uint32 version = data["version"].GetUint();
         uint32 zero_bits = data["zero_bits"].GetUint();
+
+        if(zero_bits == 0 || zero_bits >= 256)
+        {
+            ASKCOIN_RETURN false;
+        }
+        
         std::string pre_hash = data["pre_hash"].GetString();
         const rapidjson::Value &nonce = data["nonce"];
 
@@ -3704,7 +3712,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
 
     uint32 zero_bits = data["zero_bits"].GetUint();
 
-    if(zero_bits == 0 || zero_bits > 256)
+    if(zero_bits == 0 || zero_bits >= 256)
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
     }

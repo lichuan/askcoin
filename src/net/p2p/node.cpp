@@ -1355,7 +1355,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             uint32 zero_bits = data["zero_bits"].GetUint();
 
-            if(zero_bits == 0 || zero_bits > 256)
+            if(zero_bits == 0 || zero_bits >= 256)
             {
                 punish_peer(peer);
                 ASKCOIN_RETURN;
@@ -1796,7 +1796,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             uint32 zero_bits = data["zero_bits"].GetUint();
 
-            if(zero_bits == 0 || zero_bits > 256)
+            if(zero_bits == 0 || zero_bits >= 256)
             {
                 punish_brief_req(request);
                 ASKCOIN_RETURN;
@@ -3519,8 +3519,8 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
         }
         else if(chain->m_detail_attached)
         {
-            auto request = chain->m_brief_attached;
-
+            auto request = chain->m_detail_attached;
+            
             for(auto iter = request->m_attached_chains.begin(); iter != request->m_attached_chains.end(); ++iter)
             {
                 if(*iter == chain)
@@ -3737,7 +3737,6 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
         
         for(auto i = pending_start; i <= pending_chain->m_start; ++i)
         {
-            LOG_DEBUG_INFO("finish_detail, for i: %u...............................", i);
             auto pb = pending_chain->m_req_blocks[i];
             auto &doc = *pb->m_doc;
             const rapidjson::Value &data = doc["data"];
