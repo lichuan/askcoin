@@ -2095,14 +2095,14 @@ bool Blockchain::start(std::string db_path)
             ASKCOIN_RETURN false;
         }
         
-        if(utc_diff < 15)
+        if(utc_diff < 10)
         {
             if(zero_bits != parent_zero_bits + 1)
             {
                 ASKCOIN_RETURN false;
             }
         }
-        else if(utc_diff > 35)
+        else if(utc_diff > 30)
         {
             if(parent_zero_bits > 1)
             {
@@ -3558,12 +3558,12 @@ void Blockchain::mine_tx()
     uint32 parent_zero_bits = m_cur_block->zero_bits();
     uint64 utc_diff = m_cur_block->utc_diff();
     uint32 zero_bits = 1;
-    
-    if(utc_diff < 15)
+
+    if(utc_diff < 10)
     {
         zero_bits = parent_zero_bits + 1;
     }
-    else if(utc_diff > 35)
+    else if(utc_diff > 30)
     {
         if(parent_zero_bits > 1)
         {
@@ -3858,14 +3858,14 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         ASKCOIN_EXIT(EXIT_FAILURE);
     }
     
-    if(utc_diff < 15)
+    if(utc_diff < 10)
     {
         if(zero_bits != parent_zero_bits + 1)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
     }
-    else if(utc_diff > 35)
+    else if(utc_diff > 30)
     {
         if(parent_zero_bits > 1)
         {

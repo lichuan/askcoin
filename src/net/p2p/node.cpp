@@ -99,19 +99,18 @@ void Node::connect_proc()
         
         if(peer_num >= m_max_conn)
         {
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            std::this_thread::sleep_for(std::chrono::seconds(1));
             ASKCOIN_TRACE;
             continue;
         }
         
+        std::list<std::shared_ptr<Peer_Score>> scores;
         std::unique_lock<std::mutex> lock(m_score_mutex);
-        bool iter_all = true;
-
+        
         for(auto iter = m_peer_scores.begin(); iter != m_peer_scores.end(); ++iter)
         {
             std::shared_ptr<Peer_Score> peer_score = *iter;
-            uint8 expect = 0;
-            
+
             if(m_banned_peers.find(peer_score->key()) != m_banned_peers.end())
             {
                 LOG_DEBUG_INFO("try to connect banned peer %s, skipped", peer_score->key().c_str());
@@ -125,41 +124,54 @@ void Node::connect_proc()
             {
                 continue;
             }
-            
-            if(peer_score->m_state.compare_exchange_strong(expect, 1))
+
+            if(peer_score->m_state.load(std::memory_order_relaxed) > 0)
             {
-                lock.unlock();
-                std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(addr,
-                                                                                          std::bind(&Node::init, this, _1),
-                                                                                          std::bind(&Node::dispatch, this, _1),
-                                                                                          std::bind(&Node::close, this, _1),
-                                                                                          std::bind(&Node::be_closed, this, _1),
-                                                                                          m_poller, 1024 * 1024)); // todo, max_msg_length
-                LOG_DEBUG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
-
-                if(client->connect(1000))
-                {
-                    LOG_DEBUG_INFO("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
-                    iter_all = false;
-                }
-                else
-                {
-                    LOG_DEBUG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
-
-                    // todo, state to 0 ?
-                    peer_score->m_state.store(0, std::memory_order_relaxed);
-                    lock.lock();
-                    peer_score->sub_score(10);
-                }
-
-                break;
+                continue;
             }
+
+            scores.push_back(peer_score);
+        }
+        
+        lock.unlock();
+        
+        if(scores.empty())
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
         }
 
-        if(iter_all)
+        uint32 inc_num = fly::base::random_between(0, scores.size() - 1);
+        auto next_iter = scores.begin();
+        std::advance(next_iter, inc_num);
+        auto peer_score = *next_iter;
+        const fly::net::Addr &addr = peer_score->addr();
+        uint8 expect = 0;
+        
+        if(peer_score->m_state.compare_exchange_strong(expect, 1))
         {
-            lock.unlock();
-            std::this_thread::sleep_for(std::chrono::seconds(5));
+            std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(addr,
+                                                                                      std::bind(&Node::init, this, _1),
+                                                                                      std::bind(&Node::dispatch, this, _1),
+                                                                                      std::bind(&Node::close, this, _1),
+                                                                                      std::bind(&Node::be_closed, this, _1),
+                                                                                      m_poller, 1024 * 1024)); // todo, max_msg_length
+            LOG_DEBUG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
+            
+            if(client->connect(1000))
+            {
+                LOG_DEBUG_INFO("connect to peer (%s:%u) success", addr.m_host.c_str(), addr.m_port);
+            }
+            else
+            {
+                LOG_DEBUG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
+                
+                // todo, state to 0 ?
+                peer_score->m_state.store(0, std::memory_order_relaxed);
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                lock.lock();
+                peer_score->sub_score(10);
+            }
         }
     }
 }
@@ -192,6 +204,18 @@ bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     
     if(peer_num > m_max_conn)
     {
+        std::unique_lock<std::mutex> lock(m_peer_mutex);
+        auto iter_unreg = m_unreg_peers.find(id);
+        
+        if(iter_unreg == m_unreg_peers.end())
+        {
+            return false;
+        }
+        
+        auto peer = iter_unreg->second;
+        m_unreg_peers.erase(id);
+        lock.unlock();
+        m_timer_ctl.del_timer(peer->m_timer_id);
         return false;
     }
     
@@ -205,7 +229,7 @@ bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
         LOG_DEBUG_ERROR("init_verify unreg peer doesn't exist");
         return false;
     }
-    
+
     m_unreg_peers.insert(std::make_pair(conn_id, peer));
     lock.unlock();
     peer->m_timer_id = m_timer_ctl.add_timer([=]() {
@@ -799,6 +823,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                         connection->close();
                         std::unique_lock<std::mutex> lock(this->m_score_mutex);
                         peer_score->sub_score(100);
+                        peer_score->m_state.store(0, std::memory_order_relaxed);
                     }
                 });
             tmp_thread.detach();
@@ -3767,7 +3792,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 ASKCOIN_RETURN;
             }
             
-            if(utc_diff < 15)
+            if(utc_diff < 10)
             {
                 if(zero_bits != parent_zero_bits + 1)
                 {
@@ -3775,7 +3800,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     ASKCOIN_RETURN;
                 }
             }
-            else if(utc_diff > 35)
+            else if(utc_diff > 30)
             {
                 if(parent_zero_bits > 1)
                 {
