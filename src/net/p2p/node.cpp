@@ -3379,7 +3379,8 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
             }
             else
             {
-                rapidjson::Document doc;
+                std::shared_ptr<rapidjson::Document> doc_ptr = std::make_shared<rapidjson::Document>();
+                auto &doc = *doc_ptr;
                 doc.SetObject();
                 rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
                 doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
@@ -3400,7 +3401,9 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                     peer->m_connection->send(doc);
                     ++request->m_try_num;
                     LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
-                    request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
+                    request->m_timer_id = m_timer_ctl.add_timer([=]() {
+                            auto &doc = *doc_ptr;
+                            
                             if(request->m_chains.empty())
                             {
                                 m_timer_ctl.del_timer(request->m_timer_id);
@@ -3630,7 +3633,8 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
         }
         else
         {
-            rapidjson::Document doc;
+            std::shared_ptr<rapidjson::Document> doc_ptr = std::make_shared<rapidjson::Document>();
+            auto &doc = *doc_ptr;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
             doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
@@ -3651,7 +3655,9 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 peer->m_connection->send(doc);
                 ++request->m_try_num;
                 LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
-                request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
+                request->m_timer_id = m_timer_ctl.add_timer([=]() {
+                        auto &doc = *doc_ptr;
+                        
                         if(request->m_chains.empty())
                         {
                             m_timer_ctl.del_timer(request->m_timer_id);
@@ -5134,7 +5140,8 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
         auto block_hash = pb->m_hash;
         auto iter_detail = m_pending_detail_reqs.find(block_hash);
         std::shared_ptr<Pending_Detail_Request> request;
-        rapidjson::Document doc;
+        std::shared_ptr<rapidjson::Document> doc_ptr = std::make_shared<rapidjson::Document>();
+        auto &doc = *doc_ptr;
         doc.SetObject();
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
@@ -5152,7 +5159,10 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             peer->m_connection->send(doc);
             ++request->m_try_num;
             LOG_DEBUG_INFO("finish_detail, pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
-            request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
+            // todo, &doc ? coredump
+            request->m_timer_id = m_timer_ctl.add_timer([=]() {
+                    auto &doc = *doc_ptr;
+                    
                     if(request->m_chains.empty())
                     {
                         m_timer_ctl.del_timer(request->m_timer_id);
@@ -5292,7 +5302,8 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
     auto block_hash = pb->m_hash;
     auto iter_detail = m_pending_detail_reqs.find(block_hash);
     std::shared_ptr<Pending_Detail_Request> request;
-    rapidjson::Document doc;
+    std::shared_ptr<rapidjson::Document> doc_ptr = std::make_shared<rapidjson::Document>();
+    auto &doc = *doc_ptr;
     doc.SetObject();
     rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
     doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
@@ -5311,7 +5322,9 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
         peer->m_connection->send(doc);
         ++request->m_try_num;
         LOG_DEBUG_INFO("pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
-        request->m_timer_id = m_timer_ctl.add_timer([=, &doc]() {
+        request->m_timer_id = m_timer_ctl.add_timer([=]() {
+                auto &doc = *doc_ptr;
+                
                 if(request->m_chains.empty())
                 {
                     m_timer_ctl.del_timer(request->m_timer_id);

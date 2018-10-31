@@ -45,54 +45,54 @@ Blockchain::~Blockchain()
 {
 }
 
-class Key_Comp : public leveldb::Comparator
-{
-public:
-    int Compare(const leveldb::Slice &a, const leveldb::Slice &b) const
-    {
-        uint64 a_u64, b_u64;
-        char k1 = a[0];
-        char k2 = b[0];
+// class Key_Comp : public leveldb::Comparator
+// {
+// public:
+//     int Compare(const leveldb::Slice &a, const leveldb::Slice &b) const
+//     {
+//         uint64 a_u64, b_u64;
+//         char k1 = a[0];
+//         char k2 = b[0];
 
-        if(k1 > '9' || k1 < '0')
-        {
-            if(k2 > '9' || k2 < '0')
-            {
-                return a.compare(b);
-            }
+//         if(k1 > '9' || k1 < '0')
+//         {
+//             if(k2 > '9' || k2 < '0')
+//             {
+//                 return a.compare(b);
+//             }
 
-            return -1;
-        }
+//             return -1;
+//         }
 
-        if(k2 > '9' || k2 < '0')
-        {
-            return 1;
-        }
+//         if(k2 > '9' || k2 < '0')
+//         {
+//             return 1;
+//         }
         
-        fly::base::string_to(a.data(), a_u64);
-        fly::base::string_to(b.data(), b_u64);
+//         fly::base::string_to(a.data(), a_u64);
+//         fly::base::string_to(b.data(), b_u64);
         
-        if(a_u64 < b_u64)
-        {
-            return -1;
-        }
+//         if(a_u64 < b_u64)
+//         {
+//             return -1;
+//         }
 
-        if(a_u64 > b_u64)
-        {
-            return 1;
-        }
+//         if(a_u64 > b_u64)
+//         {
+//             return 1;
+//         }
 
-        return 0;
-    }
+//         return 0;
+//     }
 
-    const char* Name() const
-    {
-        return "Key_Comp";
-    }
+//     const char* Name() const
+//     {
+//         return "Key_Comp";
+//     }
 
-    void FindShortestSeparator(std::string* start, const leveldb::Slice& limit) const {}
-    void FindShortSuccessor(std::string* key) const {}
-};
+//     void FindShortestSeparator(std::string* start, const leveldb::Slice& limit) const {}
+//     void FindShortSuccessor(std::string* key) const {}
+// };
 
 const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
 extern std::vector<uint32> __asic_resistant_data__;
@@ -288,9 +288,9 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
         return true;
     }
     
-    if(cur_block_id > 8641)
+    if(cur_block_id > (2 * TOPIC_LIFE_TIME + 1))
     {
-        m_rollback_txs.erase(cur_block_id - 8641);
+        m_rollback_txs.erase(cur_block_id - (2 * TOPIC_LIFE_TIME + 1));
     }
 
     m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
@@ -379,11 +379,11 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
         return true;
     }
     
-    if(cur_block_id > 8641)
+    if(cur_block_id > (2 * TOPIC_LIFE_TIME + 1))
     {
-        m_rollback_topics.erase(cur_block_id - 8641);
+        m_rollback_topics.erase(cur_block_id - (2 * TOPIC_LIFE_TIME + 1));
     }
-
+    
     m_rollback_topics.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
     auto &topic_list = m_rollback_topics[cur_block_id - (TOPIC_LIFE_TIME + 1)];
     
@@ -1489,8 +1489,9 @@ bool Blockchain::start(std::string db_path)
     // todo, set this param?
     options.max_open_files = 50000;
     options.max_file_size = 50 * (1 << 20);
+    leveldb::Status s;
     
-    // leveldb::Status s = leveldb::RepairDB(db_path, options);
+    // s = leveldb::RepairDB(db_path, options);
     
     // if(!s.ok())
     // {
@@ -1498,8 +1499,8 @@ bool Blockchain::start(std::string db_path)
 
     //     return false;
     // }
-    
-    leveldb::Status s = leveldb::DB::Open(options, db_path, &m_db);
+
+    s = leveldb::DB::Open(options, db_path, &m_db);
     
     if(!s.ok())
     {
@@ -2901,7 +2902,7 @@ bool Blockchain::start(std::string db_path)
             char hash_raw[32];
             fly::base::base64_decode(iter_block->hash().c_str(), iter_block->hash().length(), hash_raw, 32);
             std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-            printf("load block progress: cur_block_id: %lu, cur_block_hash: %s (hex: %s)\n", \
+            CONSOLE_ONLY("load block progress: cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
                    cur_block_id, iter_block->hash().c_str(), hex_hash.c_str());
         }
         
@@ -2918,8 +2919,8 @@ bool Blockchain::start(std::string db_path)
     std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
     CONSOLE_LOG_INFO("load block finished, zero_bits: %u, cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
                      m_cur_block->zero_bits(), m_cur_block->id(), m_cur_block->hash().c_str(), hex_hash.c_str());
-    m_timer_ctl.add_timer([&]() {
-            broadcast();
+    m_timer_ctl.add_timer([this]() {
+            this->broadcast();
         }, 10);
     
     if(!check_balance())
@@ -7226,7 +7227,7 @@ void Blockchain::rollback(uint64 block_id)
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
 
-        LOG_DEBUG_INFO("rollback, id: %lu, hash: %s", cur_block_id, block_hash.c_str());
+        LOG_INFO("rollback 1, id: %lu, hash: %s", cur_block_id, block_hash.c_str());
         
         if(m_cur_block->m_miner_reward)
         {
@@ -7812,6 +7813,8 @@ void Blockchain::rollback(uint64 block_id)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
+
+            LOG_INFO("rollback 2, id: %lu, hash: %s", cur_block_id, block_hash.c_str());
             
             if(m_cur_block->m_miner_reward)
             {
