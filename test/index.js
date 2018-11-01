@@ -4,7 +4,30 @@ var EC = require('elliptic').ec;
 var ec = new EC('secp256k1');
 var WebSocket = require('ws');
 
-// protocol:
+//..............................protocol.............................
+
+// enum MSG_TYPE
+// {
+//     MSG_SYS,
+//     MSG_ACCOUNT,
+//     MSG_TX,
+//     MSG_BLOCK,
+// };
+
+// enum MSG_CMD
+// {
+//     SYS_PING,
+//     SYS_PONG,
+//     SYS_INFO,
+
+//     ACCOUNT_IMPORT = 0,
+//     ACCOUNT_TOP100,
+    
+//     TX_CMD = 0,
+    
+//     BLOCK_SYNC = 0
+// };
+
 // {"msg_type":2,"msg_cmd":3,"msg_id":1,"sign":"tx sign data","data":{}}
 
 // tx register account
@@ -84,34 +107,8 @@ var WebSocket = require('ws');
 //     }
 // }
 
-
-// //var ws = new WebSocket('ws://172.104.48.244:18051');
-// var ws = new WebSocket('ws://192.168.0.122:19051');
-
-// ws.on('open', function open() {
-//     console.log("reccv open msg");
-//     ws.send(JSON.stringify({msg_id: 22, msg_type:0, msg_cmd: 2}));
-// });
-
-// ws.on('error', function(e) {
-//     console.log("error event....................", e);
-// });
-
-// ws.on('close', function(e) {
-//     console.log("close event....................", e);
-// });
- 
-// ws.on('message', function incoming(data) {
-//     console.log("recv msg:");
-//     console.log(data);
-    
-// });
-
-// return;
-
-console.log('----------------------------------------------');
-
-var tx_data = '{\"type\":1,\"pubkey\":\"BCf32BSqhVpDy04kIpC59IT16yp77oAJnEBeRJZWc7I8JtYd2HlCtUJPPKSA4yea7dyWowXpGbaRpKoGD9Wy0mk=\",\"utc\":1540950124,\"avatar\":1,\"sign\":\"MEUCIQCjZolI48Sxgn5oWcljhfgiGpfnNRWF9fth3NbLWMjdKQIgXnHzKCDS3ErPyFIkgXfXSyYxOjObnnq9y/FakU2UpaU=\",\"sign_data\":{\"block_id\":1051,\"fee\":2,\"name\":\"dHN0MQ==\",\"referrer\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"}}';
+//...................................crypto library.................................
+var tx_data = "{\"type\":1,\"pubkey\":\"BCf32BSqhVpDy04kIpC59IT16yp77oAJnEBeRJZWc7I8JtYd2HlCtUJPPKSA4yea7dyWowXpGbaRpKoGD9Wy0mk=\",\"utc\":1540950124,\"avatar\":1,\"sign\":\"MEUCIQCjZolI48Sxgn5oWcljhfgiGpfnNRWF9fth3NbLWMjdKQIgXnHzKCDS3ErPyFIkgXfXSyYxOjObnnq9y/FakU2UpaU=\",\"sign_data\":{\"block_id\":1051,\"fee\":2,\"name\":\"dHN0MQ==\",\"referrer\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"}}";
 
 var hash_raw = hash.sha256().update(hash.sha256().update(tx_data).digest()).digest();
 var hash_b64 = Buffer.from(hash_raw).toString('base64');
@@ -154,3 +151,147 @@ if(pubkey.verify(hash_raw, sign))
 {
     console.log("new pubkey verify sign successfully");
 }
+
+//...............................wsock...............................
+//var ws = new WebSocket('ws://172.104.48.244:19050');
+var ws = new WebSocket('ws://192.168.0.122:19051');
+var ping_timer;
+
+ws.on('open', function open() {
+    console.log("recv open msg..................");
+
+    // send ping packet
+    ping_timer = setInterval(function() {
+        ws.send(JSON.stringify({msg_type:0, msg_cmd:0, msg_id:1}));
+    }, 5000);
+
+    // register account, need generate privkey
+    var key_pair = ec.genKeyPair();
+    var privkey_hex = key_pair.getPrivate("hex");
+    var privkey = ec.keyFromPrivate(privkey_hex, 'hex');
+    var pubkey_hex = privkey.getPublic('hex');
+    var pubkey = ec.keyFromPublic(pubkey_hex, 'hex');
+    var privkey_b64 = Buffer.from(privkey_hex, 'hex').toString('base64');
+    var pubkey_b64 = Buffer.from(pubkey_hex, 'hex').toString('base64');
+    var data_obj = {};
+    data_obj.type = 1;
+    data_obj.pubkey = pubkey_b64;
+    var utc = (Date.now() / 1000);
+    data_obj.utc = parseInt(utc);
+    data_obj.avatar = 3;
+    var sign_str = '{"sign":"MEUCIQCyU/J+rqjF6ZxTyZ7ZgmQ5hC/F4hEA0mtWGbzjZHFBBgIgfjA9stVN7MhI3esIZJ3mPHwcjgrZThNmPshLv5UnfVQ=","sign_data":{"block_id":1405,"fee":2,"name":"YWNjb3VudF8x","referrer":"BKBWkg5g5H0YBSqT1U0/aT/s1czat6SObFafhbpbsgvY9SO4k81Ay9jkq3zKRkXwSAA4BNmu8T+GjuUnXM4raLU="}}';
+    var sign_obj = JSON.parse(sign_str);
+    data_obj.sign = sign_obj.sign;
+    data_obj.sign_data = sign_obj.sign_data;
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var sign = privkey.sign(tx_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    var register_packet = {msg_type:2, msg_cmd:0, msg_id:1, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(register_packet));
+    ws.send(JSON.stringify(register_packet));
+
+    // privkey come from import
+    var privkey_buf = Buffer.from("Vm1wSmQwMVhSWGxUYTJScVUwWktXRmxzVWtKaVJUQjN=", 'base64');
+    var privkey = ec.keyFromPrivate(privkey_buf);
+    var pubkey_hex = privkey.getPublic('hex');
+    var pubkey_b64 = Buffer.from(pubkey_hex, 'hex').toString('base64');
+    
+    // import account msg
+    var data_obj = {};
+    data_obj.utc = parseInt(Date.now() / 1000);
+    data_obj.pubkey = pubkey_b64;
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var sign = privkey.sign(pubkey_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    ws.send(JSON.stringify({msg_type:1, msg_cmd:0, msg_id:2, sign:sign_b64, date:data_obj}));
+
+    // sendcoin
+    var data_obj = {};
+    data_obj.type = 2;
+    data_obj.pubkey = pubkey_b64;
+    var utc = (Date.now() / 1000);
+    data_obj.utc = parseInt(utc);
+    data_obj.block_id = 1500;
+    data_obj.fee = 2;
+    data_obj.amount = 100;
+    data_obj.memo = Buffer.from("this is memo data").toString('base64');
+    data_obj.receiver = "BAlgyYbC43fc7brIieAc1yKMSsO12ElINyeF9PyjKOgljkkOK1B8fEgRVOP6kGsOwx4X5lGwtkIrSHJttpqWzSM=";
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var sign = privkey.sign(tx_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(packet));
+    ws.send(JSON.stringify(packet));
+    
+    // new topic
+    var data_obj = {};
+    data_obj.type = 3;
+    data_obj.pubkey = pubkey_b64;
+    var utc = (Date.now() / 1000);
+    data_obj.utc = parseInt(utc);
+    data_obj.block_id = 1500;
+    data_obj.fee = 2;
+    data_obj.reward = 100;
+    data_obj.topic = Buffer.from("this topic data is 中文内容也可以，一共300字节最多，不能超出 问题的描述 questionnnnnnnnnnnnnnnnnnnn").toString('base64');
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var sign = privkey.sign(tx_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(packet));
+    console.log("tx_id:", tx_id);
+    ws.send(JSON.stringify(packet));
+
+    // topic reply
+    var data_obj = {};
+    data_obj.type = 4;
+    data_obj.pubkey = pubkey_b64;
+    var utc = (Date.now() / 1000);
+    data_obj.utc = parseInt(utc);
+    data_obj.block_id = 1500;
+    data_obj.fee = 2;
+    data_obj.topic_key = "R/F/I+BQ+yuU9CWDDzLbA45tMtv8Ld16VfzW0MdbSV8=";
+    data_obj.reply = Buffer.from("this topic reply 回复 replyyyyyyyyyyyyyyyyyyyyyyyyy").toString('base64');
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var sign = privkey.sign(tx_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(packet));
+    console.log("tx_id:", tx_id);
+    ws.send(JSON.stringify(packet));
+
+    // give reward
+    var data_obj = {};
+    data_obj.type = 5;
+    data_obj.pubkey = pubkey_b64;
+    var utc = (Date.now() / 1000);
+    data_obj.utc = parseInt(utc);
+    data_obj.block_id = 1900;
+    data_obj.fee = 2;
+    data_obj.topic_key = "R/F/I+BQ+yuU9CWDDzLbA45tMtv8Ld16VfzW0MdbSV8=";
+    data_obj.reply_to = "rLIcxNNqocIfMgTXADE6dupysw5skfTwxdjMbHHLAJg=";
+    data_obj.amount = 10;
+    var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var sign = privkey.sign(tx_hash_raw).toDER();
+    var sign_b64 = Buffer.from(sign).toString('base64');
+    var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(packet));
+    console.log("tx_id:", tx_id);
+    ws.send(JSON.stringify(packet));
+});
+
+ws.on('error', function(e) {
+    console.log("error event....................", e);
+});
+
+ws.on('close', function(e) {
+    clearInterval(ping_timer);
+    console.log("close event....................", e);
+});
+ 
+ws.on('message', function incoming(data) {
+    console.log("recv msg..............");
+    console.log(data);
+});

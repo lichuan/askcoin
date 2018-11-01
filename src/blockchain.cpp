@@ -699,9 +699,9 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
     {
         uint32 cnt = 0;
         char title[5][15] = {"rank", "account_name", "account_id", "avatar", "balance"};
-        printf("-----------------------------------------------------------\n");
+        printf("-------------------------------------------------------------\n");
         printf("%-5s\t%-15s\t%-10s\t%-7s\t%-22s\n", title[0], title[1], title[2], title[3], title[4]);
-        printf("-----------------------------------------------------------\n");
+        printf("-------------------------------------------------------------\n");
         
         for(auto iter = m_account_by_rich.begin(); iter != m_account_by_rich.end(); ++iter)
         {

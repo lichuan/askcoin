@@ -6,8 +6,7 @@ namespace api {
 
 enum EC
 {
-    ERR_OK = 0,
-    ERR_TX_EXIST,
+    ERR_TX_EXIST = 1,
     ERR_PUBKEY_EXIST,
     ERR_TX_EXPIRED,
     ERR_NAME_EXIST,
