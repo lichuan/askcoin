@@ -112,7 +112,7 @@
 {
     "sign":"oijowwwwwwwww",
     "data":{
-        "type":5,
+        "type":3,
         "pubkey":"oikkkkkkkkkk",
         "utc":9988888,
         "block_id": 339,
@@ -126,7 +126,7 @@
 {
     "sign":"oijowwwwwwwww",
     "data":{
-        "type":6,
+        "type":4,
         "pubkey":"eeeeeeeeee",
         "utc":9988888,
         "block_id": 339,
@@ -141,7 +141,7 @@
 {
     "sign":"oijowwwwwwwww",
     "data":{
-        "type":7,
+        "type":5,
         "pubkey":"2fwfewefef",
         "utc":9988888,
         "block_id": 339,

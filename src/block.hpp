@@ -12,7 +12,7 @@ public:
     uint32 version();
     uint64 utc();
     uint64 id();
-    std::string hash();
+    const std::string& hash();
     uint32 zero_bits();
     uint64 utc_diff();
     void set_parent(std::shared_ptr<Block> parent);

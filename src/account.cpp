@@ -55,7 +55,7 @@ uint64 Account::id()
     return m_id;
 }
 
-std::string& Account::name()
+const std::string& Account::name()
 {
     return m_name;
 }
@@ -70,7 +70,7 @@ void Account::add_history(History *history)
     m_history.push_back(history);
 }
 
-std::string& Account::pubkey()
+const std::string& Account::pubkey()
 {
     return m_pubkey;
 }

@@ -45,55 +45,6 @@ Blockchain::~Blockchain()
 {
 }
 
-// class Key_Comp : public leveldb::Comparator
-// {
-// public:
-//     int Compare(const leveldb::Slice &a, const leveldb::Slice &b) const
-//     {
-//         uint64 a_u64, b_u64;
-//         char k1 = a[0];
-//         char k2 = b[0];
-
-//         if(k1 > '9' || k1 < '0')
-//         {
-//             if(k2 > '9' || k2 < '0')
-//             {
-//                 return a.compare(b);
-//             }
-
-//             return -1;
-//         }
-
-//         if(k2 > '9' || k2 < '0')
-//         {
-//             return 1;
-//         }
-        
-//         fly::base::string_to(a.data(), a_u64);
-//         fly::base::string_to(b.data(), b_u64);
-        
-//         if(a_u64 < b_u64)
-//         {
-//             return -1;
-//         }
-
-//         if(a_u64 > b_u64)
-//         {
-//             return 1;
-//         }
-
-//         return 0;
-//     }
-
-//     const char* Name() const
-//     {
-//         return "Key_Comp";
-//     }
-
-//     void FindShortestSeparator(std::string* start, const leveldb::Slice& limit) const {}
-//     void FindShortSuccessor(std::string* key) const {}
-// };
-
 const uint32 ASIC_RESISTANT_DATA_NUM = 5 * 1024 * 1024;
 extern std::vector<uint32> __asic_resistant_data__;
 
@@ -390,8 +341,9 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     while(!m_topic_list.empty())
     {
         std::shared_ptr<Topic> topic = m_topic_list.front();
-
-        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id)
+        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+        
+        if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id)
         {
             m_topics.erase(topic->key());
             topic_list.push_front(topic);
@@ -1482,11 +1434,7 @@ bool Blockchain::start(std::string db_path)
     CONSOLE_LOG_INFO("verify __asic_resistant_data__ ok");
 
     leveldb::Options options;
-    // Key_Comp comp;
-    // options.comparator = &comp;
     options.create_if_missing = true;
-
-    // todo, set this param?
     options.max_open_files = 50000;
     options.max_file_size = 50 * (1 << 20);
     leveldb::Status s;
@@ -2705,7 +2653,7 @@ bool Blockchain::start(std::string db_path)
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block->hash(), reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -3267,7 +3215,7 @@ void Blockchain::mine_tx()
                 }
                 
                 account->sub_balance(reward);
-                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, "", reward));
                 topic->set_owner(account);
                 account->m_topic_list.push_back(topic);
                 m_topic_list.push_back(topic);
@@ -4139,6 +4087,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
             m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
             reg_account->set_referrer(referrer);
+            notify_register_account(reg_account);
         }
         else
         {
@@ -4350,7 +4299,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 }
                     
                 account->sub_balance(reward);
-                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
                 topic->set_owner(account);
                 account->m_topic_list.push_back(topic);
                 m_topic_list.push_back(topic);
@@ -4883,14 +4832,16 @@ void Blockchain::do_uv_tx()
                     ++iter;
                     continue;
                 }
+                
+                uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
 
-                if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
                     iter = m_uv_1_txs.erase(iter);
                     m_uv_tx_ids.erase(tx_id);
                     continue;
                 }
-
+                
                 if(!tx_reply->m_reply_to.empty())
                 {
                     std::shared_ptr<Reply> reply_to;
@@ -4975,7 +4926,9 @@ void Blockchain::do_uv_tx()
                     continue;
                 }
 
-                if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                
+                if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
                     iter = m_uv_1_txs.erase(iter);
                     m_uv_tx_ids.erase(tx_id);
@@ -5068,6 +5021,7 @@ void Blockchain::do_uv_tx()
                 m_uv_tx_ids.erase(tx_id);
                 m_uv_account_names.erase(register_name);
                 m_uv_account_pubkeys.erase(pubkey);
+                notify_register_failed(pubkey, 2);
                 continue;
             }
 
@@ -5098,6 +5052,7 @@ void Blockchain::do_uv_tx()
                 m_uv_tx_ids.erase(tx_id);
                 m_uv_account_names.erase(register_name);
                 m_uv_account_pubkeys.erase(pubkey);
+                notify_register_failed(pubkey, 1);
                 continue;
             }
 
@@ -5195,7 +5150,9 @@ void Blockchain::do_uv_tx()
             
             if(get_topic(tx_reply->m_topic_key, topic_outer))
             {
-                if(topic_outer->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                uint64 topic_block_id = m_blocks[topic_outer->block_hash()]->id();
+
+                if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
                     iter = m_uv_2_txs.erase(iter);
                     m_uv_tx_ids.erase(tx_id);
@@ -5314,7 +5271,9 @@ void Blockchain::do_uv_tx()
             
             if(get_topic(tx_reward->m_topic_key, topic_outer))
             {
-                if(topic_outer->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                uint64 topic_block_id = m_blocks[topic_outer->block_hash()]->id();
+                
+                if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
                     iter = m_uv_2_txs.erase(iter);
                     m_uv_tx_ids.erase(tx_id);
@@ -5920,6 +5879,7 @@ void Blockchain::switch_to_most_difficult()
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                 m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
+                notify_register_account(reg_account);
             }
             else
             {
@@ -6085,7 +6045,7 @@ void Blockchain::switch_to_most_difficult()
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -6802,6 +6762,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                 m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
+                notify_register_account(reg_account);
             }
             else
             {
@@ -6967,7 +6928,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -7560,7 +7521,7 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         uint64 reward = data["reward"].GetUint64();
                         std::string topic_data = data["topic"].GetString();
-                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
                         topic->set_owner(account);
                         topic_list.push_front(topic);
                         topics.insert(std::make_pair(tx_id, topic));

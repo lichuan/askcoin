@@ -36,7 +36,7 @@ uint32 Block::zero_bits()
     return m_zero_bits;
 }
 
-std::string Block::hash()
+const std::string& Block::hash()
 {
     return m_hash;
 }

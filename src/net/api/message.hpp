@@ -20,6 +20,7 @@ enum MSG_CMD
 
     ACCOUNT_IMPORT = 0,
     ACCOUNT_TOP100,
+    ACCOUNT_PROBE,
     
     TX_CMD = 0,
     

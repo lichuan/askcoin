@@ -7,6 +7,7 @@ User::User()
 {
     m_state = 0;
     m_timer_id = 0;
+    m_reg_query = false;
 }
 
 User::~User()

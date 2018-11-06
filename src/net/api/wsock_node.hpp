@@ -31,10 +31,12 @@ public:
     void be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection);
     void timer_proc();
     
-private:
+public:
     uint32 m_max_conn = 0;
     std::atomic<bool> m_stop{false};
     std::unordered_map<uint64, std::shared_ptr<User>> m_users;
+    std::unordered_map<std::string, std::shared_ptr<User>> m_users_to_register;
+    std::unordered_multimap<std::string, std::shared_ptr<User>> m_users_by_pubkey;
     std::mutex m_mutex;
     std::unique_ptr<fly::net::Server<Wsock>> m_server;
     std::thread m_timer_thread;

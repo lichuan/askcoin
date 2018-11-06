@@ -12,12 +12,12 @@ class Account;
 class Topic
 {
 public:
-    Topic(std::string key, std::string data, uint64 block_id, uint64 balance);
+    Topic(std::string key, std::string data, std::string block_hash, uint64 balance);
     ~Topic();
     void set_owner(std::shared_ptr<Account> owner);
     std::shared_ptr<Account> get_owner();
-    uint64 block_id();    
-    std::string key();
+    const std::string& block_hash();
+    const std::string& key();
     bool get_reply(std::string key, std::shared_ptr<Reply> &reply);
     bool add_member(std::string tx_id, std::shared_ptr<Account> account);
     void sub_balance(uint64 value);
@@ -32,7 +32,7 @@ public:
 private:
     std::string m_data;
     std::string m_key;
-    uint64 m_block_id;
+    std::string m_block_hash;
     uint64 m_balance;
     uint64 m_total;
     std::shared_ptr<Account> m_owner;

@@ -81,6 +81,8 @@ private:
     void finish_detail(std::shared_ptr<Pending_Detail_Request> request);
     void do_detail_chain(std::shared_ptr<Pending_Chain> chain);
     void do_uv_tx();
+    void notify_register_account(std::shared_ptr<Account> account);
+    void notify_register_failed(std::string pubkey, uint32 reason);
     
 private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);

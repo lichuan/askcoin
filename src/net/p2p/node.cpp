@@ -2604,7 +2604,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     ASKCOIN_RETURN;
                 }
 
-                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
                 {
                     ASKCOIN_RETURN;
                 }
@@ -2748,7 +2748,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     ASKCOIN_RETURN;
                 }
 
-                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 100)
+                if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
                 {
                     ASKCOIN_RETURN;
                 }
@@ -3059,7 +3059,9 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             ASKCOIN_RETURN;
                         }
                         
-                        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+
+                        if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                         {
                             ASKCOIN_RETURN;
                         }
@@ -3083,8 +3085,10 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             m_uv_1_txs.push_back(tx_reply);
                             ASKCOIN_RETURN;
                         }
-
-                        if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                        
+                        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                        
+                        if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                         {
                             ASKCOIN_RETURN;
                         }
@@ -3235,8 +3239,10 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         m_uv_1_txs.push_back(tx_reward);
                         ASKCOIN_RETURN;
                     }
+
+                    uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
                     
-                    if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+                    if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                     {
                         ASKCOIN_RETURN;
                     }
@@ -3865,6 +3871,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             const rapidjson::Value &tx_ids = data["tx_ids"];
             uint32 tx_num = tx_ids.Size();
             const rapidjson::Value &tx = doc["tx"];
+            std::list<std::shared_ptr<Account>> accounts_to_notify;
             
             for(uint32 i = 0; i < tx_num; ++i)
             {
@@ -4142,6 +4149,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                     m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                     reg_account->set_referrer(referrer);
+                    accounts_to_notify.push_back(reg_account);
                 }
                 else
                 {
@@ -4452,7 +4460,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         }
                     
                         account->sub_balance(reward);
-                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block_id, reward));
+                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
                         topic->set_owner(account);
                         account->m_topic_list.push_back(topic);
                         m_topic_list.push_back(topic);
@@ -4930,6 +4938,11 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 
                 punish_detail_req(request);
                 ASKCOIN_RETURN;
+            }
+
+            for(auto account : accounts_to_notify)
+            {
+                notify_register_account(account);
             }
             
             uint64 remain_balance = m_reserve_fund_account->get_balance();

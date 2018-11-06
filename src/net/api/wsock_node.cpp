@@ -91,7 +91,7 @@ bool Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     lock.unlock();
     user->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
-        }, 60, true);
+        }, 30, true);
     return true;
 }
 
@@ -113,6 +113,12 @@ void Wsock_Node::dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
         ASKCOIN_RETURN;
     }
 
+    if(!doc["msg_id"].IsUint())
+    {
+        connection->close();
+        ASKCOIN_RETURN;
+    }
+    
     uint32 msg_id = doc["msg_id"].GetUint();
     
     if(type == MSG_SYS)
@@ -164,7 +170,9 @@ void Wsock_Node::close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     auto user = m_users[conn_id];
     m_timer_ctl.del_timer(user->m_timer_id);
     m_users.erase(conn_id);
-    LOG_DEBUG_INFO("connection count: %u", m_users.size());
+    m_users_to_register.erase(user->m_pubkey);
+    m_users_by_pubkey.erase(user->m_pubkey);
+    LOG_DEBUG_INFO("wsock connection count: %u", m_users.size());
 }
 
 void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connection)
@@ -175,10 +183,71 @@ void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connecti
     auto user = m_users[conn_id];
     m_timer_ctl.del_timer(user->m_timer_id);
     m_users.erase(conn_id);
-    LOG_DEBUG_INFO("connection count: %u", m_users.size());
+    m_users_to_register.erase(user->m_pubkey);
+    m_users_by_pubkey.erase(user->m_pubkey);
+    LOG_DEBUG_INFO("wsock connection count: %u", m_users.size());
 }
 
 }
+}
+
+void Blockchain::notify_register_failed(std::string pubkey, uint32 reason)
+{
+    net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
+    std::unique_lock<std::mutex> lock(wsock_node->m_mutex);
+    auto iter = wsock_node->m_users_to_register.find(pubkey);
+    
+    if(iter == wsock_node->m_users_to_register.end())
+    {
+        return;
+    }
+
+    auto user = iter->second;
+    wsock_node->m_users_to_register.erase(iter);
+    lock.unlock();
+    user->m_state = 0;
+    rapidjson::Document doc;
+    doc.SetObject();
+    rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+    doc.AddMember("msg_type", net::api::MSG_TX, allocator);
+    doc.AddMember("msg_cmd", net::api::TX_CMD, allocator);
+    doc.AddMember("msg_id", 1, allocator);
+    doc.AddMember("type", 1, allocator);
+
+    if(reason == 1)
+    {
+        doc.AddMember("err_code", net::api::ERR_NAME_EXIST, allocator);
+    }
+    else if(reason == 2)
+    {
+        doc.AddMember("err_code", net::api::ERR_SIGN_EXPIRED, allocator);
+    }
+    
+    user->m_connection->send(doc);
+}
+
+void Blockchain::notify_register_account(std::shared_ptr<Account> account)
+{
+    net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
+    std::unique_lock<std::mutex> lock(wsock_node->m_mutex);
+    auto iter = wsock_node->m_users_to_register.find(account->pubkey());
+
+    if(iter == wsock_node->m_users_to_register.end())
+    {
+        return;
+    }
+
+    auto user = iter->second;
+    wsock_node->m_users_to_register.erase(iter);
+    lock.unlock();
+    rapidjson::Document doc;
+    doc.SetObject();
+    rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+    doc.AddMember("msg_type", net::api::MSG_TX, allocator);
+    doc.AddMember("msg_cmd", net::api::TX_CMD, allocator);
+    doc.AddMember("msg_id", 1, allocator);
+    doc.AddMember("type", 1, allocator);
+    user->m_connection->send(doc);
 }
 
 void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message)
@@ -242,8 +311,152 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("top100", top_list, allocator);
             connection->send(doc);
         }
+        else if(cmd == net::api::ACCOUNT_PROBE)
+        {
+            if(user->m_state != 0)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc.HasMember("data"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["data"].IsObject())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc.HasMember("sign"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["sign"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Value &data = doc["data"];
+
+            if(!data.HasMember("utc"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["utc"].IsUint64())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!data.HasMember("pubkey"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!data["pubkey"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            std::string pubkey = data["pubkey"].GetString();
+
+            if(!is_base64_char(pubkey))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(pubkey.length() != 88)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!user->m_reg_query)
+            {
+                uint64 utc = data["utc"].GetUint64();
+                uint64 utc_now = time(NULL);
+                std::string tx_sign = doc["sign"].GetString();
+                
+                if(utc + 10 < utc_now || utc_now + 10 < utc)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(tx_sign))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                rapidjson::StringBuffer buffer;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                data.Accept(writer);
+                std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+                if(!verify_sign(pubkey, tx_id, tx_sign))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                user->m_pubkey = pubkey;
+                user->m_reg_query = true;
+            }
+            else
+            {
+                if(pubkey != user->m_pubkey)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            }
+            
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_ACCOUNT, allocator);
+            doc.AddMember("msg_cmd", net::api::ACCOUNT_PROBE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            std::shared_ptr<Account> exist_account;
+            
+            if(get_account(pubkey, exist_account))
+            {
+                connection->send(doc);
+                user->m_state = 1;
+            }
+            else if(m_uv_account_pubkeys.find(pubkey) == m_uv_account_pubkeys.end())
+            {
+                doc.AddMember("err_code", net::api::ERR_REG_FAILED, allocator);
+                connection->send(doc);
+            }
+            else
+            {
+                doc.AddMember("err_code", net::api::ERR_REG_WAIT, allocator);
+                connection->send(doc);
+            }
+        }
         else if(cmd == net::api::ACCOUNT_IMPORT)
         {
+            // todo, if the mobile app run background, will socket disconnect ???
+            if(user->m_state == 2)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("data"))
             {
                 connection->close();
@@ -333,15 +546,121 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
-            
-            user->m_state = 1;
+
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
             doc.AddMember("msg_type", net::api::MSG_ACCOUNT, allocator);
             doc.AddMember("msg_cmd", net::api::ACCOUNT_IMPORT, allocator);
             doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("block_id", m_cur_block->id(), allocator);
+            doc.AddMember("block_hash", rapidjson::StringRef(m_cur_block->hash().c_str()), allocator);
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(pubkey, account))
+            {
+                doc.AddMember("err_code", net::api::ERR_PUBKEY_NOT_REGISTERED, allocator);
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Value topic_list(rapidjson::kArrayType);
+            uint32 topic_num = m_topic_list.size();
+
+            if(topic_num <= 20)
+            {
+                for(auto topic : m_topic_list)
+                {
+                    auto owner = topic->get_owner();
+                    auto &block_hash = topic->block_hash();
+                    auto block = m_blocks[block_hash];
+                    uint64 block_id = block->id();
+                    rapidjson::Value obj(rapidjson::kObjectType);
+                    obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                    obj.AddMember("block_id", block_id, allocator);
+                    obj.AddMember("id", owner->id(), allocator);
+                    obj.AddMember("avatar", owner->avatar(), allocator);
+                    obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                    topic_list.PushBack(obj, allocator);
+                }
+            }
+            else
+            {
+                uint32 cnt = 0;
+                std::set<uint32> v_set;
+                
+                while(cnt < 20)
+                {
+                    uint32 v = fly::base::random_between(0, topic_num - 1);
+
+                    if(v_set.find(v) != v_set.end())
+                    {
+                        continue;
+                    }
+                    
+                    ++cnt;
+                }
+                
+                for(auto v : v_set)
+                {
+                    auto iter = m_topic_list.begin();
+                    std::advance(iter, v);
+                    auto topic = *iter;
+                    auto owner = topic->get_owner();
+                    auto &block_hash = topic->block_hash();
+                    auto block = m_blocks[block_hash];
+                    uint64 block_id = block->id();
+                    rapidjson::Value obj(rapidjson::kObjectType);
+                    obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                    obj.AddMember("block_id", block_id, allocator);
+                    obj.AddMember("id", owner->id(), allocator);
+                    obj.AddMember("avatar", owner->avatar(), allocator);
+                    obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                    topic_list.PushBack(obj, allocator);
+                }
+            }
+            
+            doc.AddMember("topic_list", topic_list, allocator);
+            rapidjson::Value question_list(rapidjson::kArrayType);
+            rapidjson::Value answer_list(rapidjson::kArrayType);
+
+            for(auto topic : account->m_topic_list)
+            {
+                auto owner = topic->get_owner();
+                auto &block_hash = topic->block_hash();
+                auto block = m_blocks[block_hash];
+                uint64 block_id = block->id();
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                obj.AddMember("block_id", block_id, allocator);
+                obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                obj.AddMember("id", owner->id(), allocator);
+                obj.AddMember("avatar", owner->avatar(), allocator);
+                obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                question_list.PushBack(obj, allocator);
+            }
+            
+            for(auto topic : account->m_joined_topic_list)
+            {
+                auto owner = topic->get_owner();
+                auto &block_hash = topic->block_hash();
+                auto block = m_blocks[block_hash];
+                uint64 block_id = block->id();
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                obj.AddMember("block_id", block_id, allocator);
+                obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                obj.AddMember("id", owner->id(), allocator);
+                obj.AddMember("avatar", owner->avatar(), allocator);
+                obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                answer_list.PushBack(obj, allocator);
+            }
+            
+            doc.AddMember("question_list", question_list, allocator);
+            doc.AddMember("answer_list", answer_list, allocator);
             connection->send(doc);
+            user->m_state = 2;
+            wsock_node->m_users_by_pubkey.insert(std::make_pair(pubkey, user));
         }
         else
         {
@@ -357,13 +676,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->close();
         ASKCOIN_RETURN;
     }
-
-    rapidjson::Document rsp_doc;
-    rsp_doc.SetObject();
-    rapidjson::Document::AllocatorType &allocator = rsp_doc.GetAllocator();
-    rsp_doc.AddMember("msg_type", type, allocator);
-    rsp_doc.AddMember("msg_cmd", cmd, allocator);
-    rsp_doc.AddMember("msg_id", msg_id, allocator);
     
     if(!doc.HasMember("sign"))
     {
@@ -398,7 +710,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->close();
         ASKCOIN_RETURN;
     }
-            
+    
     if(!doc_data.HasMember("type"))
     {
         connection->close();
@@ -416,32 +728,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->close();
         ASKCOIN_RETURN;
     }
-    
-    rapidjson::StringBuffer buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-    doc_data.Accept(writer);
-    std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
 
-    if(m_tx_map.find(tx_id) != m_tx_map.end())
-    {
-        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
-        connection->send(rsp_doc);
-        ASKCOIN_RETURN;
-    }
-    
-    if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
-    {
-        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
-        connection->send(rsp_doc);
-        ASKCOIN_RETURN;
-    }
-    
     if(!doc_data["pubkey"].IsString())
     {
         connection->close();
         ASKCOIN_RETURN;
     }
-                
+    
     std::string pubkey = doc_data["pubkey"].GetString();
                 
     if(!is_base64_char(pubkey))
@@ -468,14 +761,41 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         ASKCOIN_RETURN;
     }
 
+    uint32 tx_type = doc_data["type"].GetUint();
+    uint64 utc = doc_data["utc"].GetUint64();
+    rapidjson::Document rsp_doc;
+    rsp_doc.SetObject();
+    rapidjson::Document::AllocatorType &allocator = rsp_doc.GetAllocator();
+    rsp_doc.AddMember("msg_type", type, allocator);
+    rsp_doc.AddMember("msg_cmd", cmd, allocator);
+    rsp_doc.AddMember("msg_id", msg_id, allocator);
+    rsp_doc.AddMember("type", tx_type, allocator);
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    doc_data.Accept(writer);
+    std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+
     if(!verify_sign(pubkey, tx_id, tx_sign))
     {
         connection->close();
         ASKCOIN_RETURN;
     }
-            
-    uint32 tx_type = doc_data["type"].GetUint();
-    uint64 utc = doc_data["utc"].GetUint64();
+
+    if(m_tx_map.find(tx_id) != m_tx_map.end())
+    {
+        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+        connection->send(rsp_doc);
+        ASKCOIN_RETURN;
+    }
+    
+    if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+    {
+        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+        connection->send(rsp_doc);
+        ASKCOIN_RETURN;
+    }
+    
+    user->m_pubkey = pubkey;
     uint64 cur_block_id  = m_cur_block->id();
     auto doc_ptr = std::make_shared<rapidjson::Document>();
     auto &p2p_doc = *doc_ptr;
@@ -489,6 +809,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     
     if(tx_type == 1)
     {
+        if(user->m_state != 0)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
         if(!data.HasMember("avatar"))
         {
             connection->close();
@@ -506,7 +832,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
-                
+        
         if(!data["sign"].IsString())
         {
             connection->close();
@@ -617,7 +943,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
 
         if(block_id + 100 < cur_block_id + 1 || block_id > cur_block_id + 1 + 100)
         {
-            rsp_doc.AddMember("err_code", net::api::ERR_TX_EXPIRED, allocator);
+            rsp_doc.AddMember("err_code", net::api::ERR_SIGN_EXPIRED, allocator);
             connection->send(rsp_doc);
             ASKCOIN_RETURN;
         }
@@ -732,10 +1058,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         net::p2p::Node::instance()->broadcast(p2p_doc);
         connection->send(rsp_doc);
         user->m_state = 1;
+        lock.lock();
+        wsock_node->m_users_to_register.insert(std::make_pair(pubkey, user));
     }
     else
     {
-        if(user->m_state == 0)
+        if(user->m_state != 2)
         {
             connection->close();
             ASKCOIN_RETURN;
@@ -746,7 +1074,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
-                
+        
         if(!data["fee"].IsUint64())
         {
             connection->close();
@@ -1053,7 +1381,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+            uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+            
+            if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
             {
                 rsp_doc.AddMember("err_code", net::api::ERR_TOPIC_NOT_EXIST, allocator);
                 connection->send(rsp_doc);
@@ -1234,8 +1564,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->send(rsp_doc);
                 ASKCOIN_RETURN;
             }
+
+            uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
             
-            if(topic->block_id() + TOPIC_LIFE_TIME < cur_block_id + 1)
+            if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
             {
                 rsp_doc.AddMember("err_code", net::api::ERR_TOPIC_NOT_EXIST, allocator);
                 connection->send(rsp_doc);

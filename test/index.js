@@ -67,7 +67,7 @@ var WebSocket = require('ws');
 // {
 //     "sign":"oijowwwwwwwww",
 //     "data":{
-//         "type":5,
+//         "type":3,
 //         "pubkey":"oikkkkkkkkkk",
 //         "utc":9988888,
 //         "block_id": 339,
@@ -81,7 +81,7 @@ var WebSocket = require('ws');
 // {
 //     "sign":"oijowwwwwwwww",
 //     "data":{
-//         "type":6,
+//         "type":4,
 //         "pubkey":"eeeeeeeeee",
 //         "utc":9988888,
 //         "block_id": 339,
@@ -96,7 +96,7 @@ var WebSocket = require('ws');
 // {
 //     "sign":"oijowwwwwwwww",
 //     "data":{
-//         "type":7,
+//         "type":5,
 //         "pubkey":"2fwfewefef",
 //         "utc":9988888,
 //         "block_id": 339,
@@ -153,8 +153,8 @@ if(pubkey.verify(hash_raw, sign))
 }
 
 //...............................wsock...............................
-//var ws = new WebSocket('ws://172.104.48.244:19050');
-var ws = new WebSocket('ws://192.168.0.122:19051');
+var ws = new WebSocket('ws://172.104.48.244:19050');
+//var ws = new WebSocket('ws://192.168.0.122:19051');
 var ping_timer;
 
 ws.on('open', function open() {
@@ -165,6 +165,9 @@ ws.on('open', function open() {
         ws.send(JSON.stringify({msg_type:0, msg_cmd:0, msg_id:1}));
     }, 5000);
 
+    // get info from server
+    ws.send(JSON.stringify({msg_type:0, msg_cmd:2, msg_id:100}));
+    
     // register account, need generate privkey
     var key_pair = ec.genKeyPair();
     var privkey_hex = key_pair.getPrivate("hex");
@@ -186,9 +189,9 @@ ws.on('open', function open() {
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
-    var register_packet = {msg_type:2, msg_cmd:0, msg_id:1, sign:sign_b64, data:data_obj};
-    console.log(JSON.stringify(register_packet));
-    ws.send(JSON.stringify(register_packet));
+    var packet = {msg_type:2, msg_cmd:0, msg_id:1, sign:sign_b64, data:data_obj};
+    console.log(JSON.stringify(packet));
+    ws.send(JSON.stringify(packet));
 
     // privkey come from import
     var privkey_buf = Buffer.from("Vm1wSmQwMVhSWGxUYTJScVUwWktXRmxzVWtKaVJUQjN=", 'base64');
@@ -201,9 +204,9 @@ ws.on('open', function open() {
     data_obj.utc = parseInt(Date.now() / 1000);
     data_obj.pubkey = pubkey_b64;
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
-    var sign = privkey.sign(pubkey_hash_raw).toDER();
+    var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
-    ws.send(JSON.stringify({msg_type:1, msg_cmd:0, msg_id:2, sign:sign_b64, date:data_obj}));
+    ws.send(JSON.stringify({msg_type:1, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj}));
 
     // sendcoin
     var data_obj = {};
