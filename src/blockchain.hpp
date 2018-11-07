@@ -80,7 +80,6 @@ private:
     void finish_brief(std::shared_ptr<Pending_Brief_Request> request);
     void finish_detail(std::shared_ptr<Pending_Detail_Request> request);
     void do_detail_chain(std::shared_ptr<Pending_Chain> chain);
-    void do_uv_tx();
     void notify_register_account(std::shared_ptr<Account> account);
     void notify_register_failed(std::string pubkey, uint32 reason);
     
@@ -88,6 +87,9 @@ private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
     void switch_to_most_difficult();
     void rollback(uint64 block_id);
+    void do_uv_tx();
+    void sync_block();
+    void broadcast_new_topic(std::shared_ptr<Topic> topic);
     void mine_tx();
     void do_command(std::shared_ptr<Command> cmd);
     void mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr);

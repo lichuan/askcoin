@@ -756,6 +756,12 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             return;
         }
         
+        if(account_id == 0)
+        {
+            printf("can't send coin to reserve_fund\n>");
+            return;
+        }
+        
         std::shared_ptr<Account> receiver;
         auto iter = m_account_by_id.find(account_id);
         
@@ -1360,6 +1366,7 @@ void Blockchain::do_message()
 
         if(m_block_changed)
         {
+            sync_block();
             do_uv_tx();
             m_block_changed = false;
         }
@@ -4304,6 +4311,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 account->m_topic_list.push_back(topic);
                 m_topic_list.push_back(topic);
                 m_topics.insert(std::make_pair(tx_id, topic));
+                broadcast_new_topic(topic);
             }
             else if(tx_type == 4) // reply
             {
@@ -6050,6 +6058,7 @@ void Blockchain::switch_to_most_difficult()
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
+                    broadcast_new_topic(topic);
                 }
                 else if(tx_type == 4) // reply
                 {
@@ -6933,6 +6942,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
+                    broadcast_new_topic(topic);
                 }
                 else if(tx_type == 4) // reply
                 {

@@ -10,6 +10,7 @@ enum MSG_TYPE
     MSG_ACCOUNT,
     MSG_TX,
     MSG_BLOCK,
+    MSG_TOPIC
 };
 
 enum MSG_CMD
@@ -21,10 +22,16 @@ enum MSG_CMD
     ACCOUNT_IMPORT = 0,
     ACCOUNT_TOP100,
     ACCOUNT_PROBE,
+    ACCOUNT_QUERY,
     
     TX_CMD = 0,
     
-    BLOCK_SYNC = 0
+    BLOCK_SYNC = 0,
+
+    TOPIC_PROBE = 0,
+    TOPIC_REPLY_PROBE,
+    TOPIC_LIST,
+    TOPIC_DETAIL
 };
 
 }

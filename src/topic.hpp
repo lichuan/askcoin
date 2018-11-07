@@ -28,9 +28,9 @@ public:
     std::list<std::pair<std::string, std::shared_ptr<Account>>> m_members;
     uint32 m_uv_reply;
     uint64 m_uv_reward;
+    std::string m_data;
     
 private:
-    std::string m_data;
     std::string m_key;
     std::string m_block_hash;
     uint64 m_balance;

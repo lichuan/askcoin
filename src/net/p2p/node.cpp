@@ -1096,6 +1096,9 @@ bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 
 void Node::broadcast(rapidjson::Document &doc)
 {
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    doc.Accept(writer);
     std::lock_guard<std::mutex> guard(m_peer_mutex);
 
     if(m_peers.empty())
@@ -1106,7 +1109,7 @@ void Node::broadcast(rapidjson::Document &doc)
     {
         for(auto &p : m_peers)
         {
-            p.second->m_connection->send(doc);
+            p.second->m_connection->send(buffer.GetString(), buffer.GetSize());
         }
     }
 }
@@ -3872,6 +3875,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             uint32 tx_num = tx_ids.Size();
             const rapidjson::Value &tx = doc["tx"];
             std::list<std::shared_ptr<Account>> accounts_to_notify;
+            std::list<std::shared_ptr<Topic>> topics_to_broadcast;
             
             for(uint32 i = 0; i < tx_num; ++i)
             {
@@ -4465,6 +4469,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         account->m_topic_list.push_back(topic);
                         m_topic_list.push_back(topic);
                         m_topics.insert(std::make_pair(tx_id, topic));
+                        topics_to_broadcast.push_back(topic);
                     }
                     else if(tx_type == 4) // reply
                     {
@@ -4943,6 +4948,11 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             for(auto account : accounts_to_notify)
             {
                 notify_register_account(account);
+            }
+
+            for(auto topic : topics_to_broadcast)
+            {
+                broadcast_new_topic(topic);
             }
             
             uint64 remain_balance = m_reserve_fund_account->get_balance();
