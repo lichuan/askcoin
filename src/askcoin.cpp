@@ -212,6 +212,7 @@ public:
             ">get_balance\n"
             ">top100\n"
             ">enable_mine [true|false]\n"
+            ">info\n"
             ">help\n"
             "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
 
@@ -344,7 +345,15 @@ public:
                 {
                     if(param_num > 0)
                     {
-                        cout << "get_balance doesn't need any param" << endl;
+                        cout << "top100 doesn't need any param" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "info")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "info doesn't need any param" << endl;
                         continue;
                     }
                 }

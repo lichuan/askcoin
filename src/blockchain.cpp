@@ -15,6 +15,7 @@
 #include "rapidjson/writer.h"
 #include "net/p2p/node.hpp"
 #include "net/p2p/message.hpp"
+#include "net/api/wsock_node.hpp"
 
 Blockchain::Blockchain()
 {
@@ -669,6 +670,28 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         }
         
         printf(">");
+    }
+    else if(command->m_cmd == "info")
+    {
+        net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
+        std::unique_lock<std::mutex> lock(wsock_node->m_mutex);
+        printf("wsock connection count: %u\n", wsock_node->m_users.size());
+        lock.unlock();
+        auto p2p_node = net::p2p::Node::instance();
+        std::unique_lock<std::mutex> lock_p2p(p2p_node->m_peer_mutex);
+        printf("peer count: %u\n", p2p_node->m_peers.size());
+        lock_p2p.unlock();
+        printf("account pubkey count: %u\n", m_account_by_pubkey.size());
+        printf("account count: %u\n", m_cur_account_id);
+        printf("topic count: %u\n", m_topic_list.size());
+        printf("uv tx count: %u\n", m_uv_2_txs.size());
+        printf("cur block id: %lu\n", m_cur_block->id());
+        auto block_hash = m_cur_block->hash();
+        printf("cur block hash: %s\n", block_hash.c_str());
+        char hash_raw[32];
+        fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
+        std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
+        printf("cur block_hash(hex): %s\n>", hex_hash.c_str());
     }
     else if(command->m_cmd == "enable_mine")
     {
