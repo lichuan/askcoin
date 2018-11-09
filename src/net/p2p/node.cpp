@@ -3062,7 +3062,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             ASKCOIN_RETURN;
                         }
                         
-                        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                        uint64 topic_block_id = topic->m_block->id();
 
                         if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                         {
@@ -3089,7 +3089,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             ASKCOIN_RETURN;
                         }
                         
-                        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                        uint64 topic_block_id = topic->m_block->id();
                         
                         if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                         {
@@ -3243,7 +3243,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
 
-                    uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                    uint64 topic_block_id = topic->m_block->id();
                     
                     if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                     {
@@ -4464,7 +4464,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         }
                     
                         account->sub_balance(reward);
-                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
+                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block, reward));
                         topic->set_owner(account);
                         account->m_topic_list.push_back(topic);
                         m_topic_list.push_back(topic);
@@ -4551,7 +4551,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             break;
                         }
                     
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, cur_block, reply_data));
                         reply->set_owner(account);
                     
                         if(topic->m_reply_list.size() >= 1000)
@@ -4684,7 +4684,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             break;
                         }
                     
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, cur_block, ""));
                         reply->set_owner(account);
                     
                         if(topic->m_reply_list.size() >= 1000)

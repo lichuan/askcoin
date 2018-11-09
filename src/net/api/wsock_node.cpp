@@ -260,8 +260,7 @@ void Blockchain::broadcast_new_topic(std::shared_ptr<Topic> topic)
     doc.AddMember("msg_cmd", net::api::TOPIC_LIST, allocator);
     doc.AddMember("msg_id", 0, allocator);
     auto owner = topic->get_owner();
-    auto &block_hash = topic->block_hash();
-    auto block = m_blocks[block_hash];
+    auto block = topic->m_block;
     uint64 block_id = block->id();
     doc.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
     doc.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
@@ -640,6 +639,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
+
+            if(user->m_state == 1)
+            {
+                if(user->m_pubkey != pubkey)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            }
             
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -651,7 +659,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
-
+            
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -676,15 +684,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 for(auto topic : m_topic_list)
                 {
                     auto owner = topic->get_owner();
-                    auto &block_hash = topic->block_hash();
-                    auto block = m_blocks[block_hash];
+                    auto block = topic->m_block;
                     uint64 block_id = block->id();
                     rapidjson::Value obj(rapidjson::kObjectType);
                     obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
-                    doc.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
-                    doc.AddMember("topic_reward", topic->get_total(), allocator);
+                    obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                    obj.AddMember("topic_reward", topic->get_total(), allocator);
                     obj.AddMember("block_id", block_id, allocator);
-                    doc.AddMember("utc", block->utc(), allocator);
+                    obj.AddMember("utc", block->utc(), allocator);
                     obj.AddMember("id", owner->id(), allocator);
                     obj.AddMember("avatar", owner->avatar(), allocator);
                     obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
@@ -704,7 +711,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     {
                         continue;
                     }
-                    
+
+                    v_set.insert(v);
                     ++cnt;
                 }
                 
@@ -714,15 +722,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     std::advance(iter, v);
                     auto topic = *iter;
                     auto owner = topic->get_owner();
-                    auto &block_hash = topic->block_hash();
-                    auto block = m_blocks[block_hash];
+                    auto block = topic->m_block;
                     uint64 block_id = block->id();
                     rapidjson::Value obj(rapidjson::kObjectType);
                     obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
-                    doc.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
-                    doc.AddMember("topic_reward", topic->get_total(), allocator);
+                    obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                    obj.AddMember("topic_reward", topic->get_total(), allocator);
                     obj.AddMember("block_id", block_id, allocator);
-                    doc.AddMember("utc", block->utc(), allocator);
+                    obj.AddMember("utc", block->utc(), allocator);
                     obj.AddMember("id", owner->id(), allocator);
                     obj.AddMember("avatar", owner->avatar(), allocator);
                     obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
@@ -737,16 +744,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             for(auto topic : account->m_topic_list)
             {
                 auto owner = topic->get_owner();
-                auto &block_hash = topic->block_hash();
-                auto block = m_blocks[block_hash];
+                auto &block_hash = topic->m_block->hash();
+                auto block = topic->m_block;
                 uint64 block_id = block->id();
                 rapidjson::Value obj(rapidjson::kObjectType);
                 obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
-                doc.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
-                doc.AddMember("topic_reward", topic->get_total(), allocator);
+                obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                obj.AddMember("topic_reward", topic->get_total(), allocator);
                 obj.AddMember("block_id", block_id, allocator);
                 obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
-                doc.AddMember("utc", block->utc(), allocator);
+                obj.AddMember("utc", block->utc(), allocator);
                 obj.AddMember("id", owner->id(), allocator);
                 obj.AddMember("avatar", owner->avatar(), allocator);
                 obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
@@ -756,16 +763,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             for(auto topic : account->m_joined_topic_list)
             {
                 auto owner = topic->get_owner();
-                auto &block_hash = topic->block_hash();
-                auto block = m_blocks[block_hash];
+                auto block = topic->m_block;
                 uint64 block_id = block->id();
                 rapidjson::Value obj(rapidjson::kObjectType);
                 obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
-                doc.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
-                doc.AddMember("topic_reward", topic->get_total(), allocator);
+                obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                obj.AddMember("topic_reward", topic->get_total(), allocator);
                 obj.AddMember("block_id", block_id, allocator);
-                obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
-                doc.AddMember("utc", block->utc(), allocator);
+                obj.AddMember("utc", block->utc(), allocator);
                 obj.AddMember("id", owner->id(), allocator);
                 obj.AddMember("avatar", owner->avatar(), allocator);
                 obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
@@ -789,20 +794,245 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     }
     else if(type == net::api::MSG_TOPIC)
     {
-        if(cmd == net::api::TOPIC_DETAIL)
+        if(user->m_state != 2)
         {
-            if(user->m_state != 2)
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
+        std::shared_ptr<Account> account;
+        
+        if(!get_account(user->m_pubkey, account))
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
+        if(cmd == net::api::TOPIC_QUESTION_PROBE)
+        {
+            if(!doc.HasMember("type"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["type"].IsUint())
             {
                 connection->close();
                 ASKCOIN_RETURN;
             }
             
+            uint32 type = doc["type"].GetUint();
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+            doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+
+            if(type == 0)
+            {
+                doc.AddMember("result", 0, allocator);
+                rapidjson::Value question_list(rapidjson::kArrayType);
+                
+                for(auto topic : account->m_topic_list)
+                {
+                    auto owner = topic->get_owner();
+                    auto block = topic->m_block;
+                    auto &block_hash = block->hash();
+                    uint64 block_id = block->id();
+                    rapidjson::Value obj(rapidjson::kObjectType);
+                    obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                    obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                    obj.AddMember("topic_reward", topic->get_total(), allocator);
+                    obj.AddMember("block_id", block_id, allocator);
+                    obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                    obj.AddMember("utc", block->utc(), allocator);
+                    obj.AddMember("id", owner->id(), allocator);
+                    obj.AddMember("avatar", owner->avatar(), allocator);
+                    obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                    question_list.PushBack(obj, allocator);
+                }
+                
+                doc.AddMember("questions", question_list, allocator);
+                connection->send(doc);
+            }
+            else if(type == 1)
+            {
+                if(!doc.HasMember("topic_key"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["topic_key"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                std::string topic_key = doc["topic_key"].GetString();
+            
+                if(!is_base64_char(topic_key))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(topic_key.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc.HasMember("block_hash"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["block_hash"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                std::string block_hash = doc["block_hash"].GetString();
+            
+                if(block_hash.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(block_hash))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                auto iter = m_blocks.find(block_hash);
+
+                if(iter == m_blocks.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto block = m_blocks[block_hash];
+                doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
+
+                if(account->m_topic_list.empty())
+                {
+                    doc.AddMember("result", 0, allocator);
+                    rapidjson::Value question_list(rapidjson::kArrayType);
+                    doc.AddMember("questions", question_list, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                auto topic_begin = *account->m_topic_list.begin();
+                
+                if(block->id() < topic_begin->m_block->id())
+                {
+                    doc.AddMember("result", 0, allocator);
+                    rapidjson::Value question_list(rapidjson::kArrayType);
+                
+                    for(auto topic : account->m_topic_list)
+                    {
+                        auto owner = topic->get_owner();
+                        auto block = topic->m_block;
+                        auto &block_hash = block->hash();
+                        uint64 block_id = block->id();
+                        rapidjson::Value obj(rapidjson::kObjectType);
+                        obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                        obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                        obj.AddMember("topic_reward", topic->get_total(), allocator);
+                        obj.AddMember("block_id", block_id, allocator);
+                        obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                        obj.AddMember("utc", block->utc(), allocator);
+                        obj.AddMember("id", owner->id(), allocator);
+                        obj.AddMember("avatar", owner->avatar(), allocator);
+                        obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                        question_list.PushBack(obj, allocator);
+                    }
+                
+                    doc.AddMember("questions", question_list, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+
+                uint32 cnt = 0;
+
+                for(auto iter = account->m_topic_list.rbegin(); iter != account->m_topic_list.rend(); ++iter)
+                {
+                    auto topic = *iter;
+                    
+                    if(block->id() > topic->m_block->id())
+                    {
+                        doc.AddMember("result", 2, allocator);
+                        connection->send(doc);
+                        return;
+                    }
+
+                    if(topic->key() == topic_key)
+                    {
+                        if(block_hash == topic->m_block->hash())
+                        {
+                            uint32 v = account->m_topic_list.size() - cnt;
+                            auto iter = account->m_topic_list.begin();
+                            std::advance(iter, v);
+                            doc.AddMember("result", 1, allocator);
+                            rapidjson::Value question_list(rapidjson::kArrayType);
+                                
+                            for(; iter != account->m_topic_list.end(); ++iter)
+                            {
+                                auto topic = *iter;
+                                auto owner = topic->get_owner();
+                                auto block = topic->m_block;
+                                auto &block_hash = block->hash();
+                                uint64 block_id = block->id();
+                                rapidjson::Value obj(rapidjson::kObjectType);
+                                obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                                obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                                obj.AddMember("topic_reward", topic->get_total(), allocator);
+                                obj.AddMember("block_id", block_id, allocator);
+                                obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                                obj.AddMember("utc", block->utc(), allocator);
+                                obj.AddMember("id", owner->id(), allocator);
+                                obj.AddMember("avatar", owner->avatar(), allocator);
+                                obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                                question_list.PushBack(obj, allocator);
+                            }
+                            
+                            doc.AddMember("questions", question_list, allocator);
+                            connection->send(doc);
+                            return;
+                        }
+                        
+                        break;
+                    }
+
+                    ++cnt;
+                }
+                
+                doc.AddMember("result", 2, allocator);
+                connection->send(doc);
+            }
+            else
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+        }
+        else if(cmd == net::api::TOPIC_DETAIL_PROBE)
+        {
             if(!doc.HasMember("topic_key"))
             {
                 connection->close();
                 ASKCOIN_RETURN;
             }
-                    
+            
             if(!doc["topic_key"].IsString())
             {
                 connection->close();
@@ -822,11 +1052,296 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
+
+            if(!doc.HasMember("type"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["type"].IsUint())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            uint32 type = doc["type"].GetUint();
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+            doc.AddMember("msg_cmd", net::api::TOPIC_DETAIL_PROBE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
+            std::shared_ptr<Topic> topic;
+            
+            if(!get_topic(topic_key, topic))
+            {
+                doc.AddMember("result", 3, allocator);
+                connection->send(doc);
+                ASKCOIN_RETURN;
+            }
+            
+            doc.AddMember("topic_balance", topic->get_balance(), allocator);
+
+            if(type == 0)
+            {
+                doc.AddMember("result", 0, allocator);
+                rapidjson::Value reply_list(rapidjson::kArrayType);
+                
+                for(auto reply : topic->m_reply_list)
+                {
+                    auto owner = reply->get_owner();
+                    auto block = reply->m_block;
+                    auto &block_hash = block->hash();
+                    uint64 block_id = block->id();
+                    rapidjson::Value obj(rapidjson::kObjectType);
+                    obj.AddMember("reply_key", rapidjson::StringRef(reply->key().c_str()), allocator);
+                    obj.AddMember("type", reply->type(), allocator);
+                    obj.AddMember("reply_data", rapidjson::StringRef(reply->m_data.c_str()), allocator);
+                    obj.AddMember("owner_name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                    obj.AddMember("balance", reply->get_balance(), allocator);
+                    obj.AddMember("block_id", block_id, allocator);
+                    obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                    obj.AddMember("utc", block->utc(), allocator);
+                    obj.AddMember("id", owner->id(), allocator);
+                    obj.AddMember("avatar", owner->avatar(), allocator);
+                    obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                    std::shared_ptr<Reply> reply_to = reply->get_reply_to();
+                    
+                    if(reply_to)
+                    {
+                        obj.AddMember("reply_to", rapidjson::StringRef(reply_to->key().c_str()), allocator);
+                    }
+
+                    reply_list.PushBack(obj, allocator);
+                }
+                
+                doc.AddMember("replies", reply_list, allocator);
+                connection->send(doc);
+            }
+            else if(type == 1)
+            {
+                if(!doc.HasMember("block_hash"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["block_hash"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            
+                std::string block_hash = doc["block_hash"].GetString();
+            
+                if(block_hash.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(block_hash))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc.HasMember("reply_key"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["reply_key"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            
+                std::string reply_key = doc["reply_key"].GetString();
+            
+                if(reply_key.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!is_base64_char(reply_key))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(topic->m_reply_list.empty())
+                {
+                    doc.AddMember("result", 0, allocator);
+                    rapidjson::Value reply_list(rapidjson::kArrayType);
+                    doc.AddMember("replies", reply_list, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                auto iter = m_blocks.find(block_hash);
+                
+                if(iter == m_blocks.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto block = m_blocks[block_hash];
+                auto reply_begin = *topic->m_reply_list.begin();
+                
+                if(block->id() < reply_begin->m_block->id())
+                {
+                    doc.AddMember("result", 0, allocator);
+                    rapidjson::Value reply_list(rapidjson::kArrayType);
+                
+                    for(auto reply : topic->m_reply_list)
+                    {
+                        auto owner = reply->get_owner();
+                        auto block = reply->m_block;
+                        auto &block_hash = block->hash();
+                        uint64 block_id = block->id();
+                        rapidjson::Value obj(rapidjson::kObjectType);
+                        obj.AddMember("reply_key", rapidjson::StringRef(reply->key().c_str()), allocator);
+                        obj.AddMember("type", reply->type(), allocator);
+                        obj.AddMember("reply_data", rapidjson::StringRef(reply->m_data.c_str()), allocator);
+                        obj.AddMember("owner_name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                        obj.AddMember("balance", reply->get_balance(), allocator);
+                        obj.AddMember("block_id", block_id, allocator);
+                        obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                        obj.AddMember("utc", block->utc(), allocator);
+                        obj.AddMember("id", owner->id(), allocator);
+                        obj.AddMember("avatar", owner->avatar(), allocator);
+                        obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                        std::shared_ptr<Reply> reply_to = reply->get_reply_to();
+                    
+                        if(reply_to)
+                        {
+                            obj.AddMember("reply_to", rapidjson::StringRef(reply_to->key().c_str()), allocator);
+                        }
+
+                        reply_list.PushBack(obj, allocator);
+                    }
+                
+                    doc.AddMember("replies", reply_list, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 cnt = 0;
+                
+                for(auto iter = topic->m_reply_list.rbegin(); iter != topic->m_reply_list.rend(); ++iter)
+                {
+                    auto reply = *iter;
+                    
+                    if(block->id() > reply->m_block->id())
+                    {
+                        doc.AddMember("result", 2, allocator);
+                        connection->send(doc);
+                        return;
+                    }
+                    
+                    if(reply->key() == reply_key)
+                    {
+                        if(block_hash == reply->m_block->hash())
+                        {
+                            uint32 v = topic->m_reply_list.size() - cnt;
+                            auto iter = topic->m_reply_list.begin();
+                            std::advance(iter, v);
+                            doc.AddMember("result", 1, allocator);
+                            rapidjson::Value reply_list(rapidjson::kArrayType);
+                            
+                            for(; iter != topic->m_reply_list.end(); ++iter)
+                            {
+                                auto owner = reply->get_owner();
+                                auto block = reply->m_block;
+                                auto &block_hash = block->hash();
+                                uint64 block_id = block->id();
+                                rapidjson::Value obj(rapidjson::kObjectType);
+                                obj.AddMember("reply_key", rapidjson::StringRef(reply->key().c_str()), allocator);
+                                obj.AddMember("type", reply->type(), allocator);
+                                obj.AddMember("reply_data", rapidjson::StringRef(reply->m_data.c_str()), allocator);
+                                obj.AddMember("owner_name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                                obj.AddMember("balance", reply->get_balance(), allocator);
+                                obj.AddMember("block_id", block_id, allocator);
+                                obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
+                                obj.AddMember("utc", block->utc(), allocator);
+                                obj.AddMember("id", owner->id(), allocator);
+                                obj.AddMember("avatar", owner->avatar(), allocator);
+                                obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                                std::shared_ptr<Reply> reply_to = reply->get_reply_to();
+                    
+                                if(reply_to)
+                                {
+                                    obj.AddMember("reply_to", rapidjson::StringRef(reply_to->key().c_str()), allocator);
+                                }
+
+                                reply_list.PushBack(obj, allocator);
+                            }
+                            
+                            doc.AddMember("replies", reply_list, allocator);
+                            connection->send(doc);
+                            return;
+                        }
+                        
+                        break;
+                    }
+
+                    ++cnt;
+                }
+                
+                doc.AddMember("result", 2, allocator);
+                connection->send(doc);
+            }
+            else
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+        }
+        else if(cmd == net::api::TOPIC_ANSWER_LIST)
+        {
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+            doc.AddMember("msg_cmd", net::api::TOPIC_ANSWER_LIST, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            rapidjson::Value answer_list(rapidjson::kArrayType);
+            
+            for(auto topic : account->m_joined_topic_list)
+            {
+                auto owner = topic->get_owner();
+                auto block = topic->m_block;
+                uint64 block_id = block->id();
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("topic_key", rapidjson::StringRef(topic->key().c_str()), allocator);
+                obj.AddMember("topic_data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+                obj.AddMember("topic_reward", topic->get_total(), allocator);
+                obj.AddMember("block_id", block_id, allocator);
+                obj.AddMember("utc", block->utc(), allocator);
+                obj.AddMember("id", owner->id(), allocator);
+                obj.AddMember("avatar", owner->avatar(), allocator);
+                obj.AddMember("name", rapidjson::StringRef(owner->name().c_str()), allocator);
+                answer_list.PushBack(obj, allocator);
+            }
+
+            doc.AddMember("answers", answer_list, allocator);
+            connection->send(doc);
+        }
+        else
+        {
+            connection->close();
+            ASKCOIN_RETURN;
         }
         
         return;
     }
-
+    
     if(type != net::api::MSG_TX || cmd != net::api::TX_CMD)
     {
         connection->close();
@@ -950,8 +1465,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->send(rsp_doc);
         ASKCOIN_RETURN;
     }
-    
-    user->m_pubkey = pubkey;
+
     uint64 cur_block_id  = m_cur_block->id();
     auto doc_ptr = std::make_shared<rapidjson::Document>();
     auto &p2p_doc = *doc_ptr;
@@ -1214,6 +1728,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         net::p2p::Node::instance()->broadcast(p2p_doc);
         connection->send(rsp_doc);
         user->m_state = 1;
+        user->m_pubkey = pubkey;
         lock.lock();
         wsock_node->m_users_to_register.insert(std::make_pair(pubkey, user));
     }
@@ -1537,7 +2052,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+            uint64 topic_block_id = topic->m_block->id();
             
             if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
             {
@@ -1721,7 +2236,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+            uint64 topic_block_id = topic->m_block->id();
             
             if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
             {

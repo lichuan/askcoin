@@ -1,11 +1,12 @@
 #include "reply.hpp"
 
-Reply::Reply(std::string key, uint32 type, std::string data)
+Reply::Reply(std::string key, uint32 type, std::shared_ptr<Block> block, std::string data)
 {
     m_key = key;
     m_type = type;
     m_data = data;
     m_balance = 0;
+    m_block = block;
 }
 
 Reply::~Reply()
@@ -17,7 +18,7 @@ void Reply::set_owner(std::shared_ptr<Account> owner)
     m_owner = owner;
 }
 
-std::string Reply::key()
+const std::string& Reply::key()
 {
     return m_key;
 }

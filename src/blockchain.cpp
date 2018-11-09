@@ -342,7 +342,7 @@ bool Blockchain::proc_topic_expired(uint64 cur_block_id)
     while(!m_topic_list.empty())
     {
         std::shared_ptr<Topic> topic = m_topic_list.front();
-        uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+        uint64 topic_block_id = topic->m_block->id();
         
         if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id)
         {
@@ -2683,7 +2683,7 @@ bool Blockchain::start(std::string db_path)
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block->hash(), reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block, reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -2722,7 +2722,7 @@ bool Blockchain::start(std::string db_path)
                         ASKCOIN_RETURN false;
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, iter_block, reply_data));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -2801,7 +2801,7 @@ bool Blockchain::start(std::string db_path)
                         ASKCOIN_RETURN false;
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, iter_block, ""));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -3245,7 +3245,7 @@ void Blockchain::mine_tx()
                 }
                 
                 account->sub_balance(reward);
-                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, "", reward));
+                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block, reward));
                 topic->set_owner(account);
                 account->m_topic_list.push_back(topic);
                 m_topic_list.push_back(topic);
@@ -3265,7 +3265,7 @@ void Blockchain::mine_tx()
                 }
 
                 std::string reply_data = data["reply"].GetString();
-                std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 0, cur_block, reply_data));
                 reply->set_owner(account);
                 
                 if(topic->m_reply_list.size() >= 1000)
@@ -3340,7 +3340,7 @@ void Blockchain::mine_tx()
                     continue;
                 }
                 
-                std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 1, cur_block, ""));
                 reply->set_owner(account);
                     
                 if(topic->m_reply_list.size() >= 1000)
@@ -4329,7 +4329,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 }
                     
                 account->sub_balance(reward);
-                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
+                std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block, reward));
                 topic->set_owner(account);
                 account->m_topic_list.push_back(topic);
                 m_topic_list.push_back(topic);
@@ -4389,7 +4389,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
                     
-                std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 0, cur_block, reply_data));
                 reply->set_owner(account);
                     
                 if(topic->m_reply_list.size() >= 1000)
@@ -4483,7 +4483,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
                     
-                std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                std::shared_ptr<Reply> reply(new Reply(tx_id, 1, cur_block, ""));
                 reply->set_owner(account);
                     
                 if(topic->m_reply_list.size() >= 1000)
@@ -4864,7 +4864,7 @@ void Blockchain::do_uv_tx()
                     continue;
                 }
                 
-                uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                uint64 topic_block_id = topic->m_block->id();
 
                 if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
@@ -4957,7 +4957,7 @@ void Blockchain::do_uv_tx()
                     continue;
                 }
 
-                uint64 topic_block_id = m_blocks[topic->block_hash()]->id();
+                uint64 topic_block_id = topic->m_block->id();
                 
                 if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
@@ -5181,7 +5181,7 @@ void Blockchain::do_uv_tx()
             
             if(get_topic(tx_reply->m_topic_key, topic_outer))
             {
-                uint64 topic_block_id = m_blocks[topic_outer->block_hash()]->id();
+                uint64 topic_block_id = topic_outer->m_block->id();
 
                 if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
@@ -5302,7 +5302,7 @@ void Blockchain::do_uv_tx()
             
             if(get_topic(tx_reward->m_topic_key, topic_outer))
             {
-                uint64 topic_block_id = m_blocks[topic_outer->block_hash()]->id();
+                uint64 topic_block_id = topic_outer->m_block->id();
                 
                 if(topic_block_id + TOPIC_LIFE_TIME < cur_block_id + 1)
                 {
@@ -6076,7 +6076,7 @@ void Blockchain::switch_to_most_difficult()
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block, reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -6116,7 +6116,7 @@ void Blockchain::switch_to_most_difficult()
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, iter_block, reply_data));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -6195,7 +6195,7 @@ void Blockchain::switch_to_most_difficult()
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, iter_block, ""));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -6960,7 +6960,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     
                     account->sub_balance(reward);
-                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
+                    std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block, reward));
                     topic->set_owner(account);
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
@@ -7000,7 +7000,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 0, iter_block, reply_data));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -7079,7 +7079,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                     
-                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                    std::shared_ptr<Reply> reply(new Reply(tx_id, 1, iter_block, ""));
                     reply->set_owner(account);
                     
                     if(topic->m_reply_list.size() >= 1000)
@@ -7554,7 +7554,7 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         uint64 reward = data["reward"].GetUint64();
                         std::string topic_data = data["topic"].GetString();
-                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, block_hash, reward));
+                        std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, iter_block, reward));
                         topic->set_owner(account);
                         topic_list.push_front(topic);
                         topics.insert(std::make_pair(tx_id, topic));
@@ -7571,7 +7571,7 @@ void Blockchain::rollback(uint64 block_id)
                     
                         std::shared_ptr<Topic> topic = iter->second;
                         std::string reply_data = data["reply"].GetString();
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, iter_block, reply_data));
                         reply->set_owner(account);
                         topic->m_reply_list.push_back(reply);
                     
@@ -7599,7 +7599,7 @@ void Blockchain::rollback(uint64 block_id)
                         }
                     
                         std::shared_ptr<Topic> topic = iter->second;
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, iter_block, ""));
                         reply->set_owner(account);
                         uint64 amount = data["amount"].GetUint64();
                         std::string reply_to_key = data["reply_to"].GetString();
@@ -7710,7 +7710,7 @@ void Blockchain::rollback(uint64 block_id)
                     
                         std::shared_ptr<Topic> topic = iter->second;
                         std::string reply_data = data["reply"].GetString();
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, reply_data));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 0, iter_block, reply_data));
                         reply->set_owner(account);
                         topic->m_reply_list.push_back(reply);
                     
@@ -7738,7 +7738,7 @@ void Blockchain::rollback(uint64 block_id)
                         }
                     
                         std::shared_ptr<Topic> topic = iter->second;
-                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, ""));
+                        std::shared_ptr<Reply> reply(new Reply(tx_id, 1, iter_block, ""));
                         reply->set_owner(account);
                         uint64 amount = data["amount"].GetUint64();
                         std::string reply_to_key = data["reply_to"].GetString();

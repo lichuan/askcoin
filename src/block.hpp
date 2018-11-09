@@ -2,8 +2,9 @@
 #define BLOCK
 
 #include <memory>
-#include "account.hpp"
 #include "accum_pow.hpp"
+
+class Account;
 
 class Block
 {
