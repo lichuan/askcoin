@@ -110,7 +110,7 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     
     std::string hash_data = block_data + fly::base::base64_encode(p, 64);
     std::string block_hash_verify = coin_hash_b64(hash_data.c_str(), hash_data.length());
-
+    
     if(block_hash != block_hash_verify)
     {
         return false;
@@ -1835,6 +1835,8 @@ bool Blockchain::start(std::string db_path)
         block_list.push_back(child_block);
     }
     
+    CONSOLE_ONLY("loading block, phase 1, please wait a moment......");
+    
     while(!block_list.empty())
     {
         const Child_Block &child_block = block_list.front();
@@ -2113,12 +2115,18 @@ bool Blockchain::start(std::string db_path)
 
             return false;
         }
+
+        static uint32 verify_cnt = 0;
         
         if(!verify_hash(block_hash, data_str, zero_bits))
         {
             CONSOLE_LOG_FATAL("verify block hash and zero_bits failed, hash: %s", child_block.m_hash.c_str());
-
             return false;
+        }
+        
+        if(++verify_cnt % 100 == 0)
+        {
+            CONSOLE_ONLY("verify_hash from leveldb, %lu blocks have been verified", verify_cnt);
         }
         
         std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
@@ -2144,7 +2152,7 @@ bool Blockchain::start(std::string db_path)
             Child_Block child_block(cur_block, iter->GetString());
             block_list.push_back(child_block);
         }
-
+        
         if(the_most_difficult_block->difficult_than_me(cur_block))
         {
             the_most_difficult_block = cur_block;
@@ -2152,7 +2160,8 @@ bool Blockchain::start(std::string db_path)
         
         block_list.pop_front();
     }
-    
+
+    CONSOLE_ONLY("loading block, phase 2, please wait a moment......");
     std::list<std::shared_ptr<Block>> block_chain;
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block = the_most_difficult_block;
