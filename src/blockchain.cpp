@@ -1499,8 +1499,7 @@ bool Blockchain::start(std::string db_path)
             return false;
         }
 
-        // todo, "this coin" should be changed
-        std::string genesis_block_data = "{\"hash\":\"\",\"sign\":\"\",\"data\":{\"id\":0,\"utc\":1518926400,\"version\":1,\"zero_bits\":0,\"intro\":\"This coin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
+        std::string genesis_block_data = "{\"hash\":\"\",\"sign\":\"\",\"data\":{\"id\":0,\"utc\":1518926400,\"version\":1,\"zero_bits\":0,\"intro\":\"Askcoin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
         
         rapidjson::Document doc;
         doc.Parse(genesis_block_data.c_str());
@@ -1549,7 +1548,7 @@ bool Blockchain::start(std::string db_path)
         std::string p_b64 = fly::base::base64_encode(p, 64);
         memcpy(ptr, p_b64.data(), 88);
         std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEQCIHijGcr4uZU7XOGH3zLz0g3Z0BK+mslSVYFShwH2DtFPAiBzMok2piANQ3l3v7rGy3m/DW4vuxnV+MMZGjSUpNKrNA==";
+        std::string sign_b64 = "MEQCIAe9Demds6XNev/smZ4QkOcwgwTLjZP2gsAOwmd6OEEhAiB8dDdN3YJYQJjxvQFN/WxcE5Fx1kA7MwTQ/UmycVS98w==";
         //sign_b64 = sign("", genesis_block_hash);
         
         doc["hash"].SetString(genesis_block_hash.c_str(), allocator);
@@ -1639,7 +1638,7 @@ bool Blockchain::start(std::string db_path)
     std::string block_hash = doc["hash"].GetString();
     std::string block_sign = doc["sign"].GetString();
 
-    if(block_hash != "uunNiLD8Cvli8EP4p6iIMVq6KThj0iMU9Lu7j/Ga+c8=")
+    if(block_hash != "zM9M0jTCRJKnhU+RIbPUCqFPCKYwUO9n6gLrAeMLBKE=")
     {
         ASKCOIN_RETURN false;
     }
