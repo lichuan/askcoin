@@ -51,8 +51,8 @@ public:
     bool get_account(std::string pubkey, std::shared_ptr<Account> &account);
     std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
-    bool verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits);
-    bool hash_pow(char hash_arr[32], uint32 zero_bits);
+    static bool verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits);
+    static bool hash_pow(char hash_arr[32], uint32 zero_bits);
     bool is_base64_char(std::string b64);
     bool account_name_exist(std::string name);
     bool get_topic(std::string key, std::shared_ptr<Topic> &topic);

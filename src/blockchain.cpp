@@ -1836,6 +1836,69 @@ bool Blockchain::start(std::string db_path)
     }
     
     CONSOLE_ONLY("loading block, phase 1, please wait a moment......");
+    struct _Data
+    {
+        std::string m_block_hash;
+        std::string m_block_data;
+        uint32 m_zero_bits;
+        bool m_finished;
+    };
+    
+    fly::base::Lock_Queue<_Data> lock_q;
+    std::atomic<bool> finished_signal {false};
+    std::atomic<bool> error_signal {false};
+    std::atomic<uint64> verify_cnt {1};
+    int32 cpu_num = sysconf(_SC_NPROCESSORS_ONLN);
+    const int32 thread_num = cpu_num * 2;
+    std::thread verify_threads[thread_num];
+    CONSOLE_ONLY("verify_hash threads num: %u", thread_num);
+    
+    for(int32 i = 0; i < thread_num; ++i)
+    {
+        verify_threads[i] = std::move(std::thread([&] {
+            while(!finished_signal.load(std::memory_order_relaxed))
+            {
+                if(error_signal.load(std::memory_order_relaxed))
+                {
+                    return;
+                }
+                
+                std::list<_Data> data_list;
+
+                if(lock_q.pop(data_list))
+                {
+                    for(auto &d : data_list)
+                    {
+                        if(error_signal.load(std::memory_order_relaxed))
+                        {
+                            return;
+                        }
+                        
+                        if(d.m_finished)
+                        {
+                            finished_signal.store(true, std::memory_order_relaxed);
+                            return;
+                        }
+                        
+                        if(!Blockchain::verify_hash(d.m_block_hash, d.m_block_data, d.m_zero_bits))
+                        {
+                            error_signal.store(true, std::memory_order_relaxed);
+                            lock_q.pulse_notify_not_full();
+                            CONSOLE_LOG_FATAL("verify block hash and zero_bits failed, hash: %s", d.m_block_hash.c_str());
+                            return;
+                        }
+                        
+                        uint64 _cnt = verify_cnt.fetch_add(1, std::memory_order_relaxed);
+
+                        if(_cnt % 100 == 0)
+                        {
+                            CONSOLE_ONLY("verify_hash block from leveldb, %lu blocks have been verified", _cnt);
+                        }
+                    }
+                }
+            }
+        }));
+    }
     
     while(!block_list.empty())
     {
@@ -2115,20 +2178,13 @@ bool Blockchain::start(std::string db_path)
 
             return false;
         }
-
-        static uint32 verify_cnt = 0;
         
-        if(!verify_hash(block_hash, data_str, zero_bits))
-        {
-            CONSOLE_LOG_FATAL("verify block hash and zero_bits failed, hash: %s", child_block.m_hash.c_str());
-            return false;
-        }
-        
-        if(++verify_cnt % 100 == 0)
-        {
-            CONSOLE_ONLY("verify_hash from leveldb, %lu blocks have been verified", verify_cnt);
-        }
-        
+        _Data _data;
+        _data.m_block_hash = block_hash;
+        _data.m_block_data = data_str;
+        _data.m_zero_bits = zero_bits;
+        _data.m_finished = false;
+        lock_q.push(_data);
         std::shared_ptr<Block> cur_block(new Block(block_id, utc, version, zero_bits, block_hash));
         cur_block->set_parent(parent);
         cur_block->set_miner_pubkey(miner_pubkey);
@@ -2159,8 +2215,42 @@ bool Blockchain::start(std::string db_path)
         }
         
         block_list.pop_front();
-    }
 
+        if(error_signal.load(std::memory_order_relaxed))
+        {
+            for(int32 i = 0; i < thread_num; ++i)
+            {
+                verify_threads[i].join();
+            }
+
+            return false;
+        }
+    }
+    
+    _Data _data;
+    _data.m_finished = true;
+    lock_q.push(_data);
+    
+    while(!finished_signal.load(std::memory_order_relaxed))
+    {
+        if(error_signal.load(std::memory_order_relaxed))
+        {
+            for(int32 i = 0; i < thread_num; ++i)
+            {
+                verify_threads[i].join();
+            }
+            
+            return false;
+        }
+        
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    
+    for(int32 i = 0; i < thread_num; ++i)
+    {
+        verify_threads[i].join();
+    }
+    
     CONSOLE_ONLY("loading block, phase 2, please wait a moment......");
     std::list<std::shared_ptr<Block>> block_chain;
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
