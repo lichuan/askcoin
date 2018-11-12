@@ -106,6 +106,7 @@ private:
     std::multiset<std::shared_ptr<Account>, Account::Rich_Comp> m_account_by_rich;
     std::unordered_set<std::string> m_account_names;
     std::unordered_set<std::string> m_uv_account_names; //unverified acc names
+    std::unordered_set<std::string> m_miner_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
     std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::unordered_set<std::string> m_uv_account_pubkeys;

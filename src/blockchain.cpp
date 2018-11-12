@@ -679,10 +679,25 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         lock.unlock();
         auto p2p_node = net::p2p::Node::instance();
         std::unique_lock<std::mutex> lock_p2p(p2p_node->m_peer_mutex);
-        printf("peer count: %u\n", p2p_node->m_peers.size());
+        printf("peer connection count: %u\n", p2p_node->m_peers.size());
         lock_p2p.unlock();
-        printf("account pubkey count: %u\n", m_account_by_pubkey.size());
-        printf("account count: %u\n", m_cur_account_id);
+        printf("account count: %u\n", m_account_by_pubkey.size() + 1);
+        auto iter_block = m_cur_block;
+        std::unordered_set<std::string> miner_pubkeys;
+        uint32 block_num = 0;
+        
+        while(iter_block->id() != 0)
+        {
+            miner_pubkeys.insert(iter_block->miner_pubkey());
+
+            if(++block_num >= 10000)
+            {
+                break;
+            }
+        }
+        
+        printf("miner count (latest 10000 blocks): %u\n", miner_pubkeys.size());
+        printf("miner total: %u\n", m_miner_pubkeys.size());
         printf("topic count: %u\n", m_topic_list.size());
         printf("uv tx count: %u\n", m_uv_2_txs.size());
         printf("cur block id: %lu\n", m_cur_block->id());
@@ -691,7 +706,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         char hash_raw[32];
         fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
         std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-        printf("cur block_hash(hex): %s\n>", hex_hash.c_str());
+        printf("cur block_hash (hex): %s\n>", hex_hash.c_str());
     }
     else if(command->m_cmd == "enable_mine")
     {
@@ -1834,7 +1849,6 @@ bool Blockchain::start(std::string db_path)
         block_list.push_back(child_block);
     }
     
-    CONSOLE_ONLY("loading block, phase 1, please wait a moment......");
     struct _Data
     {
         std::string m_block_hash;
@@ -1851,6 +1865,7 @@ bool Blockchain::start(std::string db_path)
     const int32 thread_num = cpu_num * 2;
     std::thread verify_threads[thread_num];
     CONSOLE_ONLY("verify_hash threads num: %u", thread_num);
+    CONSOLE_ONLY("loading block, phase 1, please wait a moment......");
     
     for(int32 i = 0; i < thread_num; ++i)
     {
@@ -2972,6 +2987,8 @@ bool Blockchain::start(std::string db_path)
         {
             iter_block->m_miner_reward = false;
         }
+
+        m_miner_pubkeys.insert(miner->pubkey());
         
         if(cur_block_id % 1000 == 0)
         {
@@ -4675,6 +4692,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         cur_block->m_miner_reward = false;
     }
 
+    m_miner_pubkeys.insert(miner_pubkey);
     std::string block_data;
     leveldb::Status s;
 
@@ -6366,7 +6384,8 @@ void Blockchain::switch_to_most_difficult()
         {
             iter_block->m_miner_reward = false;
         }
-        
+
+        m_miner_pubkeys.insert(miner->pubkey());
         m_block_changed = true;
     }
 }
@@ -7250,7 +7269,8 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
         {
             iter_block->m_miner_reward = false;
         }
-        
+
+        m_miner_pubkeys.insert(miner->pubkey());
         m_block_changed = true;
     }
     

@@ -24,6 +24,7 @@ public:
     bool difficult_equal(std::shared_ptr<Block> other);
     void add_difficulty_from(std::shared_ptr<Block> other);
     void set_miner_pubkey(std::string pubkey);
+    const std::string& miner_pubkey();
     std::shared_ptr<Account> get_miner();
     bool m_miner_reward = true;
     Accum_Pow m_accum_pow;

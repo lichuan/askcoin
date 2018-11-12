@@ -4969,6 +4969,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 cur_block->m_miner_reward = false;
             }
 
+            m_miner_pubkeys.insert(miner_pubkey);
             std::string block_data;
             leveldb::Status s;
             
