@@ -24,6 +24,7 @@ enum MSG_CMD
     ACCOUNT_PROBE,
     ACCOUNT_QUERY,
     ACCOUNT_HISTORY_PROBE,
+    ACCOUNT_UPDATE,
     
     TX_CMD = 0,
     
