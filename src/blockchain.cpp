@@ -694,6 +694,8 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             {
                 break;
             }
+
+            iter_block = iter_block->get_parent();
         }
         
         printf("miner count (latest 10000 blocks): %u\n", miner_pubkeys.size());
@@ -1218,8 +1220,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
 
         if(reg_name != register_name)
         {
-            printf("parse reg_sign failed, name is not the same as account_name\n>");
-            printf("reg_name: %s, register_name: %s\n>", reg_name.c_str(), register_name.c_str());
+            printf("parse reg_sign failed, name: %s is not the same as the name in sign: %s\n>", register_name.c_str(), reg_name.c_str());
             return;
         }
         
