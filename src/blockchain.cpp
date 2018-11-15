@@ -2369,6 +2369,8 @@ bool Blockchain::start(std::string db_path)
         {
             ASKCOIN_RETURN false;
         }
+
+        uint64 utc = iter_block->utc();
         
         for(uint32 i = 0; i < tx_num; ++i)
         {
@@ -2586,6 +2588,14 @@ bool Blockchain::start(std::string db_path)
                 else
                 {
                     referrer_referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = referrer->id();
+                    history->m_target_avatar = referrer->avatar();
+                    history->m_target_name = referrer->name();
+                    history->m_utc = utc;
+                    referrer_referrer->add_history(history);
                 }
                 
                 if(!is_base64_char(register_name))
@@ -2631,6 +2641,14 @@ bool Blockchain::start(std::string db_path)
                 m_account_by_pubkey.insert(std::make_pair(pubkey, reg_account));
                 m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
+                auto history = std::make_shared<History>(HISTORY_REG_FEE);
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_target_id = reg_account->id();
+                history->m_target_avatar = reg_account->avatar();
+                history->m_target_name = reg_account->name();
+                history->m_utc = utc;
+                referrer->add_history(history);
             }
             else
             {
@@ -2690,10 +2708,28 @@ bool Blockchain::start(std::string db_path)
                 else
                 {
                     referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    history->m_utc = utc;
+                    referrer->add_history(history);
                 }
+
+                auto history = std::make_shared<History>();
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_utc = utc;
+                account->add_history(history);
                 
                 if(tx_type == 2) // send coin
                 {
+                    history->m_type = HISTORY_SEND_FEE;
+                    auto history_to = std::make_shared<History>(HISTORY_SEND_TO);
+                    auto history_from = std::make_shared<History>(HISTORY_SEND_FROM);
+
                     if(data.HasMember("memo"))
                     {
                         if(!data["memo"].IsString())
@@ -2717,6 +2753,9 @@ bool Blockchain::start(std::string db_path)
                         {
                             ASKCOIN_RETURN false;
                         }
+
+                        history_from->m_memo = memo;
+                        history_to->m_memo = memo;
                     }
 
                     uint64 amount = data["amount"].GetUint64();
@@ -2752,9 +2791,25 @@ bool Blockchain::start(std::string db_path)
 
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
+                    history_to->m_block_id = cur_block_id;
+                    history_to->m_change = amount;
+                    history_to->m_utc = utc;
+                    history_to->m_target_id = receiver->id();
+                    history_to->m_target_avatar = receiver->avatar();
+                    history_to->m_target_name = receiver->name();
+                    account->add_history(history_to);
+                    history_from->m_block_id = cur_block_id;
+                    history_from->m_change = amount;
+                    history_from->m_utc = utc;
+                    history_from->m_target_id = account->id();
+                    history_from->m_target_avatar = account->avatar();
+                    history_from->m_target_name = account->name();
+                    receiver->add_history(history_from);
                 }
                 else if(tx_type == 3) // new topic
                 {
+                    history->m_type = HISTORY_NEW_TOPIC_FEE;
+                    
                     if(!data.HasMember("reward"))
                     {
                         ASKCOIN_RETURN false;
@@ -2802,9 +2857,15 @@ bool Blockchain::start(std::string db_path)
                     account->m_topic_list.push_back(topic);
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
+                    auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = reward;
+                    history->m_utc = utc;
+                    account->add_history(history);
                 }
                 else if(tx_type == 4) // reply
                 {
+                    history->m_type = HISTORY_REPLY_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -2891,6 +2952,7 @@ bool Blockchain::start(std::string db_path)
                 }
                 else if(tx_type == 5) // reward
                 {
+                    history->m_type = HISTORY_REWARD_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -2965,6 +3027,14 @@ bool Blockchain::start(std::string db_path)
                     reply_to->get_owner()->add_balance(amount);
                     reply->add_balance(amount);
                     topic->m_reply_list.push_back(reply);
+                    auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = amount;
+                    history->m_utc = utc;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    reply_to->get_owner()->add_history(history);
                 }
                 else
                 {
@@ -2976,13 +3046,27 @@ bool Blockchain::start(std::string db_path)
         }
 
         uint64 remain_balance = m_reserve_fund_account->get_balance();
-        miner->add_balance(tx_num);
+
+        if(tx_num > 0)
+        {
+            miner->add_balance(tx_num);
+            auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = tx_num;
+            history->m_utc = utc;
+            miner->add_history(history);
+        }
         
         if(remain_balance >= 5000)
         {
             m_reserve_fund_account->sub_balance(5000);
             miner->add_balance(5000);
             iter_block->m_miner_reward = true;
+            auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = 5000;
+            history->m_utc = utc;
+            miner->add_history(history);
         }
         else
         {
@@ -3016,6 +3100,12 @@ bool Blockchain::start(std::string db_path)
     m_timer_ctl.add_timer([this]() {
             this->broadcast();
         }, 10);
+
+    for(auto p : m_account_by_id)
+    {
+        auto account = p.second;
+        account->proc_history_expired(m_cur_block->id());
+    }
     
     if(!check_balance())
     {
@@ -4026,8 +4116,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         const rapidjson::Value &data = tx_node["data"];
         std::string pubkey = data["pubkey"].GetString();
         uint32 tx_type = data["type"].GetUint();
-        uint64 utc = data["utc"].GetUint64();
-                
+        
         if(m_tx_map.find(tx_id) != m_tx_map.end())
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
@@ -4225,8 +4314,16 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             else
             {
                 referrer_referrer->add_balance(1);
+                auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                history->m_block_id = cur_block_id;
+                history->m_change = 1;
+                history->m_target_id = referrer->id();
+                history->m_target_avatar = referrer->avatar();
+                history->m_target_name = referrer->name();
+                history->m_utc = utc;
+                referrer_referrer->add_history(history);
             }
-                    
+
             referrer->sub_balance(2);
             std::shared_ptr<Account> reg_account(new Account(++m_cur_account_id, register_name, pubkey, avatar, cur_block_id));
             m_account_names.insert(register_name);
@@ -4234,6 +4331,14 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
             reg_account->set_referrer(referrer);
             notify_register_account(reg_account);
+            auto history = std::make_shared<History>(HISTORY_REG_FEE);
+            history->m_block_id = cur_block_id;
+            history->m_change = 2;
+            history->m_target_id = reg_account->id();
+            history->m_target_avatar = reg_account->avatar();
+            history->m_target_name = reg_account->name();
+            history->m_utc = utc;
+            referrer->add_history(history);
         }
         else
         {
@@ -4301,12 +4406,29 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             else
             {
                 referrer->add_balance(1);
+                auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                history->m_block_id = cur_block_id;
+                history->m_change = 1;
+                history->m_target_id = account->id();
+                history->m_target_avatar = account->avatar();
+                history->m_target_name = account->name();
+                history->m_utc = utc;
+                referrer->add_history(history);
             }
-                    
+            
             account->sub_balance(2);
-
+            auto history = std::make_shared<History>();
+            history->m_block_id = cur_block_id;
+            history->m_change = 2;
+            history->m_utc = utc;
+            account->add_history(history);
+            
             if(tx_type == 2) // send coin
             {
+                history->m_type = HISTORY_SEND_FEE;
+                auto history_to = std::make_shared<History>(HISTORY_SEND_TO);
+                auto history_from = std::make_shared<History>(HISTORY_SEND_FROM);
+                
                 if(data.HasMember("memo"))
                 {
                     if(!data["memo"].IsString())
@@ -4330,6 +4452,9 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
+
+                    history_from->m_memo = memo;
+                    history_to->m_memo = memo;
                 }
                 
                 if(!data.HasMember("amount"))
@@ -4382,12 +4507,28 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
-                        
+
                 account->sub_balance(amount);
                 receiver->add_balance(amount);
+                history_to->m_block_id = cur_block_id;
+                history_to->m_change = amount;
+                history_to->m_utc = utc;
+                history_to->m_target_id = receiver->id();
+                history_to->m_target_avatar = receiver->avatar();
+                history_to->m_target_name = receiver->name();
+                account->add_history(history_to);
+                history_from->m_block_id = cur_block_id;
+                history_from->m_change = amount;
+                history_from->m_utc = utc;
+                history_from->m_target_id = account->id();
+                history_from->m_target_avatar = account->avatar();
+                history_from->m_target_name = account->name();
+                receiver->add_history(history_from);
             }
             else if(tx_type == 3) // new topic
             {
+                history->m_type = HISTORY_NEW_TOPIC_FEE;
+                
                 if(!data.HasMember("reward"))
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
@@ -4443,7 +4584,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
-                    
+
                 account->sub_balance(reward);
                 std::shared_ptr<Topic> topic(new Topic(tx_id, topic_data, cur_block, reward));
                 topic->set_owner(account);
@@ -4451,9 +4592,16 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 m_topic_list.push_back(topic);
                 m_topics.insert(std::make_pair(tx_id, topic));
                 broadcast_new_topic(topic);
+                auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
+                history->m_block_id = cur_block_id;
+                history->m_change = reward;
+                history->m_utc = utc;
+                account->add_history(history);
             }
             else if(tx_type == 4) // reply
             {
+                history->m_type = HISTORY_REPLY_FEE;
+                
                 if(!data.HasMember("topic_key"))
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
@@ -4565,6 +4713,8 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             }
             else if(tx_type == 5) // reward
             {
+                history->m_type = HISTORY_REWARD_FEE;
+                
                 if(!data.HasMember("topic_key"))
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
@@ -4662,13 +4812,21 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
-                        
+
                 reply->set_reply_to(reply_to);
                 topic->sub_balance(amount);
                 reply_to->add_balance(amount);
                 reply_to->get_owner()->add_balance(amount);
                 reply->add_balance(amount);
                 topic->m_reply_list.push_back(reply);
+                auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
+                history->m_block_id = cur_block_id;
+                history->m_change = amount;
+                history->m_utc = utc;
+                history->m_target_id = account->id();
+                history->m_target_avatar = account->avatar();
+                history->m_target_name = account->name();
+                reply_to->get_owner()->add_history(history);
             }
             else
             {
@@ -4680,13 +4838,27 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     }
     
     uint64 remain_balance = m_reserve_fund_account->get_balance();
-    miner->add_balance(tx_num);
-    
+
+    if(tx_num > 0)
+    {
+        miner->add_balance(tx_num);
+        auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
+        history->m_block_id = cur_block_id;
+        history->m_change = tx_num;
+        history->m_utc = utc;
+        miner->add_history(history);
+    }
+
     if(remain_balance >= 5000)
     {
         m_reserve_fund_account->sub_balance(5000);
         miner->add_balance(5000);
         cur_block->m_miner_reward = true;
+        auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
+        history->m_block_id = cur_block_id;
+        history->m_change = 5000;
+        history->m_utc = utc;
+        miner->add_history(history);
     }
     else
     {
@@ -5777,6 +5949,8 @@ void Blockchain::switch_to_most_difficult()
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
+
+        uint64 utc = iter_block->utc();
         
         for(uint32 i = 0; i < tx_num; ++i)
         {
@@ -5982,6 +6156,14 @@ void Blockchain::switch_to_most_difficult()
                 else
                 {
                     referrer_referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = referrer->id();
+                    history->m_target_avatar = referrer->avatar();
+                    history->m_target_name = referrer->name();
+                    history->m_utc = utc;
+                    referrer_referrer->add_history(history);
                 }
                 
                 if(!is_base64_char(register_name))
@@ -6028,6 +6210,14 @@ void Blockchain::switch_to_most_difficult()
                 m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
                 notify_register_account(reg_account);
+                auto history = std::make_shared<History>(HISTORY_REG_FEE);
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_target_id = reg_account->id();
+                history->m_target_avatar = reg_account->avatar();
+                history->m_target_name = reg_account->name();
+                history->m_utc = utc;
+                referrer->add_history(history);
             }
             else
             {
@@ -6086,10 +6276,28 @@ void Blockchain::switch_to_most_difficult()
                 else
                 {
                     referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    history->m_utc = utc;
+                    referrer->add_history(history);
                 }
+
+                auto history = std::make_shared<History>();
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_utc = utc;
+                account->add_history(history);
                 
                 if(tx_type == 2) // send coin
                 {
+                    history->m_type = HISTORY_SEND_FEE;
+                    auto history_to = std::make_shared<History>(HISTORY_SEND_TO);
+                    auto history_from = std::make_shared<History>(HISTORY_SEND_FROM);
+
                     if(data.HasMember("memo"))
                     {
                         if(!data["memo"].IsString())
@@ -6113,6 +6321,9 @@ void Blockchain::switch_to_most_difficult()
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
+
+                        history_from->m_memo = memo;
+                        history_to->m_memo = memo;
                     }
 
                     uint64 amount = data["amount"].GetUint64();
@@ -6148,9 +6359,25 @@ void Blockchain::switch_to_most_difficult()
 
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
+                    history_to->m_block_id = cur_block_id;
+                    history_to->m_change = amount;
+                    history_to->m_utc = utc;
+                    history_to->m_target_id = receiver->id();
+                    history_to->m_target_avatar = receiver->avatar();
+                    history_to->m_target_name = receiver->name();
+                    account->add_history(history_to);
+                    history_from->m_block_id = cur_block_id;
+                    history_from->m_change = amount;
+                    history_from->m_utc = utc;
+                    history_from->m_target_id = account->id();
+                    history_from->m_target_avatar = account->avatar();
+                    history_from->m_target_name = account->name();
+                    receiver->add_history(history_from);
                 }
                 else if(tx_type == 3) // new topic
                 {
+                    history->m_type = HISTORY_NEW_TOPIC_FEE;
+                    
                     if(!data.HasMember("reward"))
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
@@ -6199,9 +6426,15 @@ void Blockchain::switch_to_most_difficult()
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
                     broadcast_new_topic(topic);
+                    auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = reward;
+                    history->m_utc = utc;
+                    account->add_history(history);
                 }
                 else if(tx_type == 4) // reply
                 {
+                    history->m_type = HISTORY_REPLY_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -6288,6 +6521,7 @@ void Blockchain::switch_to_most_difficult()
                 }
                 else if(tx_type == 5) // reward
                 {
+                    history->m_type = HISTORY_REWARD_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -6362,6 +6596,14 @@ void Blockchain::switch_to_most_difficult()
                     reply_to->get_owner()->add_balance(amount);
                     reply->add_balance(amount);
                     topic->m_reply_list.push_back(reply);
+                    auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = amount;
+                    history->m_utc = utc;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    reply_to->get_owner()->add_history(history);
                 }
                 else
                 {
@@ -6373,13 +6615,27 @@ void Blockchain::switch_to_most_difficult()
         }
 
         uint64 remain_balance = m_reserve_fund_account->get_balance();
-        miner->add_balance(tx_num);
+
+        if(tx_num > 0)
+        {
+            miner->add_balance(tx_num);
+            auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = tx_num;
+            history->m_utc = utc;
+            miner->add_history(history);
+        }
 
         if(remain_balance >= 5000)
         {
             m_reserve_fund_account->sub_balance(5000);
             miner->add_balance(5000);
             iter_block->m_miner_reward = true;
+            auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = 5000;
+            history->m_utc = utc;
+            miner->add_history(history);
         }
         else
         {
@@ -6662,6 +6918,8 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
+
+        uint64 utc = iter_block->utc();
         
         for(uint32 i = 0; i < tx_num; ++i)
         {
@@ -6867,6 +7125,14 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 else
                 {
                     referrer_referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = referrer->id();
+                    history->m_target_avatar = referrer->avatar();
+                    history->m_target_name = referrer->name();
+                    history->m_utc = utc;
+                    referrer_referrer->add_history(history);
                 }
                 
                 if(!is_base64_char(register_name))
@@ -6913,6 +7179,14 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 m_account_by_id.insert(std::make_pair(m_cur_account_id, reg_account));
                 reg_account->set_referrer(referrer);
                 notify_register_account(reg_account);
+                auto history = std::make_shared<History>(HISTORY_REG_FEE);
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_target_id = reg_account->id();
+                history->m_target_avatar = reg_account->avatar();
+                history->m_target_name = reg_account->name();
+                history->m_utc = utc;
+                referrer->add_history(history);
             }
             else
             {
@@ -6971,10 +7245,28 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 else
                 {
                     referrer->add_balance(1);
+                    auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = 1;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    history->m_utc = utc;
+                    referrer->add_history(history);
                 }
+
+                auto history = std::make_shared<History>();
+                history->m_block_id = cur_block_id;
+                history->m_change = 2;
+                history->m_utc = utc;
+                account->add_history(history);
                 
                 if(tx_type == 2) // send coin
                 {
+                    history->m_type = HISTORY_SEND_FEE;
+                    auto history_to = std::make_shared<History>(HISTORY_SEND_TO);
+                    auto history_from = std::make_shared<History>(HISTORY_SEND_FROM);
+                    
                     if(data.HasMember("memo"))
                     {
                         if(!data["memo"].IsString())
@@ -6998,8 +7290,11 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-                    }
 
+                        history_from->m_memo = memo;
+                        history_to->m_memo = memo;
+                    }
+                    
                     uint64 amount = data["amount"].GetUint64();
                     
                     if(amount == 0)
@@ -7033,9 +7328,25 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
 
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
+                    history_to->m_block_id = cur_block_id;
+                    history_to->m_change = amount;
+                    history_to->m_utc = utc;
+                    history_to->m_target_id = receiver->id();
+                    history_to->m_target_avatar = receiver->avatar();
+                    history_to->m_target_name = receiver->name();
+                    account->add_history(history_to);
+                    history_from->m_block_id = cur_block_id;
+                    history_from->m_change = amount;
+                    history_from->m_utc = utc;
+                    history_from->m_target_id = account->id();
+                    history_from->m_target_avatar = account->avatar();
+                    history_from->m_target_name = account->name();
+                    receiver->add_history(history_from);
                 }
                 else if(tx_type == 3) // new topic
                 {
+                    history->m_type = HISTORY_NEW_TOPIC_FEE;
+
                     if(!data.HasMember("reward"))
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
@@ -7084,9 +7395,15 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     m_topic_list.push_back(topic);
                     m_topics.insert(std::make_pair(tx_id, topic));
                     broadcast_new_topic(topic);
+                    auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = reward;
+                    history->m_utc = utc;
+                    account->add_history(history);
                 }
                 else if(tx_type == 4) // reply
                 {
+                    history->m_type = HISTORY_REPLY_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -7173,6 +7490,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 }
                 else if(tx_type == 5) // reward
                 {
+                    history->m_type = HISTORY_REWARD_FEE;
                     std::string topic_key = data["topic_key"].GetString();
                     
                     if(!is_base64_char(topic_key))
@@ -7247,6 +7565,14 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     reply_to->get_owner()->add_balance(amount);
                     reply->add_balance(amount);
                     topic->m_reply_list.push_back(reply);
+                    auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
+                    history->m_block_id = cur_block_id;
+                    history->m_change = amount;
+                    history->m_utc = utc;
+                    history->m_target_id = account->id();
+                    history->m_target_avatar = account->avatar();
+                    history->m_target_name = account->name();
+                    reply_to->get_owner()->add_history(history);
                 }
                 else
                 {
@@ -7258,13 +7584,27 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
         }
 
         uint64 remain_balance = m_reserve_fund_account->get_balance();
-        miner->add_balance(tx_num);
 
+        if(tx_num > 0)
+        {
+            miner->add_balance(tx_num);
+            auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = tx_num;
+            history->m_utc = utc;
+            miner->add_history(history);
+        }
+        
         if(remain_balance >= 5000)
         {
             m_reserve_fund_account->sub_balance(5000);
             miner->add_balance(5000);
             iter_block->m_miner_reward = true;
+            auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
+            history->m_block_id = cur_block_id;
+            history->m_change = 5000;
+            history->m_utc = utc;
+            miner->add_history(history);
         }
         else
         {
@@ -7346,6 +7686,7 @@ void Blockchain::rollback(uint64 block_id)
         {
             m_reserve_fund_account->add_balance(5000);
             miner->sub_balance(5000);
+            miner->pop_history();
         }
         
         if(tx_num <= 0)
@@ -7355,6 +7696,7 @@ void Blockchain::rollback(uint64 block_id)
         }
         
         miner->sub_balance(tx_num);
+        miner->pop_history();
         
         for(int32 i = tx_num - 1; i >= 0; --i)
         {
@@ -7400,6 +7742,7 @@ void Blockchain::rollback(uint64 block_id)
                 get_account(referrer_pubkey, referrer);
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                 referrer->add_balance(2);
+                referrer->pop_history();
                 
                 if(!referrer_referrer)
                 {
@@ -7413,6 +7756,7 @@ void Blockchain::rollback(uint64 block_id)
                 else
                 {
                     referrer_referrer->sub_balance(1);
+                    referrer_referrer->pop_history();
                 }
                 
                 m_account_names.erase(register_name);
@@ -7426,6 +7770,7 @@ void Blockchain::rollback(uint64 block_id)
                 get_account(pubkey, account);
                 std::shared_ptr<Account> referrer = account->get_referrer();
                 account->add_balance(2);
+                account->pop_history();
                 
                 if(!referrer)
                 {
@@ -7439,6 +7784,7 @@ void Blockchain::rollback(uint64 block_id)
                 else
                 {
                     referrer->sub_balance(1);
+                    referrer->pop_history();
                 }
                 
                 if(tx_type == 2) // send coin
@@ -7449,6 +7795,8 @@ void Blockchain::rollback(uint64 block_id)
                     get_account(receiver_pubkey, receiver);
                     account->add_balance(amount);
                     receiver->sub_balance(amount);
+                    account->pop_history();
+                    receiver->pop_history();
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -7457,6 +7805,7 @@ void Blockchain::rollback(uint64 block_id)
                     account->m_topic_list.pop_back();
                     m_topic_list.pop_back();
                     m_topics.erase(tx_id);
+                    account->pop_history();
                 }
                 else if(tx_type == 4) // reply
                 {
@@ -7489,6 +7838,7 @@ void Blockchain::rollback(uint64 block_id)
                     reply_to->sub_balance(amount);
                     reply_to->get_owner()->sub_balance(amount);
                     topic->m_reply_list.pop_back();
+                    reply_to->get_owner()->pop_history();
                 }
                 else
                 {
@@ -7933,6 +8283,7 @@ void Blockchain::rollback(uint64 block_id)
             {
                 m_reserve_fund_account->add_balance(5000);
                 miner->sub_balance(5000);
+                miner->pop_history();
             }
             
             if(tx_num <= 0)
@@ -7942,6 +8293,7 @@ void Blockchain::rollback(uint64 block_id)
             }
 
             miner->sub_balance(tx_num);
+            miner->pop_history();
             
             for(int32 i = tx_num - 1; i >= 0; --i)
             {
@@ -7987,6 +8339,7 @@ void Blockchain::rollback(uint64 block_id)
                     get_account(referrer_pubkey, referrer);
                     std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                     referrer->add_balance(2);
+                    referrer->pop_history();
                 
                     if(!referrer_referrer)
                     {
@@ -8000,6 +8353,7 @@ void Blockchain::rollback(uint64 block_id)
                     else
                     {
                         referrer_referrer->sub_balance(1);
+                        referrer_referrer->pop_history();
                     }
                 
                     m_account_names.erase(register_name);
@@ -8013,6 +8367,7 @@ void Blockchain::rollback(uint64 block_id)
                     get_account(pubkey, account);
                     std::shared_ptr<Account> referrer = account->get_referrer();
                     account->add_balance(2);
+                    account->pop_history();
                 
                     if(!referrer)
                     {
@@ -8026,6 +8381,7 @@ void Blockchain::rollback(uint64 block_id)
                     else
                     {
                         referrer->sub_balance(1);
+                        referrer->pop_history();
                     }
                 
                     if(tx_type == 2) // send coin
@@ -8036,6 +8392,8 @@ void Blockchain::rollback(uint64 block_id)
                         get_account(receiver_pubkey, receiver);
                         account->add_balance(amount);
                         receiver->sub_balance(amount);
+                        account->pop_history();
+                        receiver->pop_history();
                     }
                     else if(tx_type == 3) // new topic
                     {
@@ -8044,6 +8402,7 @@ void Blockchain::rollback(uint64 block_id)
                         account->m_topic_list.pop_back();
                         m_topic_list.pop_back();
                         m_topics.erase(tx_id);
+                        account->pop_history();
                     }
                     else if(tx_type == 4) // reply
                     {
@@ -8076,6 +8435,7 @@ void Blockchain::rollback(uint64 block_id)
                         reply_to->sub_balance(amount);
                         reply_to->get_owner()->sub_balance(amount);
                         topic->m_reply_list.pop_back();
+                        reply_to->get_owner()->pop_history();
                     }
                     else
                     {

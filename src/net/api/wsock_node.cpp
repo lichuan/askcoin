@@ -501,7 +501,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->send(doc);
             }
         }
-        else if(cmd == net::api::ACCOUNT_UPDATE)
+        else if(cmd == net::api::ACCOUNT_INFO)
         {
             if(user->m_state != 2)
             {
@@ -521,7 +521,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
             doc.AddMember("msg_type", net::api::MSG_ACCOUNT, allocator);
-            doc.AddMember("msg_cmd", net::api::ACCOUNT_UPDATE, allocator);
+            doc.AddMember("msg_cmd", net::api::ACCOUNT_INFO, allocator);
             doc.AddMember("msg_id", msg_id, allocator);
             doc.AddMember("id", account->id(), allocator);
             doc.AddMember("avatar", account->avatar(), allocator);
@@ -578,6 +578,61 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("avatar", receiver->avatar(), allocator);
             doc.AddMember("name", rapidjson::StringRef(receiver->name().c_str()), allocator);
             doc.AddMember("pubkey", rapidjson::StringRef(receiver->pubkey().c_str()), allocator);
+            connection->send(doc);
+        }
+        else if(cmd == net::api::ACCOUNT_HISTORY)
+        {
+            if(user->m_state != 2)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(user->m_pubkey, account))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            account->proc_history_expired(m_cur_block->id());
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_ACCOUNT, allocator);
+            doc.AddMember("msg_cmd", net::api::ACCOUNT_HISTORY, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("id", account->id(), allocator);
+            doc.AddMember("avatar", account->avatar(), allocator);
+            doc.AddMember("balance", account->get_balance(), allocator);
+            doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
+            rapidjson::Value history_list(rapidjson::kArrayType);
+            
+            for(auto history : account->m_history)
+            {
+                rapidjson::Value obj;
+                obj.AddMember("type", history->m_type, allocator);
+                obj.AddMember("change", history->m_change, allocator);
+                obj.AddMember("target_id", history->m_target_id, allocator);
+                obj.AddMember("target_avatar", history->m_target_avatar, allocator);
+                obj.AddMember("block_id", history->m_block_id, allocator);
+                obj.AddMember("utc", history->m_utc, allocator);
+                
+                if(!history->m_memo.empty())
+                {
+                    obj.AddMember("memo", rapidjson::StringRef(history->m_memo.c_str()), allocator);
+                }
+                
+                if(!history->m_target_name.empty())
+                {
+                    obj.AddMember("target_name", rapidjson::StringRef(history->m_target_name.c_str()), allocator);
+                }
+
+                history_list.PushBack(obj, allocator);
+            }
+            
+            doc.AddMember("histories", history_list, allocator);
             connection->send(doc);
         }
         else if(cmd == net::api::ACCOUNT_IMPORT)

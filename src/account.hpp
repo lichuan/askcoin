@@ -41,17 +41,19 @@ public:
     std::shared_ptr<Account> get_referrer();
     uint64 get_balance();
     uint64 block_id();
-    void add_history(History *history);
+    void add_history(std::shared_ptr<History> history, uint64 cur_block_id = 0);
+    void pop_history();
+    void proc_history_expired(uint64 cur_block_id);
     bool joined_topic(std::shared_ptr<Topic> topic);
     void leave_topic(std::shared_ptr<Topic> topic);
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::list<std::shared_ptr<Topic>> m_joined_topic_list;
+    std::list<std::shared_ptr<History>> m_history;
     uint64 m_uv_spend;
     uint32 m_uv_topic;
     uint32 m_uv_join_topic;
 
 private:
-    std::list<History*> m_history;
     std::string m_name;
     uint64 m_id;
     uint64 m_block_id;
