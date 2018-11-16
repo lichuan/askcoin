@@ -34,7 +34,7 @@ bool Node::start(uint16 port)
                                                                               std::bind(&Node::dispatch, this, _1),
                                                                               std::bind(&Node::close, this, _1),
                                                                               std::bind(&Node::be_closed, this, _1),
-                                                                              m_poller, 1024 * 1024)); // todo, max_msg_length?
+                                                                              m_poller, 1778586));
     m_poller->start();
     m_port = port;
     
@@ -155,7 +155,7 @@ void Node::connect_proc()
                                                                                       std::bind(&Node::dispatch, this, _1),
                                                                                       std::bind(&Node::close, this, _1),
                                                                                       std::bind(&Node::be_closed, this, _1),
-                                                                                      m_poller, 1024 * 1024)); // todo, max_msg_length
+                                                                                      m_poller, 1778586));
             LOG_DEBUG_INFO("try to connect peer from peer_score %s", peer_score->key().c_str());
             
             if(client->connect(1000))
@@ -165,8 +165,6 @@ void Node::connect_proc()
             else
             {
                 LOG_DEBUG_ERROR("connect to peer (%s:%u) failed", addr.m_host.c_str(), addr.m_port);
-                
-                // todo, state to 0 ?
                 peer_score->m_state.store(0, std::memory_order_relaxed);
                 std::this_thread::sleep_for(std::chrono::seconds(1));
                 lock.lock();
@@ -303,8 +301,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
     auto iter_reg = m_peers.find(conn_id);
     uint32 type = message->type();
     uint32 cmd = message->cmd();
-    uint32 msg_length = message->length(); // todo, the following cmd need check length 
-    
+
     if(iter_reg != m_peers.end())
     {
         std::shared_ptr<Peer> peer = iter_reg->second;
@@ -754,7 +751,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         uint16 port_u16 = port.GetUint();
         uint32 key_u32 = key.GetUint();
         LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u16);
-        // todo, version?
+        
         if(!version_compatible(version_u32, ASKCOIN_VERSION))
         {
             LOG_DEBUG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
@@ -812,7 +809,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                                                                                               std::bind(&Node::dispatch, this, _1),
                                                                                               std::bind(&Node::close, this, _1),
                                                                                               std::bind(&Node::be_closed, this, _1),
-                                                                                              m_poller));
+                                                                                              m_poller, 87));
                     if(client->connect(1000))
                     {
                         LOG_DEBUG_INFO("unreg peer (m_state:2) connect to peer (%s:%u) success", peer->m_addr.m_host.c_str(), peer->m_addr.m_port);
@@ -1074,7 +1071,6 @@ bool Node::add_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
     return true;
 }
 
-// todo, when del_peer_score ?
 bool Node::del_peer_score(const std::shared_ptr<Peer_Score> &peer_score)
 {
     std::string key = peer_score->key();
@@ -1202,14 +1198,19 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     }
     
     rapidjson::Document& doc = message->doc();
-    uint32 msg_length = message->length(); // todo, the following need check length
-    // todo, don't only use msg_length, && use doc->MemberCount ?
+    uint32 msg_length = message->length();
     LOG_DEBUG_INFO("peer msg: %s, length: %u, peer key: %s", message->raw_data().c_str(), msg_length, peer->key().c_str());
     
     if(type == net::p2p::MSG_BLOCK)
     {
         if(cmd == net::p2p::BLOCK_BROADCAST)
         {
+            if(doc.MemberCount() != 6)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1274,6 +1275,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(data.MemberCount() != 8)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             data.Accept(writer);
@@ -1313,8 +1320,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             Accum_Pow declared_pow(pow_array[0].GetUint(), pow_array[1].GetUint(), pow_array[2].GetUint(), pow_array[3].GetUint(), pow_array[4].GetUint(), \
                                 pow_array[5].GetUint(), pow_array[6].GetUint(), pow_array[7].GetUint(), pow_array[8].GetUint());
-
-            // todo, what if is switching?
             if(!m_most_difficult_block->difficult_than_me(declared_pow))
             {
                 ASKCOIN_RETURN;
@@ -1365,9 +1370,15 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-
-            // todo, version compatible?
+            
             uint32 version = data["version"].GetUint();
+
+            if(!version_compatible(version, ASKCOIN_VERSION))
+            {
+                LOG_DEBUG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
             
             if(!data.HasMember("zero_bits"))
             {
@@ -1591,6 +1602,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         }
         else if(cmd == net::p2p::BLOCK_BRIEF_REQ)
         {
+            if(doc.MemberCount() != 3)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1670,6 +1687,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         }
         else if(cmd == net::p2p::BLOCK_BRIEF_RSP)
         {
+            if(doc.MemberCount() != 5)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1748,6 +1771,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(data.MemberCount() != 8)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
             data.Accept(writer);
@@ -1800,12 +1829,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
             
-            // todo, version compatible?
             uint32 version = data["version"].GetUint();
             
             if(!version_compatible(version, ASKCOIN_VERSION))
             {
-                LOG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u)", version, ASKCOIN_VERSION);
+                LOG_DEBUG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
                 punish_brief_req(request);
                 ASKCOIN_RETURN;
             }
@@ -1982,6 +2010,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         }
         else if(cmd == net::p2p::BLOCK_DETAIL_REQ)
         {
+            if(doc.MemberCount() != 3)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -2063,6 +2097,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         }
         else if(cmd == net::p2p::BLOCK_DETAIL_RSP)
         {
+            if(doc.MemberCount() != 6)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -2141,6 +2181,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(data.MemberCount() != 8)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("tx"))
             {
                 punish_peer(peer);
@@ -2169,16 +2215,15 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             uint64 block_id = data["id"].GetUint64();
             uint64 utc = data["utc"].GetUint64();
-            // todo, version compatible?
             uint32 version = data["version"].GetUint();
             
             if(!version_compatible(version, ASKCOIN_VERSION))
             {
-                LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u)", version, ASKCOIN_VERSION);
+                LOG_DEBUG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
                 punish_detail_req(request);
                 ASKCOIN_RETURN;
             }
-
+            
             uint32 zero_bits = data["zero_bits"].GetUint();
             std::string pre_hash = data["pre_hash"].GetString();
             std::string miner_pubkey = data["miner"].GetString();
@@ -2197,11 +2242,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-            
-            // 695 is the max size of the other fields from the block,
-            // refer to max_size_fields in data_structure.example file
-            uint32 max_msg_size = 695 + tx_num * 47;
-            
+
             for(uint32 i = 0; i < tx_num; ++i)
             {
                 std::string tx_id = tx_ids[i].GetString();
@@ -2212,7 +2253,13 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     punish_peer(peer);
                     ASKCOIN_RETURN;
                 }
-            
+
+                if(tx_node.MemberCount() != 2)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
                 if(!tx_node.HasMember("sign"))
                 {
                     punish_peer(peer);
@@ -2313,41 +2360,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     punish_detail_req(request);
                     ASKCOIN_RETURN;
                 }
-                
-                uint32 tx_type = data["type"].GetUint();
-                uint64 utc = data["utc"].GetUint64();
-                
-                if(tx_type == 1)
-                {
-                    max_msg_size += 617;
-                }
-                else if(tx_type == 2)
-                {
-                    max_msg_size += 555;
-                }
-                else if(tx_type == 3)
-                {
-                    max_msg_size += 774;
-                }
-                else if(tx_type == 4)
-                {
-                    max_msg_size += 861;
-                }
-                else if(tx_type == 5)
-                {
-                    max_msg_size += 480;
-                }
-                else
-                {
-                    punish_detail_req(request);
-                    ASKCOIN_RETURN;
-                }
-            }
-            
-            if(msg_length > max_msg_size)
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
             }
 
             auto pending_chain = *request->m_chains.begin();
@@ -2371,9 +2383,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     }
     else if(type == net::p2p::MSG_TX)
     {
-        // attention please, the following contains anti-DDoS logic code.
         if(cmd == net::p2p::TX_BROADCAST)
         {
+            if(doc.MemberCount() != 4)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("sign"))
             {
                 punish_peer(peer);
@@ -2485,6 +2502,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(tx_type == 1)
             {
+                if(data.MemberCount() != 6)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
                 if(!data.HasMember("avatar"))
                 {
                     punish_peer(peer);
@@ -2542,7 +2565,13 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     punish_peer(peer);
                     ASKCOIN_RETURN;
                 }
-                    
+                
+                if(sign_data.MemberCount() != 4)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
                 rapidjson::StringBuffer buffer;
                 rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
                 sign_data.Accept(writer);
@@ -2766,6 +2795,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 {
                     if(data.HasMember("memo"))
                     {
+                        if(data.MemberCount() != 8)
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
                         if(!data["memo"].IsString())
                         {
                             punish_peer(peer);
@@ -2791,6 +2826,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             punish_peer(peer);
                             ASKCOIN_RETURN;
                         }
+                    }
+                    else if(data.MemberCount() != 7)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
                     }
                     
                     if(!data.HasMember("amount"))
@@ -2878,6 +2918,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 }
                 else if(tx_type == 3)
                 {
+                    if(data.MemberCount() != 7)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
                     if(!data.HasMember("reward"))
                     {
                         punish_peer(peer);
@@ -3033,6 +3079,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     
                     if(data.HasMember("reply_to"))
                     {
+                        if(data.MemberCount() != 8)
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+                        
                         if(!data["reply_to"].IsString())
                         {
                             punish_peer(peer);
@@ -3083,6 +3135,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     }
                     else
                     {
+                        if(data.MemberCount() != 7)
+                        {
+                            punish_peer(peer);
+                            ASKCOIN_RETURN;
+                        }
+
                         if(!get_topic(topic_key, topic))
                         {
                             m_uv_1_txs.push_back(tx_reply);
@@ -3137,6 +3195,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 }
                 else if(tx_type == 5)
                 {
+                    if(data.MemberCount() != 8)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
                     if(!data.HasMember("topic_key"))
                     {
                         punish_peer(peer);
@@ -3894,6 +3958,13 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 
                 if(tx_type == 1)
                 {
+                    if(data.MemberCount() != 6)
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+                    
                     if(!data.HasMember("avatar"))
                     {
                         proc_tx_failed = true;
@@ -3950,6 +4021,13 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     const rapidjson::Value &sign_data = data["sign_data"];
 
                     if(!sign_data.IsObject())
+                    {
+                        proc_tx_failed = true;
+                        ASKCOIN_TRACE;
+                        break;
+                    }
+
+                    if(sign_data.MemberCount() != 4)
                     {
                         proc_tx_failed = true;
                         ASKCOIN_TRACE;
@@ -4293,6 +4371,14 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         
                         if(data.HasMember("memo"))
                         {
+                            if(data.MemberCount() != 8)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+                            
                             if(!data["memo"].IsString())
                             {
                                 failed_cb();
@@ -4329,6 +4415,13 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             
                             history_from->m_memo = memo;
                             history_to->m_memo = memo;
+                        }
+                        else if(data.MemberCount() != 7)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
                         }
                         
                         if(!data.HasMember("amount"))
@@ -4429,6 +4522,14 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     else if(tx_type == 3) // new topic
                     {
                         history->m_type = HISTORY_NEW_TOPIC_FEE;
+
+                        if(data.MemberCount() != 7)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
                         if(!data.HasMember("reward"))
                         {
@@ -4624,6 +4725,14 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
 
                         if(data.HasMember("reply_to"))
                         {
+                            if(data.MemberCount() != 8)
+                            {
+                                failed_cb();
+                                proc_tx_failed = true;
+                                ASKCOIN_TRACE;
+                                break;
+                            }
+
                             if(!data["reply_to"].IsString())
                             {
                                 failed_cb();
@@ -4670,6 +4779,13 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             
                             reply->set_reply_to(reply_to);
                         }
+                        else if(data.MemberCount() != 7)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
 
                         if(topic->get_owner() != account)
                         {
@@ -4693,6 +4809,14 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     else if(tx_type == 5) // reward
                     {
                         history->m_type = HISTORY_REWARD_FEE;
+
+                        if(data.MemberCount() != 8)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
                         
                         if(!data.HasMember("topic_key"))
                         {
@@ -5275,7 +5399,6 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             peer->m_connection->send(doc);
             ++request->m_try_num;
             LOG_DEBUG_INFO("finish_detail, pending_detail_request, id: %lu, hash: %s", pb->m_id, block_hash.c_str());
-            // todo, &doc ? coredump
             request->m_timer_id = m_timer_ctl.add_timer([=]() {
                     auto &doc = *doc_ptr;
                     

@@ -153,8 +153,7 @@ if(pubkey.verify(hash_raw, sign))
 }
 
 //...............................wsock...............................
-var ws = new WebSocket('ws://172.104.48.244:19050');
-//var ws = new WebSocket('ws://192.168.0.122:19051');
+var ws = new WebSocket('ws://192.168.0.122:19051');
 var ping_timer;
 
 ws.on('open', function open() {
@@ -163,7 +162,7 @@ ws.on('open', function open() {
     // send ping packet
     ping_timer = setInterval(function() {
         ws.send(JSON.stringify({msg_type:0, msg_cmd:0, msg_id:1}));
-    }, 5000);
+    }, 10000);
 
     // get info from server
     ws.send(JSON.stringify({msg_type:0, msg_cmd:2, msg_id:100}));
@@ -192,7 +191,7 @@ ws.on('open', function open() {
     var packet = {msg_type:2, msg_cmd:0, msg_id:1, sign:sign_b64, data:data_obj};
     console.log(JSON.stringify(packet));
     ws.send(JSON.stringify(packet));
-
+    
     // privkey come from import
     var privkey_buf = Buffer.from("Vm1wSmQwMVhSWGxUYTJScVUwWktXRmxzVWtKaVJUQjN=", 'base64');
     var privkey = ec.keyFromPrivate(privkey_buf);

@@ -32,7 +32,7 @@ bool Wsock_Node::start(std::string host, uint16 port)
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
                                                                                 std::bind(&Wsock_Node::be_closed, this, _1),
-                                                                                cpu_num, 1024 * 1024)); // todo, max_msg_length
+                                                                                cpu_num, 1000));
     if(server->start())
     {
         CONSOLE_LOG_INFO("start websocket node success");
@@ -103,8 +103,6 @@ void Wsock_Node::dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
     uint64 conn_id = connection->id();
     uint32 type = message->type();
     uint32 cmd = message->cmd();
-    uint32 msg_length = message->length(); // todo, the following cmd need check length
-    //std::unique_lock<std::mutex> lock(m_mutex);
     rapidjson::Document& doc = message->doc();
     
     if(!doc.HasMember("msg_id"))
@@ -310,7 +308,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     uint64 conn_id = connection->id();
     uint32 type = message->type();
     uint32 cmd = message->cmd();
-    uint32 msg_length = message->length(); // todo, the following cmd need check length
     rapidjson::Document& doc = message->doc();
     uint32 msg_id = doc["msg_id"].GetUint();
     net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();
@@ -637,7 +634,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         }
         else if(cmd == net::api::ACCOUNT_IMPORT)
         {
-            // todo, if the mobile app run background, will socket disconnect ???
             if(user->m_state == 2)
             {
                 connection->close();
@@ -1431,6 +1427,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         connection->close();
         ASKCOIN_RETURN;
     }
+
+    if(doc.MemberCount() != 5)
+    {
+        connection->close();
+        ASKCOIN_RETURN;
+    }
     
     if(!doc.HasMember("sign"))
     {
@@ -1568,6 +1570,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
+
+        if(data.MemberCount() != 6)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
         
         if(!data.HasMember("avatar"))
         {
@@ -1630,7 +1638,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
-                    
+
+        if(sign_data.MemberCount() != 4)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
         sign_data.Accept(writer);
@@ -1883,6 +1897,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         {
             if(data.HasMember("memo"))
             {
+                if(data.MemberCount() != 8)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
                 if(!data["memo"].IsString())
                 {
                     connection->close();
@@ -1908,6 +1928,11 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
+            }
+            else if(data.MemberCount() != 7)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
             }
             
             if(!data.HasMember("amount"))
@@ -1989,6 +2014,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         }
         else if(tx_type == 3)
         {
+            if(data.MemberCount() != 7)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
             if(!data.HasMember("reward"))
             {
                 connection->close();
@@ -2149,6 +2180,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             
             if(data.HasMember("reply_to"))
             {
+                if(data.MemberCount() != 8)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
                 if(!data["reply_to"].IsString())
                 {
                     connection->close();
@@ -2184,6 +2221,11 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
+            }
+            else if(data.MemberCount() != 7)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
             }
             
             if(topic->m_reply_list.size() + topic->m_uv_reply >= 1000)
@@ -2232,6 +2274,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         }
         else if(tx_type == 5)
         {
+            if(data.MemberCount() != 8)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
             if(!data.HasMember("topic_key"))
             {
                 connection->close();

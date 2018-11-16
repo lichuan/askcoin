@@ -681,7 +681,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         std::unique_lock<std::mutex> lock_p2p(p2p_node->m_peer_mutex);
         printf("peer connection count: %u\n", p2p_node->m_peers.size());
         lock_p2p.unlock();
-        printf("account count: %u\n", m_account_by_pubkey.size() + 1);
+        printf("account count: %u\n", m_account_by_id.size());
         auto iter_block = m_cur_block;
         std::unordered_set<std::string> miner_pubkeys;
         uint32 block_num = 0;
@@ -1784,7 +1784,7 @@ bool Blockchain::start(std::string db_path)
     m_cur_account_id = 1;
     m_account_names.insert(reserve_fund_b64);
     m_account_names.insert(account_b64);
-    uint64 total = (uint64)1000000000000;
+    uint64 total = (uint64)1000000000000UL;
     author_account->set_balance(total / 2);
     m_reserve_fund_account->set_balance(total / 2);
     m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
@@ -2055,12 +2055,6 @@ bool Blockchain::start(std::string db_path)
             ASKCOIN_RETURN false;
         }
         
-        // todo
-        if(block_data.length() > 500 + tx_num * 44)
-        {
-            //ASKCOIN_RETURN false;
-        }
-        
         if(!data.HasMember("nonce"))
         {
             ASKCOIN_RETURN false;
@@ -2111,7 +2105,6 @@ bool Blockchain::start(std::string db_path)
         std::string pre_hash = data["pre_hash"].GetString();
         const rapidjson::Value &nonce = data["nonce"];
 
-        // todo, merge and pruning? version compatible?
         if(!version_compatible(version, ASKCOIN_VERSION))
         {
             CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
@@ -2534,8 +2527,7 @@ bool Blockchain::start(std::string db_path)
                 {
                     ASKCOIN_RETURN false;
                 }
-
-                // todo, edge case
+                
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN false;
@@ -2670,7 +2662,6 @@ bool Blockchain::start(std::string db_path)
                     ASKCOIN_RETURN false;
                 }
 
-                // todo, edge case
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN false;
@@ -3200,8 +3191,20 @@ bool Blockchain::start(std::string db_path)
 
 bool Blockchain::check_balance()
 {
-    // todo, make sure the total coin is equal to 1000000000000
-    return true;
+    uint64 total_coin = 0;
+    
+    for(auto p : m_account_by_id)
+    {
+        auto account = p.second;
+        total_coin += account->get_balance();
+    }
+    
+    for(auto topic : m_topic_list)
+    {
+        total_coin += topic->get_balance();
+    }
+    
+    return total_coin == (uint64)1000000000000UL;
 }
 
 void Blockchain::mine_tx()
