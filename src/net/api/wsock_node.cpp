@@ -498,34 +498,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->send(doc);
             }
         }
-        else if(cmd == net::api::ACCOUNT_INFO)
-        {
-            if(user->m_state != 2)
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            std::shared_ptr<Account> account;
-            
-            if(!get_account(user->m_pubkey, account))
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            rapidjson::Document doc;
-            doc.SetObject();
-            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-            doc.AddMember("msg_type", net::api::MSG_ACCOUNT, allocator);
-            doc.AddMember("msg_cmd", net::api::ACCOUNT_INFO, allocator);
-            doc.AddMember("msg_id", msg_id, allocator);
-            doc.AddMember("id", account->id(), allocator);
-            doc.AddMember("avatar", account->avatar(), allocator);
-            doc.AddMember("balance", account->get_balance(), allocator);
-            doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
-            connection->send(doc);
-        }
         else if(cmd == net::api::ACCOUNT_QUERY)
         {
             if(user->m_state != 2)
@@ -755,9 +727,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
+            doc.AddMember("id", account->id(), allocator);
+            doc.AddMember("avatar", account->avatar(), allocator);
+            doc.AddMember("balance", account->get_balance(), allocator);
+            doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
             rapidjson::Value topic_list(rapidjson::kArrayType);
             uint32 topic_num = m_topic_list.size();
-
+            
             if(topic_num <= 20)
             {
                 for(auto topic : m_topic_list)

@@ -903,7 +903,8 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         }
         
         uint32 len = raw_name.length();
-
+        printf("acount_name: %s, length: %u\n", raw_name.c_str(), len);
+        
         if(len > 15 || len == 0)
         {
             printf("account_name's length is invalid, can't exceed 15 bytes\n>");
