@@ -41,6 +41,7 @@ public:
     std::unique_ptr<fly::net::Server<Wsock>> m_server;
     std::thread m_timer_thread;
     Timer_Controller m_timer_ctl;
+    std::string m_explorer_auth;
 };
 
 }

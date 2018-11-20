@@ -28,6 +28,7 @@ public:
     std::shared_ptr<Account> get_miner();
     bool m_miner_reward = true;
     Accum_Pow m_accum_pow;
+    uint32 m_tx_num = 0;
     
 private:
     uint64 m_id;

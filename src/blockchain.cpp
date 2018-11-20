@@ -1828,9 +1828,10 @@ bool Blockchain::start(std::string db_path)
     }
 
     std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
+    genesis_block->set_miner_pubkey(pubkey);
     m_blocks.insert(std::make_pair(block_hash, genesis_block));
     std::shared_ptr<Block> the_most_difficult_block = genesis_block;
-
+    
     struct Child_Block
     {
         std::shared_ptr<Block> m_parent;
@@ -2203,7 +2204,8 @@ bool Blockchain::start(std::string db_path)
         {
             ASKCOIN_RETURN false;
         }
-        
+
+        cur_block->m_tx_num = tx_num;
         m_blocks.insert(std::make_pair(block_hash, cur_block));
         const rapidjson::Value &children = doc["children"];
         
@@ -4089,6 +4091,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     cur_block->set_parent(m_cur_block);
     cur_block->set_miner_pubkey(miner_pubkey);
     cur_block->add_difficulty_from(m_cur_block);
+    cur_block->m_tx_num = tx_num;
     uint64 cur_block_id = block_id;
     
     if(!proc_topic_expired(cur_block_id))

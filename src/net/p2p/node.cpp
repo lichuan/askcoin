@@ -3940,6 +3940,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             const rapidjson::Value &tx = doc["tx"];
             std::list<std::shared_ptr<Account>> accounts_to_notify;
             std::list<std::shared_ptr<Topic>> topics_to_broadcast;
+            cur_block->m_tx_num = tx_num;
             
             for(uint32 i = 0; i < tx_num; ++i)
             {

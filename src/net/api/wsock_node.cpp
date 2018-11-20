@@ -150,7 +150,7 @@ void Wsock_Node::dispatch(std::unique_ptr<fly::net::Message<Wsock>> message)
             connection->close();
         }
     }
-    else if(type == MSG_ACCOUNT || type == MSG_TX || type == MSG_TOPIC)
+    else if(type == MSG_ACCOUNT || type == MSG_TX || type == MSG_TOPIC || type == MSG_EXPLORER)
     {
         Blockchain::instance()->dispatch_wsock_message(std::move(message));
     }
@@ -724,6 +724,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             if(!get_account(pubkey, account))
             {
                 doc.AddMember("err_code", net::api::ERR_PUBKEY_NOT_REGISTERED, allocator);
+                connection->send(doc);
                 ASKCOIN_RETURN;
             }
             
@@ -848,7 +849,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         
         return;
     }
-    else if(type == net::api::MSG_TOPIC)
+
+    if(type == net::api::MSG_TOPIC)
     {
         if(user->m_state != 2)
         {
@@ -866,19 +868,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         
         if(cmd == net::api::TOPIC_QUESTION_PROBE)
         {
-            if(!doc.HasMember("type"))
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-
-            if(!doc["type"].IsUint())
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            uint32 type = doc["type"].GetUint();
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -886,7 +875,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
             doc.AddMember("msg_id", msg_id, allocator);
 
-            if(type == 0)
+            if(msg_id == 0)
             {
                 doc.AddMember("result", 0, allocator);
                 rapidjson::Value question_list(rapidjson::kArrayType);
@@ -913,7 +902,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("questions", question_list, allocator);
                 connection->send(doc);
             }
-            else if(type == 1)
+            else if(msg_id == 1)
             {
                 if(!doc.HasMember("topic_key"))
                 {
@@ -1109,19 +1098,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            if(!doc.HasMember("type"))
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-
-            if(!doc["type"].IsUint())
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            uint32 type = doc["type"].GetUint();
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -1140,7 +1116,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             
             doc.AddMember("topic_balance", topic->get_balance(), allocator);
 
-            if(type == 0)
+            if(msg_id == 0)
             {
                 doc.AddMember("result", 0, allocator);
                 rapidjson::Value reply_list(rapidjson::kArrayType);
@@ -1175,7 +1151,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("replies", reply_list, allocator);
                 connection->send(doc);
             }
-            else if(type == 1)
+            else if(msg_id == 1)
             {
                 if(!doc.HasMember("block_hash"))
                 {
@@ -1393,6 +1369,158 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         {
             connection->close();
             ASKCOIN_RETURN;
+        }
+        
+        return;
+    }
+
+    if(type == net::api::MSG_EXPLORER)
+    {
+        if(cmd == net::api::EXPLORER_MAIN_PAGE)
+        {
+            if(wsock_node->m_explorer_auth.empty())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_MAIN_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            rapidjson::Value block_list(rapidjson::kArrayType);
+            
+            if(user->m_state == 0)
+            {
+                if(!doc.HasMember("explorer_auth"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["explorer_auth"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto explorer_auth = doc["explorer_auth"].GetString();
+                
+                if(explorer_auth != wsock_node->m_explorer_auth)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            }
+            
+            auto iter_block = m_cur_block;
+            auto count = 0;
+            
+            while(iter_block)
+            {
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("block_id", iter_block->id(), allocator);
+                obj.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                obj.AddMember("utc", iter_block->utc(), allocator);
+                obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+                obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                block_list.PushBack(obj, allocator);
+                iter_block = iter_block->get_parent();
+                    
+                if(++count > 20)
+                {
+                    break;
+                }
+            }
+            
+            doc.AddMember("block_list", block_list, allocator);
+            connection->send(doc);
+            user->m_state = 3;
+            return;
+        }
+
+        if(user->m_state != 3)
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+        
+        if(cmd == net::api::EXPLORER_NEXT_PAGE)
+        {
+            if(!doc.HasMember("block_id"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["block_id"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc.HasMember("block_hash"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["block_hash"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+                
+            std::string block_hash = doc["block_hash"].GetString();
+            auto block_id = doc["block_id"].GetUint64();
+
+            if(block_hash.length() != 44)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            auto iter = m_blocks.find(block_hash);
+
+            if(iter == m_blocks.end())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter_block = iter->second->get_parent();
+            auto count = 0;
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_NEXT_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            rapidjson::Value block_list(rapidjson::kArrayType);
+            
+            while(iter_block)
+            {
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("block_id", iter_block->id(), allocator);
+                obj.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                obj.AddMember("utc", iter_block->utc(), allocator);
+                obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+                obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                block_list.PushBack(obj, allocator);
+                iter_block = iter_block->get_parent();
+                
+                if(++count > 20)
+                {
+                    break;
+                }
+            }
+            
+            doc.AddMember("block_list", block_list, allocator);
+            connection->send(doc);
         }
         
         return;
