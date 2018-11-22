@@ -1425,6 +1425,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 obj.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
                 obj.AddMember("utc", iter_block->utc(), allocator);
                 obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+                obj.AddMember("tx_num", iter_block->m_tx_num, allocator);
                 obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
                 obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
                 block_list.PushBack(obj, allocator);
@@ -1450,18 +1451,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         
         if(cmd == net::api::EXPLORER_NEXT_PAGE)
         {
-            if(!doc.HasMember("block_id"))
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-
-            if(!doc["block_id"].IsString())
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
             if(!doc.HasMember("block_hash"))
             {
                 connection->close();
@@ -1475,7 +1464,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
                 
             std::string block_hash = doc["block_hash"].GetString();
-            auto block_id = doc["block_id"].GetUint64();
 
             if(block_hash.length() != 44)
             {
@@ -1492,6 +1480,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
             
             auto iter_block = iter->second->get_parent();
+
+            if(!iter_block->m_in_main_chain)
+            {
+                ASKCOIN_RETURN;
+            }
+            
             auto count = 0;
             rapidjson::Document doc;
             doc.SetObject();
@@ -1508,6 +1502,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 obj.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
                 obj.AddMember("utc", iter_block->utc(), allocator);
                 obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+                obj.AddMember("tx_num", iter_block->m_tx_num, allocator);
                 obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
                 obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
                 block_list.PushBack(obj, allocator);
@@ -1521,6 +1516,687 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             
             doc.AddMember("block_list", block_list, allocator);
             connection->send(doc);
+        }
+        else if(cmd == net::api::EXPLORER_BLOCK_PAGE)
+        {
+            if(!doc.HasMember("block_hash"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["block_hash"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            std::string block_hash = doc["block_hash"].GetString();
+
+            if(block_hash.length() != 44)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            auto iter = m_blocks.find(block_hash);
+
+            if(iter == m_blocks.end())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter_block = iter->second;
+            
+            if(!iter_block->m_in_main_chain)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_BLOCK_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("block_id", iter_block->id(), allocator);
+            doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+            doc.AddMember("utc", iter_block->utc(), allocator);
+            doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+            doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
+            doc.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+            doc.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+            rapidjson::Value tx_list(rapidjson::kArrayType);
+            
+            if(iter_block->m_tx_num > 0)
+            {
+                std::string block_data;
+                leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                
+                if(!s.ok())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                rapidjson::Document doc_1;
+                const char *block_data_str = block_data.c_str();
+                doc_1.Parse(block_data_str);
+                
+                if(doc_1.HasParseError())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!doc_1.IsObject())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(!doc_1.HasMember("data"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!doc_1.HasMember("tx"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                const rapidjson::Value &data = doc_1["data"];
+        
+                if(!data.IsObject())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(!data.HasMember("tx_ids"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                const rapidjson::Value &tx_ids = data["tx_ids"];
+                const rapidjson::Value &tx = doc_1["tx"];
+        
+                if(!tx_ids.IsArray())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!tx.IsArray())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                uint32 tx_num = tx_ids.Size();
+
+                if(tx_num > 2000)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(tx.Size() != tx_num)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(tx_num != iter_block->m_tx_num)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                for(uint32 i = 0; i < tx_num; ++i)
+                {
+                    std::string tx_id = tx_ids[i].GetString();
+                    tx_list.PushBack(rapidjson::StringRef(tx_id.c_str()), allocator);
+                }
+            }
+            
+            doc.AddMember("tx_list", tx_list, allocator);
+            connection->send(doc);
+        }
+        else if(cmd == net::api::EXPLORER_TX_PAGE)
+        {
+            if(!doc.HasMember("block_hash"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["block_hash"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            std::string block_hash = doc["block_hash"].GetString();
+
+            if(!doc.HasMember("tx_hash"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["tx_hash"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            std::string tx_hash = doc["tx_hash"].GetString();
+            
+            if(tx_hash.length() != 44)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            auto iter = m_blocks.find(block_hash);
+            
+            if(iter == m_blocks.end())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter_block = iter->second->get_parent();
+            
+            if(!iter_block->m_in_main_chain)
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_TX_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("block_id", iter_block->id(), allocator);
+            doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+            
+            if(iter_block->m_tx_num > 0)
+            {
+                std::string block_data;
+                leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                
+                if(!s.ok())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                rapidjson::Document doc_1;
+                const char *block_data_str = block_data.c_str();
+                doc_1.Parse(block_data_str);
+        
+                if(doc_1.HasParseError())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!doc_1.IsObject())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(!doc_1.HasMember("data"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!doc_1.HasMember("tx"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                const rapidjson::Value &data = doc_1["data"];
+        
+                if(!data.IsObject())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(!data.HasMember("tx_ids"))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                const rapidjson::Value &tx_ids = data["tx_ids"];
+                const rapidjson::Value &tx = doc_1["tx"];
+        
+                if(!tx_ids.IsArray())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!tx.IsArray())
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                uint32 tx_num = tx_ids.Size();
+
+                if(tx_num > 2000)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+        
+                if(tx.Size() != tx_num)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                for(uint32 i = 0; i < tx_num; ++i)
+                {
+                    std::string tx_id = tx_ids[i].GetString();
+                    
+                    if(tx_id != tx_hash)
+                    {
+                        continue;
+                    }
+                    
+                    const rapidjson::Value &tx_node = tx[i];
+                    
+                    if(!tx_node.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+            
+                    if(!tx_node.HasMember("sign"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!tx_node.HasMember("data"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+            
+                    std::string tx_sign = tx_node["sign"].GetString();
+                    const rapidjson::Value &data = tx_node["data"];
+
+                    if(!is_base64_char(tx_sign))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+            
+                    if(!data.HasMember("pubkey"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!data.HasMember("type"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+            
+                    if(!data.HasMember("utc"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    uint64 tx_utc = data["utc"].GetUint64();
+                    rapidjson::StringBuffer buffer;
+                    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                    data.Accept(writer);
+                    std::string raw_data(buffer.GetString(), buffer.GetSize());
+                    std::string pubkey = data["pubkey"].GetString();
+                    
+                    if(!verify_sign(pubkey, tx_id, tx_sign))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    uint32 tx_type = data["type"].GetUint();
+                    doc.AddMember("type", tx_type, allocator);
+                    doc.AddMember("utc", tx_utc, allocator);
+                    doc.AddMember("pubkey", rapidjson::StringRef(pubkey.c_str()), allocator);
+                    doc.AddMember("raw", rapidjson::StringRef(raw_data.c_str()), allocator);
+                    
+                    if(tx_type == 1) // register account
+                    {
+                        std::string reg_sign = data["sign"].GetString();
+                        const rapidjson::Value &sign_data = data["sign_data"];
+                        std::string register_name = sign_data["name"].GetString();
+                        std::string referrer_pubkey = sign_data["referrer"].GetString();
+                        std::shared_ptr<Account> referrer;
+                        get_account(referrer_pubkey, referrer);
+                        uint32 avatar = data["avatar"].GetUint();
+                        doc.AddMember("name", rapidjson::StringRef(register_name.c_str()), allocator);
+                        doc.AddMember("avatar", avatar, allocator);
+                        doc.AddMember("referrer", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                    }
+                    else
+                    {
+                        std::shared_ptr<Account> account;
+                        
+                        if(!get_account(pubkey, account))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        doc.AddMember("owner", rapidjson::StringRef(account->name().c_str()), allocator);
+                        
+                        if(tx_type == 2) // send coin
+                        {
+                            if(data.HasMember("memo"))
+                            {
+                                std::string memo = data["memo"].GetString();
+                                doc.AddMember("memo", rapidjson::StringRef(memo.c_str()), allocator);
+                            }
+                            
+                            uint64 amount = data["amount"].GetUint64();
+                            std::string receiver_pubkey = data["receiver"].GetString();
+                            std::shared_ptr<Account> receiver;
+                    
+                            if(!get_account(receiver_pubkey, receiver))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+                            
+                            doc.AddMember("receiver", rapidjson::StringRef(receiver->name().c_str()), allocator);
+                            doc.AddMember("receiver_pubkey", rapidjson::StringRef(receiver_pubkey.c_str()), allocator);
+                            doc.AddMember("amount", amount, allocator);
+                        }
+                        else if(tx_type == 3) // new topic
+                        {
+                            uint64 reward = data["reward"].GetUint64();
+                            std::string topic_data = data["topic"].GetString();
+                            doc.AddMember("reward", reward, allocator);
+                        }
+                        else if(tx_type == 4) // reply
+                        {
+                            std::string topic_key = data["topic_key"].GetString();
+                            std::shared_ptr<Topic> topic;
+                            
+                            if(!get_topic(topic_key, topic))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+
+                            if(data.HasMember("reply_to"))
+                            {
+                                std::string reply_to_key = data["reply_to"].GetString();
+                                std::shared_ptr<Reply> reply_to;
+                        
+                                if(!topic->get_reply(reply_to_key, reply_to))
+                                {
+                                    ASKCOIN_EXIT(EXIT_FAILURE);
+                                }
+
+                                doc.AddMember("reply_to", rapidjson::StringRef(reply_to->get_owner()->name().c_str()), allocator);
+                                doc.AddMember("reply_to_pubkey", rapidjson::StringRef(reply_to->get_owner()->pubkey().c_str()), allocator);
+                            }
+                        }
+                        else if(tx_type == 5) // reward
+                        {
+                            std::string topic_key = data["topic_key"].GetString();
+                            std::shared_ptr<Topic> topic;
+                            
+                            if(!get_topic(topic_key, topic))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+
+                            if(topic->get_owner() != account)
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+
+                            uint64 amount = data["amount"].GetUint64();
+                            std::string reply_to_key = data["reply_to"].GetString();
+                            std::shared_ptr<Reply> reply_to;
+                        
+                            if(!topic->get_reply(reply_to_key, reply_to))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+                            
+                            doc.AddMember("reward_to", rapidjson::StringRef(reply_to->get_owner()->name().c_str()), allocator);
+                            doc.AddMember("reward_to_pubkey", rapidjson::StringRef(reply_to->get_owner()->pubkey().c_str()), allocator);
+                            doc.AddMember("reward", amount, allocator);
+                        }
+                    }
+                    
+                    break;
+                }
+                
+                connection->send(doc);
+            }
+            else
+            {
+                ASKCOIN_RETURN;
+            }
+        }
+        else if(cmd == net::api::EXPLORER_ACCOUNT_PAGE)
+        {
+            if(!doc.HasMember("pubkey"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["pubkey"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+            
+            std::string pubkey = doc["pubkey"].GetString();
+            std::shared_ptr<Account> account;
+            
+            if(!get_account(pubkey, account))
+            {
+                ASKCOIN_RETURN;
+            }
+            
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_ACCOUNT_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            doc.AddMember("id", account->id(), allocator);
+            doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
+            doc.AddMember("avatar", account->avatar(), allocator);
+            doc.AddMember("balance", account->get_balance(), allocator);
+            doc.AddMember("pubkey", rapidjson::StringRef(account->pubkey().c_str()), allocator);
+            auto referrer = account->get_referrer();
+            
+            if(referrer)
+            {
+                doc.AddMember("referrer_name", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                doc.AddMember("referrer_pubkey", rapidjson::StringRef(referrer->pubkey().c_str()), allocator);
+            }
+            
+            connection->send(doc);
+        }
+        else if(cmd == net::api::EXPLORER_QUERY)
+        {
+            if(!doc.HasMember("id"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["id"].IsUint64())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("block_hash"))
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["block_hash"].IsString())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            uint64 account_id = doc["id"].GetUint64();
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+
+            if(account_id > 0)
+            {
+                auto iter = m_account_by_id.find(account_id);
+                
+                if(iter == m_account_by_id.end())
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                auto account = iter->second;
+                doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+                doc.AddMember("msg_cmd", net::api::EXPLORER_ACCOUNT_PAGE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
+                doc.AddMember("id", account->id(), allocator);
+                doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
+                doc.AddMember("avatar", account->avatar(), allocator);
+                doc.AddMember("balance", account->get_balance(), allocator);
+                doc.AddMember("pubkey", rapidjson::StringRef(account->pubkey().c_str()), allocator);
+                auto referrer = account->get_referrer();
+            
+                if(referrer)
+                {
+                    doc.AddMember("referrer_name", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                    doc.AddMember("referrer_pubkey", rapidjson::StringRef(referrer->pubkey().c_str()), allocator);
+                }
+            }
+            else
+            {
+                std::string block_hash = doc["block_hash"].GetString();
+                
+                if(block_hash.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto iter = m_blocks.find(block_hash);
+
+                if(iter == m_blocks.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto iter_block = iter->second;
+                
+                if(!iter_block->m_in_main_chain)
+                {
+                    ASKCOIN_RETURN;
+                }
+
+                doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+                doc.AddMember("msg_cmd", net::api::EXPLORER_BLOCK_PAGE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
+                doc.AddMember("block_id", iter_block->id(), allocator);
+                doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                doc.AddMember("utc", iter_block->utc(), allocator);
+                doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
+                doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
+                doc.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                doc.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                rapidjson::Value tx_list(rapidjson::kArrayType);
+                
+                if(iter_block->m_tx_num > 0)
+                {
+                    std::string block_data;
+                    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                
+                    if(!s.ok())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                
+                    rapidjson::Document doc_1;
+                    const char *block_data_str = block_data.c_str();
+                    doc_1.Parse(block_data_str);
+                
+                    if(doc_1.HasParseError())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!doc_1.HasMember("data"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.HasMember("tx"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    const rapidjson::Value &data = doc_1["data"];
+        
+                    if(!data.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!data.HasMember("tx_ids"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    const rapidjson::Value &tx_ids = data["tx_ids"];
+                    const rapidjson::Value &tx = doc_1["tx"];
+        
+                    if(!tx_ids.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!tx.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    uint32 tx_num = tx_ids.Size();
+
+                    if(tx_num > 2000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(tx.Size() != tx_num)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(tx_num != iter_block->m_tx_num)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                
+                    for(uint32 i = 0; i < tx_num; ++i)
+                    {
+                        std::string tx_id = tx_ids[i].GetString();
+                        tx_list.PushBack(rapidjson::StringRef(tx_id.c_str()), allocator);
+                    }
+                }
+                
+                doc.AddMember("tx_list", tx_list, allocator);
+            }
+            
+            connection->send(doc);
+        }
+        else
+        {
+            connection->close();
+            ASKCOIN_RETURN;
         }
         
         return;

@@ -1829,6 +1829,7 @@ bool Blockchain::start(std::string db_path)
 
     std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
     genesis_block->set_miner_pubkey(pubkey);
+    genesis_block->m_in_main_chain = true;
     m_blocks.insert(std::make_pair(block_hash, genesis_block));
     std::shared_ptr<Block> the_most_difficult_block = genesis_block;
     
@@ -2270,6 +2271,7 @@ bool Blockchain::start(std::string db_path)
 
     while(iter_block->id() != 0)
     {
+        iter_block->m_in_main_chain = true;
         block_chain.push_front(iter_block);
         iter_block = iter_block->get_parent();
     }
@@ -4988,6 +4990,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
              zero_bits, block_id, block_hash.c_str(), hex_hash.c_str());
     m_blocks.insert(std::make_pair(block_hash, cur_block));
     m_cur_block = cur_block;
+    m_cur_block->m_in_main_chain = true;
     
     if(m_most_difficult_block->difficult_than_me(m_cur_block))
     {
@@ -5864,6 +5867,7 @@ void Blockchain::switch_to_most_difficult()
     for(auto iter_block : db_blocks)
     {
         m_cur_block = iter_block;
+        m_cur_block->m_in_main_chain = true;
         uint64 cur_block_id = iter_block->id();
         
         if(cur_block_id == 0)
@@ -6831,6 +6835,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
     for(auto iter_block : db_blocks)
     {
         m_cur_block = iter_block;
+        m_cur_block->m_in_main_chain = true;
         uint64 cur_block_id = iter_block->id();
         
         if(cur_block_id == 0)
@@ -7888,6 +7893,7 @@ void Blockchain::rollback(uint64 block_id)
             m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
         }
 
+        m_cur_block->m_in_main_chain = false;
         m_cur_block = m_cur_block->get_parent();
         cur_block_id  = m_cur_block->id();
     }
@@ -8485,6 +8491,7 @@ void Blockchain::rollback(uint64 block_id)
                 rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
             }
 
+            m_cur_block->m_in_main_chain = false;
             m_cur_block = m_cur_block->get_parent();
             cur_block_id  = m_cur_block->id();
         }

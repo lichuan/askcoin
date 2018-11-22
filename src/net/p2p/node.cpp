@@ -5311,6 +5311,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                      block_hash.c_str(), hex_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
             m_cur_block = cur_block;
+            m_cur_block->m_in_main_chain = true;
 
             if(m_most_difficult_block->difficult_than_me(m_cur_block))
             {
