@@ -165,14 +165,8 @@ public:
         std::string websocket_host = doc["network"]["websocket"]["host"].GetString();
         uint16 websocket_port = doc["network"]["websocket"]["port"].GetUint();
         bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
-
-        if(doc["network"]["websocket"].HasMember("explorer_auth"))
-        {
-            net::api::Wsock_Node::instance()->m_explorer_auth = doc["network"]["websocket"]["explorer_auth"].GetString();
-        }
-        
         uint32 websocket_max_conn = doc["network"]["websocket"]["max_conn"].GetUint();
-
+        
         if(websocket_max_conn == 0)
         {
             CONSOLE_LOG_FATAL("websocket max_conn must be greater than 0");            

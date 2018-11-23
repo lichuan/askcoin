@@ -1399,35 +1399,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     {
         if(cmd == net::api::EXPLORER_MAIN_PAGE)
         {
-            if(wsock_node->m_explorer_auth.empty())
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
-            if(user->m_state == 0)
-            {
-                if(!doc.HasMember("explorer_auth"))
-                {
-                    connection->close();
-                    ASKCOIN_RETURN;
-                }
-                
-                if(!doc["explorer_auth"].IsString())
-                {
-                    connection->close();
-                    ASKCOIN_RETURN;
-                }
-                
-                auto explorer_auth = doc["explorer_auth"].GetString();
-                
-                if(explorer_auth != wsock_node->m_explorer_auth)
-                {
-                    connection->close();
-                    ASKCOIN_RETURN;
-                }
-            }
-            
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -1446,12 +1417,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 obj.AddMember("utc", iter_block->utc(), allocator);
                 obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
                 obj.AddMember("tx_num", iter_block->m_tx_num, allocator);
-                obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
-                obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                obj.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                obj.AddMember("miner_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
                 block_list.PushBack(obj, allocator);
                 iter_block = iter_block->get_parent();
                     
-                if(++count > 20)
+                if(++count >= 20)
                 {
                     break;
                 }
@@ -1500,12 +1471,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
             
             auto iter_block = iter->second->get_parent();
-
-            if(!iter_block->m_in_main_chain)
-            {
-                ASKCOIN_RETURN;
-            }
             
+            if(iter_block)
+            {
+                if(!iter_block->m_in_main_chain)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+
             auto count = 0;
             rapidjson::Document doc;
             doc.SetObject();
@@ -1523,12 +1497,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 obj.AddMember("utc", iter_block->utc(), allocator);
                 obj.AddMember("zero_bits", iter_block->zero_bits(), allocator);
                 obj.AddMember("tx_num", iter_block->m_tx_num, allocator);
-                obj.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
-                obj.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                obj.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                obj.AddMember("miner_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
                 block_list.PushBack(obj, allocator);
                 iter_block = iter_block->get_parent();
                 
-                if(++count > 20)
+                if(++count >= 20)
                 {
                     break;
                 }
@@ -1566,14 +1540,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
-            
+
             auto iter_block = iter->second;
-            
+
             if(!iter_block->m_in_main_chain)
             {
                 ASKCOIN_RETURN;
             }
-            
+
+            auto pre_block = iter_block->get_parent();
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -1582,11 +1557,17 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("msg_id", msg_id, allocator);
             doc.AddMember("block_id", iter_block->id(), allocator);
             doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+
+            if(pre_block)
+            {
+                doc.AddMember("pre_hash", rapidjson::StringRef(pre_block->hash().c_str()), allocator);
+            }
+
             doc.AddMember("utc", iter_block->utc(), allocator);
             doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
             doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
-            doc.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
-            doc.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+            doc.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+            doc.AddMember("miner_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
             rapidjson::Value tx_list(rapidjson::kArrayType);
             
             if(iter_block->m_tx_num > 0)
@@ -1719,7 +1700,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
-            auto iter_block = iter->second->get_parent();
+            auto iter_block = iter->second;
             
             if(!iter_block->m_in_main_chain)
             {
@@ -1985,6 +1966,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
             else
             {
+                connection->close();
                 ASKCOIN_RETURN;
             }
         }
@@ -2058,12 +2040,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
 
             uint64 account_id = doc["id"].GetUint64();
-            rapidjson::Document doc;
-            doc.SetObject();
-            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-
+            
             if(account_id > 0)
             {
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
                 auto iter = m_account_by_id.find(account_id);
                 
                 if(iter == m_account_by_id.end())
@@ -2106,23 +2088,33 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     ASKCOIN_RETURN;
                 }
                 
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
                 auto iter_block = iter->second;
                 
                 if(!iter_block->m_in_main_chain)
                 {
                     ASKCOIN_RETURN;
                 }
-
+                
+                auto pre_block = iter_block->get_parent();
                 doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
                 doc.AddMember("msg_cmd", net::api::EXPLORER_BLOCK_PAGE, allocator);
                 doc.AddMember("msg_id", msg_id, allocator);
                 doc.AddMember("block_id", iter_block->id(), allocator);
                 doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                
+                if(pre_block)
+                {
+                    doc.AddMember("pre_hash", rapidjson::StringRef(pre_block->hash().c_str()), allocator);
+                }
+
                 doc.AddMember("utc", iter_block->utc(), allocator);
                 doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
                 doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
-                doc.AddMember("mine_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
-                doc.AddMember("mine_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
+                doc.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
+                doc.AddMember("miner_pubkey", rapidjson::StringRef(iter_block->miner_pubkey().c_str()), allocator);
                 rapidjson::Value tx_list(rapidjson::kArrayType);
                 
                 if(iter_block->m_tx_num > 0)
