@@ -868,15 +868,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         
         if(cmd == net::api::TOPIC_QUESTION_PROBE)
         {
-            rapidjson::Document doc;
-            doc.SetObject();
-            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-            doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
-            doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
-            doc.AddMember("msg_id", msg_id, allocator);
-
             if(msg_id == 0)
             {
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+                doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
                 doc.AddMember("result", 0, allocator);
                 rapidjson::Value question_list(rapidjson::kArrayType);
                 
@@ -965,6 +964,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 auto block = m_blocks[block_hash];
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+                doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
                 doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
 
                 if(account->m_topic_list.empty())
@@ -1098,26 +1103,25 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            rapidjson::Document doc;
-            doc.SetObject();
-            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-            doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
-            doc.AddMember("msg_cmd", net::api::TOPIC_DETAIL_PROBE, allocator);
-            doc.AddMember("msg_id", msg_id, allocator);
-            doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
-            std::shared_ptr<Topic> topic;
-            
-            if(!get_topic(topic_key, topic))
-            {
-                doc.AddMember("result", 3, allocator);
-                connection->send(doc);
-                ASKCOIN_RETURN;
-            }
-            
-            doc.AddMember("topic_balance", topic->get_balance(), allocator);
-
             if(msg_id == 0)
             {
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+                doc.AddMember("msg_cmd", net::api::TOPIC_DETAIL_PROBE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
+                doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
+                std::shared_ptr<Topic> topic;
+            
+                if(!get_topic(topic_key, topic))
+                {
+                    doc.AddMember("result", 3, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                doc.AddMember("topic_balance", topic->get_balance(), allocator);
                 doc.AddMember("result", 0, allocator);
                 rapidjson::Value reply_list(rapidjson::kArrayType);
                 
@@ -1204,7 +1208,24 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
+                
+                rapidjson::Document doc;
+                doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                doc.AddMember("msg_type", net::api::MSG_TOPIC, allocator);
+                doc.AddMember("msg_cmd", net::api::TOPIC_DETAIL_PROBE, allocator);
+                doc.AddMember("msg_id", msg_id, allocator);
+                doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
+                std::shared_ptr<Topic> topic;
+                
+                if(!get_topic(topic_key, topic))
+                {
+                    doc.AddMember("result", 3, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
 
+                doc.AddMember("topic_balance", topic->get_balance(), allocator);
                 doc.AddMember("reply_key", rapidjson::StringRef(reply_key.c_str()), allocator);
                 
                 if(topic->m_reply_list.empty())
@@ -1383,14 +1404,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
-
-            rapidjson::Document doc;
-            doc.SetObject();
-            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
-            doc.AddMember("msg_cmd", net::api::EXPLORER_MAIN_PAGE, allocator);
-            doc.AddMember("msg_id", msg_id, allocator);
-            rapidjson::Value block_list(rapidjson::kArrayType);
             
             if(user->m_state == 0)
             {
@@ -1415,6 +1428,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
             }
             
+            rapidjson::Document doc;
+            doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+            doc.AddMember("msg_cmd", net::api::EXPLORER_MAIN_PAGE, allocator);
+            doc.AddMember("msg_id", msg_id, allocator);
+            rapidjson::Value block_list(rapidjson::kArrayType);
             auto iter_block = m_cur_block;
             auto count = 0;
             
