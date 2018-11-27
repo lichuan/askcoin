@@ -50,6 +50,7 @@ public:
     uint64 m_block_id;
     std::string m_memo;
     uint64 m_utc;
+    std::string m_tx_id;
 };
 
 #endif

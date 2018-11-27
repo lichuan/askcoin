@@ -4230,6 +4230,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history->m_target_avatar = referrer->avatar();
                         history->m_target_name = referrer->name();
                         history->m_utc = utc;
+                        history->m_tx_id = tx_id;
                         referrer_referrer->add_history(history);
                     }
                     
@@ -4247,6 +4248,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     history->m_target_avatar = reg_account->avatar();
                     history->m_target_name = reg_account->name();
                     history->m_utc = utc;
+                    history->m_tx_id = tx_id;
                     referrer->add_history(history);
                 }
                 else
@@ -4340,6 +4342,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history->m_target_avatar = account->avatar();
                         history->m_target_name = account->name();
                         history->m_utc = utc;
+                        history->m_tx_id = tx_id;
                         referrer->add_history(history);
                     }
                     
@@ -4348,6 +4351,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     history->m_block_id = cur_block_id;
                     history->m_change = 2;
                     history->m_utc = utc;
+                    history->m_tx_id = tx_id;
                     account->add_history(history);
                     auto failed_cb = [=]() {
                         account->add_balance(2);
@@ -4511,6 +4515,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history_to->m_target_id = receiver->id();
                         history_to->m_target_avatar = receiver->avatar();
                         history_to->m_target_name = receiver->name();
+                        history_to->m_tx_id = tx_id;
                         account->add_history(history_to);
                         history_from->m_block_id = cur_block_id;
                         history_from->m_change = amount;
@@ -4518,6 +4523,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history_from->m_target_id = account->id();
                         history_from->m_target_avatar = account->avatar();
                         history_from->m_target_name = account->name();
+                        history_from->m_tx_id = tx_id;
                         receiver->add_history(history_from);
                     }
                     else if(tx_type == 3) // new topic
@@ -4629,6 +4635,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history->m_block_id = cur_block_id;
                         history->m_change = reward;
                         history->m_utc = utc;
+                        history->m_tx_id = tx_id;
                         account->add_history(history);
                     }
                     else if(tx_type == 4) // reply
@@ -4981,6 +4988,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history->m_target_id = account->id();
                         history->m_target_avatar = account->avatar();
                         history->m_target_name = account->name();
+                        history->m_tx_id = tx_id;
                         reply_to->get_owner()->add_history(history);
                     }
                     else
