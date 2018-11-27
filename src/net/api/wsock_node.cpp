@@ -1563,6 +1563,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("pre_hash", rapidjson::StringRef(pre_block->hash().c_str()), allocator);
             }
 
+            if(iter_block->m_miner_reward)
+            {
+                doc.AddMember("block_reward", 5000, allocator);
+            }
+            else
+            {
+                doc.AddMember("block_reward", 0, allocator);
+            }
+
             doc.AddMember("utc", iter_block->utc(), allocator);
             doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
             doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
