@@ -131,6 +131,7 @@ private:
     std::atomic<bool> m_enable_mine{true};
     std::atomic<uint64> m_mine_id_1 {0};
     std::atomic<uint64> m_mine_id_2 {0};
+    uint64 m_last_mine_time;
     std::shared_ptr<rapidjson::Document> m_mine_doc;
     uint64 m_mine_cur_block_id;
     std::string m_mine_cur_block_hash;

@@ -40,6 +40,7 @@ Blockchain::Blockchain()
     m_b64_table['/'] = 64;
     m_b64_table['='] = 64;
     m_cur_account_id = 0;
+    m_last_mine_time = 0;
 }
 
 Blockchain::~Blockchain()
@@ -3097,6 +3098,15 @@ bool Blockchain::start(std::string db_path)
             this->broadcast();
         }, 10);
 
+    m_timer_ctl.add_timer([this]() {
+            uint64 utc_now = time(NULL);
+
+            if(m_last_mine_time + 5 < utc_now)
+            {
+                mine_tx();
+            }
+        }, 1);
+    
     for(auto p : m_account_by_id)
     {
         auto account = p.second;
@@ -3214,6 +3224,8 @@ bool Blockchain::check_balance()
 
 void Blockchain::mine_tx()
 {
+    m_last_mine_time = time(NULL);
+    
     if(!m_enable_mine.load(std::memory_order_relaxed))
     {
         return;

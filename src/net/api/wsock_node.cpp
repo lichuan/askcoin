@@ -491,6 +491,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             {
                 doc.AddMember("err_code", net::api::ERR_REG_FAILED, allocator);
                 connection->send(doc);
+                ASKCOIN_RETURN;
             }
             else
             {
