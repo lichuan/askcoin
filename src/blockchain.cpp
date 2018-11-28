@@ -979,7 +979,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             }
 
             std::string sign = fly::base::base64_encode(&sign_vec[0], sign_vec.size());
-            doc.AddMember("sign", rapidjson::StringRef(sign.c_str()), allocator);
+            doc.AddMember("sign", rapidjson::Value(sign.c_str(), allocator), allocator);
             doc.AddMember("sign_data", sign_data, allocator);
         }
         
