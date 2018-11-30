@@ -7941,9 +7941,12 @@ void Blockchain::rollback(uint64 block_id)
         m_cur_block = m_cur_block->get_parent();
         cur_block_id  = m_cur_block->id();
     }
+
+    uint64 target_block_id = block_id;
     
-    if(cur_block_id > block_id)
+    while(cur_block_id > target_block_id)
     {
+        target_block_id = block_id;
         uint64 iter_id = cur_block_id;
         auto iter_block = m_cur_block;
         uint32 count = 0;
@@ -7963,8 +7966,7 @@ void Blockchain::rollback(uint64 block_id)
                 break;
             }
         }
-
-        // todo, need optimize if diff far more than 4320
+        
         if(count > TOPIC_LIFE_TIME)
         {
             uint64 diff = cur_block_id - block_id - 1;
@@ -7981,9 +7983,15 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         break;
                     }
+                    
+                    if(++count > TOPIC_LIFE_TIME + TOPIC_LIFE_TIME)
+                    {
+                        target_block_id = cur_block_id - TOPIC_LIFE_TIME - 1;
+                        break;
+                    }
                 }
             }
-
+            
             for(; count > TOPIC_LIFE_TIME; --count)
             {
                 iter_block = block_list.front();
@@ -8286,7 +8294,7 @@ void Blockchain::rollback(uint64 block_id)
             }
         }
         
-        while(cur_block_id > block_id)
+        while(cur_block_id > target_block_id)
         {
             std::string block_data;
             std::string block_hash = m_cur_block->hash();
