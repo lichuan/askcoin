@@ -50,17 +50,16 @@ void Timer_Controller::del_timer(uint64 id)
     {
         return;
     }
-
+    
     std::shared_ptr<Timer> timer = iter_timer->second;
+    m_timer_map.erase(iter_timer);
     auto iter_end = m_timers.upper_bound(timer);
-
+    
     for(auto iter = m_timers.lower_bound(timer); iter != iter_end; ++iter)
     {
         if(*iter == timer)
         {
             m_timers.erase(iter);
-            m_timer_map.erase(iter_timer);
-            
             return;
         }
     }
@@ -121,19 +120,24 @@ bool Timer_Controller::run()
     {
         timer->m_cb();
         called = true;
-            
+        lock.lock();
+        
         if(!timer->m_oneshot)
         {
             timer->m_utc = now + timer->m_interval;
-            lock.lock();
-            m_timers.insert(timer);
-            lock.unlock();
+            
+            if(m_timer_map.find(timer->m_id) != m_timer_map.end())
+            {
+                m_timers.insert(timer);
+            }
         }
         else
         {
             m_timer_map.erase(timer->m_id);
         }
+        
+        lock.unlock();
     }
-
+    
     return called;
 }

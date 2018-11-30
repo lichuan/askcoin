@@ -2333,13 +2333,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
     doc_data.Accept(writer);
     std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-
+    
     if(!verify_sign(pubkey, tx_id, tx_sign))
     {
         connection->close();
         ASKCOIN_RETURN;
     }
-
+    
     if(m_tx_map.find(tx_id) != m_tx_map.end())
     {
         rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);

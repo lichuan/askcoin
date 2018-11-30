@@ -553,7 +553,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             
             if(!version_compatible(version_u32, ASKCOIN_VERSION))
             {
-                LOG_DEBUG_ERROR("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_ERROR("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
                 connection->close();
 
                 return;
@@ -754,7 +754,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         
         if(!version_compatible(version_u32, ASKCOIN_VERSION))
         {
-            LOG_DEBUG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
+            LOG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
             connection->close();
             return;
         }
@@ -1133,38 +1133,48 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
             p2p_node->m_timer_ctl.del_timer(peer->m_punish_timer_id);
         }
         
-        LOG_DEBUG_INFO("punish_peer + banned, peer: %s", peer->key().c_str());
+        LOG_INFO("punish_peer + banned, peer: %s", peer->key().c_str());
         p2p_node->m_banned_peers.insert(peer->key());
         peer->m_punish_timer_id = p2p_node->m_timer_ctl.add_timer([=]() {
                 std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
                 p2p_node->m_banned_peers.erase(peer->key());
-                LOG_DEBUG_INFO("unbanned peer: %s", peer->key().c_str());
+                LOG_INFO("unbanned peer: %s", peer->key().c_str());
             }, 600, true);
     }
 }
 
-void Blockchain::punish_brief_req(std::shared_ptr<Pending_Brief_Request> request)
+void Blockchain::punish_brief_req(std::shared_ptr<Pending_Brief_Request> request, bool _punish_peer)
 {
     for(auto pending_chain : request->m_chains)
     {
         std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
-        punish_peer(peer);
+
+        if(_punish_peer)
+        {
+            punish_peer(peer);
+        }
+        
         m_chains_by_peer_key.erase(peer->key());
-        LOG_DEBUG_INFO("punish_brief_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_hash.c_str());
+        LOG_INFO("punish_brief_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_hash.c_str());
     }
     
     m_timer_ctl.del_timer(request->m_timer_id);
     m_pending_brief_reqs.erase(request->m_hash);
 }
 
-void Blockchain::punish_detail_req(std::shared_ptr<Pending_Detail_Request> request)
+void Blockchain::punish_detail_req(std::shared_ptr<Pending_Detail_Request> request, bool _punish_peer)
 {
     for(auto pending_chain : request->m_chains)
     {
         std::shared_ptr<net::p2p::Peer> peer = pending_chain->m_peer;
-        punish_peer(peer);
+
+        if(_punish_peer)
+        {
+            punish_peer(peer);
+        }
+        
         m_chains_by_peer_key.erase(peer->key());
-        LOG_DEBUG_INFO("punish_detail_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_pb->m_hash.c_str());
+        LOG_INFO("punish_detail_req, peer key: %s, block_hash: %s", peer->key().c_str(), request->m_pb->m_hash.c_str());
     }
     
     m_timer_ctl.del_timer(request->m_timer_id);
@@ -1375,7 +1385,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(!version_compatible(version, ASKCOIN_VERSION))
             {
-                LOG_DEBUG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
@@ -1833,7 +1843,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(!version_compatible(version, ASKCOIN_VERSION))
             {
-                LOG_DEBUG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
                 punish_brief_req(request);
                 ASKCOIN_RETURN;
             }
@@ -2219,7 +2229,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(!version_compatible(version, ASKCOIN_VERSION))
             {
-                LOG_DEBUG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
                 punish_detail_req(request);
                 ASKCOIN_RETURN;
             }
@@ -3473,7 +3483,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                     m_chains_by_peer_key.insert(std::make_pair(key, pending_chain));
                     peer->m_connection->send(doc);
                     ++request->m_try_num;
-                    LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
+                    LOG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
                     request->m_timer_id = m_timer_ctl.add_timer([=]() {
                             auto &doc = *doc_ptr;
                             
@@ -3501,7 +3511,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                             }
                             else
                             {
-                                punish_brief_req(request);
+                                punish_brief_req(request, false);
                                 return;
                             }
                         
@@ -3727,7 +3737,7 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 m_chains_by_peer_key.insert(std::make_pair(key, pending_chain));
                 peer->m_connection->send(doc);
                 ++request->m_try_num;
-                LOG_DEBUG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
+                LOG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
                 request->m_timer_id = m_timer_ctl.add_timer([=]() {
                         auto &doc = *doc_ptr;
                         
@@ -3755,7 +3765,7 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
                         }
                         else
                         {
-                            punish_brief_req(request);
+                            punish_brief_req(request, false);
                             return;
                         }
                         
@@ -5436,7 +5446,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     }
                     else
                     {
-                        punish_detail_req(request);
+                        punish_detail_req(request, false);
                         return;
                     }
 
@@ -5598,7 +5608,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
                 }
                 else
                 {
-                    punish_detail_req(request);
+                    punish_detail_req(request, false);
                     return;
                 }
 

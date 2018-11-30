@@ -73,8 +73,8 @@ public:
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
     void punish_peer(std::shared_ptr<net::p2p::Peer> peer);
-    void punish_brief_req(std::shared_ptr<Pending_Brief_Request> req);
-    void punish_detail_req(std::shared_ptr<Pending_Detail_Request> request);
+    void punish_brief_req(std::shared_ptr<Pending_Brief_Request> req, bool punish_peer = true);
+    void punish_detail_req(std::shared_ptr<Pending_Detail_Request> request, bool punish_peer = true);
     void do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &message);
     void do_brief_chain(std::shared_ptr<Pending_Chain> chain);
     void finish_brief(std::shared_ptr<Pending_Brief_Request> request);
