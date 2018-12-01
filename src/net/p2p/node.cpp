@@ -1792,7 +1792,33 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             data.Accept(writer);
             std::string data_str(buffer.GetString(), buffer.GetSize());
             std::string data_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+            
+            if(!data.HasMember("zero_bits"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
 
+            if(!data["zero_bits"].IsUint())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            uint32 zero_bits = data["zero_bits"].GetUint();
+
+            if(zero_bits == 0 || zero_bits >= 256)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!verify_hash(block_hash, data_str, zero_bits))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!data.HasMember("id"))
             {
                 punish_brief_req(request);
@@ -1847,27 +1873,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_brief_req(request);
                 ASKCOIN_RETURN;
             }
-            
-            if(!data.HasMember("zero_bits"))
-            {
-                punish_brief_req(request);
-                ASKCOIN_RETURN;
-            }
-
-            if(!data["zero_bits"].IsUint())
-            {
-                punish_brief_req(request);
-                ASKCOIN_RETURN;
-            }
-
-            uint32 zero_bits = data["zero_bits"].GetUint();
-
-            if(zero_bits == 0 || zero_bits >= 256)
-            {
-                punish_brief_req(request);
-                ASKCOIN_RETURN;
-            }
-            
+                        
             if(!data.HasMember("pre_hash"))
             {
                 punish_brief_req(request);
@@ -1999,13 +2005,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-            
-            if(!verify_hash(block_hash, data_str, zero_bits))
-            {
-                punish_brief_req(request);
-                ASKCOIN_RETURN;
-            }
-            
+                        
             auto pending_block = std::make_shared<Pending_Block>(block_id, utc, version, zero_bits, block_hash, pre_hash, data_hash);
             m_pending_blocks.insert(std::make_pair(block_hash, pending_block));
             m_pending_block_hashes.push_back(block_hash);
