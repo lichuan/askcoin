@@ -23,6 +23,7 @@ public:
     uint64 m_timer_id;
     uint64 m_ping_timer_id;
     uint64 m_punish_timer_id;
+    uint64 m_last_peer_req_time;
     std::shared_ptr<fly::net::Connection<Json>> m_connection;
     
 private:

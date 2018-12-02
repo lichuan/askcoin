@@ -14,6 +14,7 @@ Peer::Peer()
     m_local_key = 0;
     m_reg_conn_id = 0;
     m_punish_timer_id = 0;
+    m_last_peer_req_time = 0;
 }
 
 Peer::~Peer()

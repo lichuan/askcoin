@@ -352,6 +352,14 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             }
             else if(cmd == SYS_PEER_REQ)
             {
+                uint64 now = time(NULL);
+
+                if(peer->m_last_peer_req_time + 55 > now)
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                peer->m_last_peer_req_time = now;
                 std::unique_lock<std::mutex> lock(m_score_mutex);
                 std::vector<std::shared_ptr<Peer_Score>> vec;
                 vec.insert(vec.begin(), m_peer_scores.begin(), m_peer_scores.end());
@@ -372,7 +380,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                     peer_info.AddMember("port", peer_score->m_addr.m_port, allocator);
                     peers.PushBack(peer_info, allocator);
 
-                    if(++count >= 5)
+                    if(++count >= 2)
                     {
                         break;
                     }
@@ -1649,10 +1657,10 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 uint32 diff = utc - now;
                 
-                if(diff > 3600)
-                {
-                    LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
-                }
+                // if(diff > 3600)
+                // {
+                //     LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
+                // }
                 
                 m_timer_ctl.add_timer([=]() {
                         do_brief_chain(pending_chain);
