@@ -14,15 +14,16 @@ public:
     {
         bool operator()(const std::shared_ptr<Timer> &a, const std::shared_ptr<Timer> &b)
         {
-            return a->m_utc < b->m_utc;
+            return a->m_tick < b->m_tick;
         }
     };
-
-    Timer(uint64 id, uint64 utc, std::function<void()> cb, uint32 interval, bool oneshot = false);
+    
+    Timer(uint64 id, uint64 tick, std::function<void()> cb, uint32 interval_tick, bool oneshot = false);
     ~Timer();
-    uint64 m_utc;
+    static uint64 now_msec();
+    uint64 m_tick;
     uint64 m_id;
-    uint32 m_interval;
+    uint32 m_interval_tick;
     bool m_oneshot;
     std::function<void()> m_cb;
 };

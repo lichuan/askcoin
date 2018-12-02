@@ -1,17 +1,27 @@
 #include <list>
+#include <sys/time.h>
 #include "timer.hpp"
 
-Timer::Timer(uint64 id, uint64 utc, std::function<void()> cb, uint32 interval, bool oneshot)
+Timer::Timer(uint64 id, uint64 tick, std::function<void()> cb, uint32 interval_tick, bool oneshot)
 {
-    m_utc = utc;
+    m_tick = tick;
     m_cb = cb;
-    m_interval = interval;
+    m_interval_tick = interval_tick;
     m_oneshot = oneshot;
     m_id = id;
 }
 
 Timer::~Timer()
 {
+}
+
+uint64 Timer::now_msec()
+{
+    struct timeval _tv;
+    gettimeofday(&_tv, NULL);
+    uint64 now_msec = (uint64)_tv.tv_sec * 1000 + (uint64)_tv.tv_usec / 1000;
+
+    return now_msec;
 }
 
 Timer_Controller::Timer_Controller()
@@ -31,9 +41,10 @@ void Timer_Controller::clear()
 
 uint64 Timer_Controller::add_timer(std::function<void()> cb, uint32 interval, bool oneshot)
 {
-    uint32 now = time(NULL);
+    uint64 now_tick = Timer::now_msec() / 100;
+    uint64 interval_tick = interval / 100;
     uint64 id = m_id_allocator.new_id();
-    std::shared_ptr<Timer> timer = std::make_shared<Timer>(id, now + interval, cb, interval, oneshot);
+    std::shared_ptr<Timer> timer = std::make_shared<Timer>(id, now_tick + interval_tick, cb, interval_tick, oneshot);
     std::lock_guard<std::mutex> guard(m_mutex);
     m_timers.insert(timer);
     m_timer_map.insert(std::make_pair(id, timer));
@@ -67,7 +78,7 @@ void Timer_Controller::del_timer(uint64 id)
 
 void Timer_Controller::reset_timer(uint64 id)
 {
-    uint64 now = time(NULL);
+    uint64 now_tick = Timer::now_msec() / 100;
     std::lock_guard<std::mutex> guard(m_mutex);
     auto iter_timer = m_timer_map.find(id);
 
@@ -84,7 +95,7 @@ void Timer_Controller::reset_timer(uint64 id)
         if(*iter == timer)
         {
             m_timers.erase(iter);
-            timer->m_utc = now + timer->m_interval;
+            timer->m_tick = now_tick + timer->m_interval_tick;
             m_timers.insert(timer);
             
             return;
@@ -92,9 +103,10 @@ void Timer_Controller::reset_timer(uint64 id)
     }
 }
 
+
 bool Timer_Controller::run()
 {
-    uint64 now = time(NULL);
+    uint64 now_tick = Timer::now_msec() / 100;
     std::unique_lock<std::mutex> lock(m_mutex);
     bool called = false;
     std::list<std::shared_ptr<Timer>> timers;
@@ -103,7 +115,7 @@ bool Timer_Controller::run()
     {
         std::shared_ptr<Timer> timer = *iter;
 
-        if(timer->m_utc <= now)
+        if(timer->m_tick <= now_tick)
         {
             timers.push_back(timer);
             iter = m_timers.erase(iter);
@@ -124,7 +136,7 @@ bool Timer_Controller::run()
         
         if(!timer->m_oneshot)
         {
-            timer->m_utc = now + timer->m_interval;
+            timer->m_tick = now_tick + timer->m_interval_tick;
             
             if(m_timer_map.find(timer->m_id) != m_timer_map.end())
             {

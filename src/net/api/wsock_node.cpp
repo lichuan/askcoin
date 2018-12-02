@@ -91,7 +91,7 @@ bool Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     lock.unlock();
     user->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
-        }, 30, true);
+        }, 30000, true);
     return true;
 }
 

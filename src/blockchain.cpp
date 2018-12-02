@@ -3104,7 +3104,7 @@ bool Blockchain::start(std::string db_path)
                      m_cur_block->zero_bits(), m_cur_block->id(), m_cur_block->hash().c_str(), hex_hash.c_str());
     m_timer_ctl.add_timer([this]() {
             this->broadcast();
-        }, 10);
+        }, 10000);
 
     m_timer_ctl.add_timer([this]() {
             uint64 utc_now = time(NULL);
@@ -3113,7 +3113,7 @@ bool Blockchain::start(std::string db_path)
             {
                 mine_tx();
             }
-        }, 1);
+        }, 1000);
     
     for(auto p : m_account_by_id)
     {

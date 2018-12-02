@@ -60,7 +60,7 @@ bool Node::start(uint16 port)
                 }
                 
                 broadcast(doc);
-            }, 60);
+            }, 60000);
         
         return true;
     }
@@ -232,7 +232,7 @@ bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     lock.unlock();
     peer->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
-        }, 10, true);
+        }, 10000, true);
     peer->m_connection = connection;
     std::shared_ptr<Peer> peer_unreg = iter_unreg->second;
     rapidjson::Document doc;
@@ -265,7 +265,7 @@ bool Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
     std::shared_ptr<Peer> peer = std::make_shared<Peer>();
     peer->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
-        }, 10, true);
+        }, 10000, true);
     peer->m_connection = connection;
     {
         std::lock_guard<std::mutex> guard(m_peer_mutex);
@@ -931,7 +931,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                 }
 
                 reg_connection->send(doc);
-            }, 5);
+            }, 5000);
         lock.unlock();
         rapidjson::Document doc;
         doc.SetObject();
@@ -1147,7 +1147,7 @@ void Blockchain::punish_peer(std::shared_ptr<net::p2p::Peer> peer)
                 std::lock_guard<std::mutex> guard(p2p_node->m_score_mutex);
                 p2p_node->m_banned_peers.erase(peer->key());
                 LOG_INFO("unbanned peer: %s", peer->key().c_str());
-            }, 600, true);
+            }, 600000, true);
     }
 }
 
@@ -1655,16 +1655,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(utc > now)
             {
-                uint32 diff = utc - now;
+                uint64 diff = utc - now;
                 
-                // if(diff > 3600)
-                // {
-                //     LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
-                // }
+                if(diff > 3600)
+                {
+                    LOG_DEBUG_WARN("block time too future, diff: %u > 3600, hash: %s, peer key: %s", diff, block_hash.c_str(), peer->key().c_str());
+                }
                 
                 m_timer_ctl.add_timer([=]() {
                         do_brief_chain(pending_chain);
-                    }, diff, true);
+                    }, diff * 1000, true);
             }
             else
             {
@@ -3727,7 +3727,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                                     request->m_attached_chains.pop_front();
                                 }
                             }
-                        }, 1);
+                        }, 1500);
                 }
                 else
                 {
@@ -3981,7 +3981,7 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
                                 request->m_attached_chains.pop_front();
                             }
                         }
-                    }, 1);
+                    }, 1500);
             }
             else
             {
@@ -5670,7 +5670,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             request->m_attached_chains.pop_front();
                         }
                     }
-                }, 1);
+                }, 1500);
         }
         else
         {
@@ -5832,7 +5832,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
                         request->m_attached_chains.pop_front();
                     }
                 }
-            }, 1);
+            }, 1500);
     }
     else
     {
