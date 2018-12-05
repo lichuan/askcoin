@@ -627,8 +627,8 @@ void Blockchain::do_mine()
         {
             rapidjson::Document &doc = *tx->m_doc;
             rapidjson::Value tx_node(rapidjson::kObjectType);
-            tx_node.AddMember("sign", doc["sign"], allocator);
-            tx_node.AddMember("data", doc["data"], allocator);
+            tx_node.AddMember("sign", rapidjson::Value().CopyFrom(doc["sign"], allocator), allocator);
+            tx_node.AddMember("data", rapidjson::Value().CopyFrom(doc["data"], allocator), allocator);
             doc_tx.PushBack(tx_node, allocator);
         }
         
@@ -1428,6 +1428,26 @@ void Blockchain::do_message()
             {
                 if(last_mine_id.load(std::memory_order_relaxed) != mine_id_2.load(std::memory_order_relaxed))
                 {
+                    if(!m_enable_mine.load(std::memory_order_relaxed))
+                    {
+                        continue;
+                    }
+                    
+                    lock.lock();
+                    
+                    if(m_miner_privkey.empty())
+                    {
+                        continue;
+                    }
+
+                    lock.unlock();
+                    std::shared_ptr<Account> miner;
+                    
+                    if(!get_account(m_miner_pubkey, miner))
+                    {
+                        continue;
+                    }
+                    
                     mined_new_block(doc_ptr);
                     last_mine_id.store(mine_id_2.load(std::memory_order_relaxed), std::memory_order_relaxed);
                 }
@@ -1947,7 +1967,7 @@ bool Blockchain::start(std::string db_path)
         {
             ASKCOIN_RETURN false;
         }
-        
+
         if(!doc.HasMember("hash"))
         {
             ASKCOIN_RETURN false;
@@ -1958,6 +1978,34 @@ bool Blockchain::start(std::string db_path)
             ASKCOIN_RETURN false;
         }
 
+        if(!doc["hash"].IsString())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!doc["sign"].IsString())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        std::string block_hash = doc["hash"].GetString();
+        std::string block_sign = doc["sign"].GetString();
+
+        if(!is_base64_char(block_hash))
+        {
+            ASKCOIN_RETURN false;
+        }
+            
+        if(!is_base64_char(block_sign))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(block_hash.length() != 44)
+        {
+            ASKCOIN_RETURN false;
+        }
+        
         if(!doc.HasMember("data"))
         {
             ASKCOIN_RETURN false;
@@ -1979,32 +2027,24 @@ bool Blockchain::start(std::string db_path)
         {
             ASKCOIN_RETURN false;
         }
-    
-        std::string block_hash = doc["hash"].GetString();
-        std::string block_sign = doc["sign"].GetString();
         
-        if(!is_base64_char(block_hash))
-        {
-            ASKCOIN_RETURN false;
-        }
-
-        if(block_hash.length() != 44)
-        {
-            ASKCOIN_RETURN false;
-        }
-
         if(block_hash != child_block.m_hash)
         {
             ASKCOIN_RETURN false;
         }
+
+        const rapidjson::Value &data = doc["data"];
         
-        if(!is_base64_char(block_sign))
+        if(!data.IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(data.MemberCount() != 8)
         {
             ASKCOIN_RETURN false;
         }
         
-        const rapidjson::Value &data = doc["data"];
-    
         if(!data.HasMember("id"))
         {
             ASKCOIN_RETURN false;
@@ -3240,7 +3280,7 @@ void Blockchain::mine_tx()
     }
     
     std::unique_lock<std::mutex> lock(m_mine_mutex);
-
+    
     if(m_miner_privkey.empty())
     {
         return;
@@ -4052,7 +4092,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     
     if(!get_account(miner_pubkey, miner))
     {
-        ASKCOIN_RETURN;
+        ASKCOIN_EXIT(EXIT_FAILURE);
     }
     
     uint64 parent_block_id = m_cur_block->id();
@@ -4943,12 +4983,12 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
 
     if(!children.IsArray())
     {
-        ASKCOIN_RETURN;
+        ASKCOIN_EXIT(EXIT_FAILURE);
     }
-            
+    
     bool exist_in_children = false;
     bool exist_block_hash = true;
-            
+    
     for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
     {
         if(block_hash == iter->GetString())

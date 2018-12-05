@@ -901,10 +901,11 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_state != 3");
             connection->close();
+            peer_unreg->m_connection->close();
             
             return;
         }
-
+        
         if(key_u32 != peer_unreg->m_local_key)
         {
             LOG_DEBUG_ERROR("after recv message cmd REG_VERIFY_REQ, unreg peer m_local_key != key_u32");
@@ -1378,7 +1379,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_broadcast_keys.push_back(key);
             }
             
-            if(block_id > m_cur_block->id() + 5000)
+            if(block_id > m_cur_block->id() + 1000)
             {
                 if(m_broadcast_by_peer_key[key] != 100)
                 {
@@ -1392,6 +1393,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     if(++m_broadcast_by_peer_key[key] > 3)
                     {
                         m_broadcast_by_peer_key[key] = 100; // 100 is a flag, means no need send BLOCK_BROADCAST_1 message
+                        goto no_need_broadcast_1;
                     }
                     
                     rapidjson::Document doc;
@@ -1416,7 +1418,8 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 m_broadcast_by_peer_key[key] = 0;
             }
-            
+
+        no_need_broadcast_1:
             if(!data.HasMember("utc"))
             {
                 punish_peer(peer);
@@ -1719,31 +1722,26 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             uint64 block_id = doc["id"].GetUint64();
-
-            if(block_id >= m_cur_block->id())
-            {
-                ASKCOIN_RETURN;
-            }
-            
             auto iter_block = m_cur_block;
             uint64 iter_block_id = iter_block->id();
             
             while(iter_block_id > 0)
             {
-                if(iter_block_id < block_id + 5000)
+                if(iter_block_id <= block_id + 1000)
                 {
                     break;
                 }
-
+                
                 iter_block = iter_block->get_parent();
                 iter_block_id = iter_block->id();
             }
 
             if(!(iter_block->m_accum_pow > declared_pow))
             {
-                ASKCOIN_RETURN;
+                iter_block = m_most_difficult_block;
+                ASKCOIN_TRACE;
             }
-
+            
             std::string block_hash = iter_block->hash();
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
@@ -3575,7 +3573,6 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
         if(peer->m_connection->closed())
         {
             m_chains_by_peer_key.erase(key);
-            ++iter;
             continue;
         }
         
