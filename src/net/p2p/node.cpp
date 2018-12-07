@@ -92,12 +92,14 @@ void Node::connect_proc()
     while(!m_stop.load(std::memory_order_relaxed))
     {
         uint32 peer_num = 0;
+        uint32 reg_peer_num = 0;
         {
             std::lock_guard<std::mutex> guard(m_peer_mutex);
             peer_num = m_peers.size() + m_unreg_peers.size();
+            reg_peer_num = m_peers.size();
         }
         
-        if(peer_num >= m_max_conn)
+        if(peer_num >= m_max_conn / 2)
         {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             ASKCOIN_TRACE;
@@ -202,18 +204,6 @@ bool Node::init_verify(std::shared_ptr<fly::net::Connection<Json>> connection, u
     
     if(peer_num > m_max_conn)
     {
-        std::unique_lock<std::mutex> lock(m_peer_mutex);
-        auto iter_unreg = m_unreg_peers.find(id);
-        
-        if(iter_unreg == m_unreg_peers.end())
-        {
-            return false;
-        }
-        
-        auto peer = iter_unreg->second;
-        m_unreg_peers.erase(id);
-        lock.unlock();
-        m_timer_ctl.del_timer(peer->m_timer_id);
         return false;
     }
     
@@ -1112,9 +1102,34 @@ void Node::broadcast(rapidjson::Document &doc)
     }
     else
     {
-        for(auto &p : m_peers)
+        if(m_peers.size() > 100)
         {
-            p.second->m_connection->send(buffer.GetString(), buffer.GetSize());
+            std::vector<std::shared_ptr<Peer>> vec;
+
+            for(auto &p : m_peers)
+            {
+                vec.push_back(p.second);
+            }
+            
+            std::random_shuffle(vec.begin(), vec.end());
+            uint32 cnt = 0;
+
+            for(auto &peer : vec)
+            {
+                if(++cnt > 100)
+                {
+                    break;
+                }
+
+                peer->m_connection->send(buffer.GetString(), buffer.GetSize());
+            }
+        }
+        else
+        {
+            for(auto &p : m_peers)
+            {
+                p.second->m_connection->send(buffer.GetString(), buffer.GetSize());
+            }
         }
     }
 }
@@ -1224,12 +1239,6 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     {
         if(cmd == net::p2p::BLOCK_BROADCAST)
         {
-            if(doc.MemberCount() != 6)
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
@@ -1364,6 +1373,53 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            bool have_ratio = false;
+            uint32 DISTANCE = 1000;
+            
+            if(doc.HasMember("ratio"))
+            {
+                if(doc.MemberCount() != 7)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["ratio"].IsUint())
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 ratio = doc["ratio"].GetUint();
+                
+                if(ratio == 1)
+                {
+                }
+                else if(ratio == 2)
+                {
+                    DISTANCE *= 10;
+                }
+                else if(ratio == 3)
+                {
+                    DISTANCE *= 100;
+                }
+                else
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+                
+                have_ratio = true;
+            }
+            else
+            {
+                if(doc.MemberCount() != 6)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             if(m_broadcast_keys.size() > 1000000)
             {
                 m_broadcast_by_peer_key.erase(m_broadcast_keys.front());
@@ -1379,7 +1435,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_broadcast_keys.push_back(key);
             }
             
-            if(block_id > m_cur_block->id() + 1000)
+            if(block_id > m_cur_block->id() + DISTANCE)
             {
                 if(m_broadcast_by_peer_key[key] != 100)
                 {
@@ -1389,11 +1445,23 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                     {
                         ASKCOIN_RETURN;
                     }
-                    
-                    if(++m_broadcast_by_peer_key[key] > 3)
+
+                    if(have_ratio)
                     {
-                        m_broadcast_by_peer_key[key] = 100; // 100 is a flag, means no need send BLOCK_BROADCAST_1 message
-                        goto no_need_broadcast_1;
+                        if(++m_broadcast_by_peer_key[key] > 3)
+                        {
+                            m_broadcast_by_peer_key[key] = 100; // 100 is a flag, means no need send BLOCK_BROADCAST_1 message
+                            goto no_need_broadcast_1;
+                        }
+                    }
+                    else
+                    {
+                        if(m_broadcast_by_peer_key[key] >= 1)
+                        {
+                            ASKCOIN_RETURN;
+                        }
+                        
+                        ++m_broadcast_by_peer_key[key];
                     }
                     
                     rapidjson::Document doc;
@@ -1410,6 +1478,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     
                     doc.AddMember("pow", pow_arr, allocator);
                     doc.AddMember("id", m_cur_block->id(), allocator);
+                    doc.AddMember("ratio", m_broadcast_by_peer_key[key], allocator);
                     connection->send(doc);
                     ASKCOIN_RETURN;
                 }
@@ -1720,14 +1789,46 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
+
+            if(!doc.HasMember("ratio"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["ratio"].IsUint())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
             
             uint64 block_id = doc["id"].GetUint64();
-            auto iter_block = m_cur_block;
+            uint32 ratio = doc["ratio"].GetUint();
+            uint32 DISTANCE = 1000;
+
+            if(ratio == 1)
+            {
+            }
+            else if(ratio == 2)
+            {
+                DISTANCE *= 10;
+            }
+            else if(ratio == 3)
+            {
+                DISTANCE *= 100;
+            }
+            else
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            auto iter_block = m_most_difficult_block;
             uint64 iter_block_id = iter_block->id();
             
             while(iter_block_id > 0)
             {
-                if(iter_block_id <= block_id + 1000)
+                if(iter_block_id <= block_id + DISTANCE)
                 {
                     break;
                 }
@@ -1791,6 +1892,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             doc_rsp.AddMember("pow", pow_arr, allocator);
             doc_rsp.AddMember("data", data, allocator);
+            doc_rsp.AddMember("ratio", ratio, allocator);
             connection->send(doc_rsp);
         }
         else if(cmd == net::p2p::BLOCK_BRIEF_REQ)
