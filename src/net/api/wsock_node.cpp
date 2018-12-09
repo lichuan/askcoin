@@ -581,7 +581,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             
             for(auto history : account->m_history)
             {
-                rapidjson::Value obj;
+                rapidjson::Value obj(rapidjson::kObjectType);
                 obj.AddMember("type", history->m_type, allocator);
                 obj.AddMember("change", history->m_change, allocator);
                 obj.AddMember("target_id", history->m_target_id, allocator);
@@ -1473,14 +1473,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             
             auto iter_block = iter->second->get_parent();
             
-            if(iter_block)
+            if(!iter_block)
             {
-                if(!iter_block->m_in_main_chain)
-                {
-                    ASKCOIN_RETURN;
-                }
+                ASKCOIN_RETURN;
             }
-
+            
+            if(!iter_block->m_in_main_chain)
+            {
+                ASKCOIN_RETURN;
+            }
+            
             auto count = 0;
             rapidjson::Document doc;
             doc.SetObject();
@@ -1659,7 +1661,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 for(uint32 i = 0; i < tx_num; ++i)
                 {
                     std::string tx_id = tx_ids[i].GetString();
-                    tx_list.PushBack(rapidjson::StringRef(tx_id.c_str()), allocator);
+                    tx_list.PushBack(rapidjson::Value(tx_id.c_str(), allocator), allocator);
                 }
             }
             
@@ -2012,6 +2014,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
             doc.AddMember("avatar", account->avatar(), allocator);
             doc.AddMember("balance", account->get_balance(), allocator);
+            doc.AddMember("reg_block_id", account->block_id(), allocator);
             doc.AddMember("pubkey", rapidjson::StringRef(account->pubkey().c_str()), allocator);
             auto referrer = account->get_referrer();
             
@@ -2020,7 +2023,23 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("referrer_name", rapidjson::StringRef(referrer->name().c_str()), allocator);
                 doc.AddMember("referrer_pubkey", rapidjson::StringRef(referrer->pubkey().c_str()), allocator);
             }
+
+            rapidjson::Value tx_list(rapidjson::kArrayType);
+
+            for(auto history : account->m_history)
+            {
+                if(history->m_type == HISTORY_MINER_TX_REWARD || history->m_type == HISTORY_MINER_BLOCK_REWARD)
+                {
+                    continue;
+                }
+                
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("tx", rapidjson::StringRef(history->m_tx_id.c_str()), allocator);
+                obj.AddMember("utc", history->m_utc, allocator);
+                tx_list.PushBack(obj, allocator);
+            }
             
+            doc.AddMember("txs", tx_list, allocator);
             connection->send(doc);
         }
         else if(cmd == net::api::EXPLORER_QUERY)
@@ -2206,7 +2225,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     for(uint32 i = 0; i < tx_num; ++i)
                     {
                         std::string tx_id = tx_ids[i].GetString();
-                        tx_list.PushBack(rapidjson::StringRef(tx_id.c_str()), allocator);
+                        tx_list.PushBack(rapidjson::Value(tx_id.c_str(), allocator), allocator);
                     }
                 }
                 

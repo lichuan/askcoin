@@ -1222,7 +1222,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
 
         if(reg_name != register_name)
         {
-            printf("parse reg_sign failed, name: %s is not the same as the name in sign: %s\n>", register_name.c_str(), reg_name.c_str());
+            printf("parse reg_sign failed, name: %s(base64) is not the same as the name in sign: %s(base64)\n>", register_name.c_str(), reg_name.c_str());
             return;
         }
         

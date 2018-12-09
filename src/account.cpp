@@ -73,7 +73,7 @@ void Account::add_history(std::shared_ptr<History> history, uint64 cur_block_id)
         {
             auto h = m_history.front();
 
-            if(h->m_block_id + TOPIC_LIFE_TIME < cur_block_id)
+            if(h->m_block_id + TOPIC_LIFE_TIME * 10 < cur_block_id)
             {
                 m_history.pop_front();
             }
@@ -106,7 +106,7 @@ void Account::proc_history_expired(uint64 cur_block_id)
     {
         auto h = m_history.front();
         
-        if(h->m_block_id + TOPIC_LIFE_TIME < cur_block_id)
+        if(h->m_block_id + TOPIC_LIFE_TIME * 10 < cur_block_id)
         {
             m_history.pop_front();
         }
