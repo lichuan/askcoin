@@ -65,25 +65,8 @@ uint32 Account::avatar()
     return m_avatar;
 }
 
-void Account::add_history(std::shared_ptr<History> history, uint64 cur_block_id)
+void Account::add_history(std::shared_ptr<History> history)
 {
-    if(cur_block_id > 0)
-    {
-        while(!m_history.empty())
-        {
-            auto h = m_history.front();
-
-            if(h->m_block_id + TOPIC_LIFE_TIME * 10 < cur_block_id)
-            {
-                m_history.pop_front();
-            }
-            else
-            {
-                break;
-            }
-        }
-    }
-    
     m_history.push_back(history);
     
     while(m_history.size() > 200)
@@ -106,7 +89,7 @@ void Account::proc_history_expired(uint64 cur_block_id)
     {
         auto h = m_history.front();
         
-        if(h->m_block_id + TOPIC_LIFE_TIME * 10 < cur_block_id)
+        if(h->m_block_id + TOPIC_LIFE_TIME * 30 < cur_block_id)
         {
             m_history.pop_front();
         }

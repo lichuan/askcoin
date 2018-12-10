@@ -1863,8 +1863,17 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     uint32 tx_type = data["type"].GetUint();
                     doc.AddMember("type", tx_type, allocator);
                     doc.AddMember("utc", tx_utc, allocator);
-                    doc.AddMember("pubkey", rapidjson::StringRef(pubkey.c_str()), allocator);
-                    doc.AddMember("raw", rapidjson::StringRef(raw_data.c_str()), allocator);
+                    doc.AddMember("tx_hash", rapidjson::Value(tx_id.c_str(), allocator), allocator);
+                    doc.AddMember("pubkey", rapidjson::Value(pubkey.c_str(), allocator), allocator);
+                    doc.AddMember("raw", rapidjson::Value(raw_data.c_str(), allocator), allocator);
+                    std::shared_ptr<Account> account;
+                        
+                    if(!get_account(pubkey, account))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    doc.AddMember("owner", rapidjson::StringRef(account->name().c_str()), allocator);
                     
                     if(tx_type == 1) // register account
                     {
@@ -1875,27 +1884,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         std::shared_ptr<Account> referrer;
                         get_account(referrer_pubkey, referrer);
                         uint32 avatar = data["avatar"].GetUint();
-                        doc.AddMember("name", rapidjson::StringRef(register_name.c_str()), allocator);
+                        doc.AddMember("name", rapidjson::Value(register_name.c_str(), allocator), allocator);
                         doc.AddMember("avatar", avatar, allocator);
-                        doc.AddMember("referrer", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                        doc.AddMember("referrer_name", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                        doc.AddMember("referrer_pubkey", rapidjson::StringRef(referrer_pubkey.c_str()), allocator);
                     }
                     else
                     {
-                        std::shared_ptr<Account> account;
-                        
-                        if(!get_account(pubkey, account))
-                        {
-                            ASKCOIN_EXIT(EXIT_FAILURE);
-                        }
-                        
-                        doc.AddMember("owner", rapidjson::StringRef(account->name().c_str()), allocator);
-                        
                         if(tx_type == 2) // send coin
                         {
                             if(data.HasMember("memo"))
                             {
                                 std::string memo = data["memo"].GetString();
-                                doc.AddMember("memo", rapidjson::StringRef(memo.c_str()), allocator);
+                                doc.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
                             }
                             
                             uint64 amount = data["amount"].GetUint64();
@@ -1908,7 +1909,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             }
                             
                             doc.AddMember("receiver", rapidjson::StringRef(receiver->name().c_str()), allocator);
-                            doc.AddMember("receiver_pubkey", rapidjson::StringRef(receiver_pubkey.c_str()), allocator);
+                            doc.AddMember("receiver_pubkey", rapidjson::Value(receiver_pubkey.c_str(), allocator), allocator);
                             doc.AddMember("amount", amount, allocator);
                         }
                         else if(tx_type == 3) // new topic
@@ -2035,6 +2036,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 rapidjson::Value obj(rapidjson::kObjectType);
                 obj.AddMember("tx", rapidjson::StringRef(history->m_tx_id.c_str()), allocator);
+                obj.AddMember("block_hash", rapidjson::StringRef(history->m_block_hash.c_str()), allocator);
                 obj.AddMember("utc", history->m_utc, allocator);
                 tx_list.PushBack(obj, allocator);
             }

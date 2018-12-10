@@ -41,7 +41,7 @@ public:
     std::shared_ptr<Account> get_referrer();
     uint64 get_balance();
     uint64 block_id();
-    void add_history(std::shared_ptr<History> history, uint64 cur_block_id = 0);
+    void add_history(std::shared_ptr<History> history);
     void pop_history();
     void proc_history_expired(uint64 cur_block_id);
     bool joined_topic(std::shared_ptr<Topic> topic);

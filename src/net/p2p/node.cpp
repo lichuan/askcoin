@@ -4518,6 +4518,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         referrer_referrer->add_balance(1);
                         auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                         history->m_block_id = cur_block_id;
+                        history->m_block_hash = block_hash;
                         history->m_change = 1;
                         history->m_target_id = referrer->id();
                         history->m_target_avatar = referrer->avatar();
@@ -4536,6 +4537,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     accounts_to_notify.push_back(reg_account);
                     auto history = std::make_shared<History>(HISTORY_REG_FEE);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 2;
                     history->m_target_id = reg_account->id();
                     history->m_target_avatar = reg_account->avatar();
@@ -4630,6 +4632,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         referrer->add_balance(1);
                         auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                         history->m_block_id = cur_block_id;
+                        history->m_block_hash = block_hash;
                         history->m_change = 1;
                         history->m_target_id = account->id();
                         history->m_target_avatar = account->avatar();
@@ -4642,6 +4645,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     account->sub_balance(2);
                     auto history = std::make_shared<History>();
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 2;
                     history->m_utc = utc;
                     history->m_tx_id = tx_id;
@@ -4803,6 +4807,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         account->sub_balance(amount);
                         receiver->add_balance(amount);
                         history_to->m_block_id = cur_block_id;
+                        history_to->m_block_hash = block_hash;
                         history_to->m_change = amount;
                         history_to->m_utc = utc;
                         history_to->m_target_id = receiver->id();
@@ -4811,6 +4816,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history_to->m_tx_id = tx_id;
                         account->add_history(history_to);
                         history_from->m_block_id = cur_block_id;
+                        history_from->m_block_hash = block_hash;
                         history_from->m_change = amount;
                         history_from->m_utc = utc;
                         history_from->m_target_id = account->id();
@@ -4926,6 +4932,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         topics_to_broadcast.push_back(topic);
                         auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
                         history->m_block_id = cur_block_id;
+                        history->m_block_hash = block_hash;
                         history->m_change = reward;
                         history->m_utc = utc;
                         history->m_tx_id = tx_id;
@@ -5276,6 +5283,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         topic->m_reply_list.push_back(reply);
                         auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
                         history->m_block_id = cur_block_id;
+                        history->m_block_hash = block_hash;
                         history->m_change = amount;
                         history->m_utc = utc;
                         history->m_target_id = account->id();
@@ -5466,6 +5474,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 miner->add_balance(tx_num);
                 auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = tx_num;
                 history->m_utc = utc;
                 miner->add_history(history);
@@ -5478,6 +5487,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 cur_block->m_miner_reward = true;
                 auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 5000;
                 history->m_utc = utc;
                 miner->add_history(history);

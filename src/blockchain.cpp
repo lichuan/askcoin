@@ -2322,8 +2322,9 @@ bool Blockchain::start(std::string db_path)
     {
         iter_block = block_chain.front();
         uint64 cur_block_id = iter_block->id();
+        std::string block_hash = iter_block->hash();
         std::string block_data;
-        s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+        s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
         
         if(!s.ok())
         {
@@ -2628,6 +2629,7 @@ bool Blockchain::start(std::string db_path)
                     referrer_referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = referrer->id();
                     history->m_target_avatar = referrer->avatar();
@@ -2682,6 +2684,7 @@ bool Blockchain::start(std::string db_path)
                 reg_account->set_referrer(referrer);
                 auto history = std::make_shared<History>(HISTORY_REG_FEE);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_target_id = reg_account->id();
                 history->m_target_avatar = reg_account->avatar();
@@ -2749,6 +2752,7 @@ bool Blockchain::start(std::string db_path)
                     referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = account->id();
                     history->m_target_avatar = account->avatar();
@@ -2760,6 +2764,7 @@ bool Blockchain::start(std::string db_path)
 
                 auto history = std::make_shared<History>();
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
@@ -2833,6 +2838,7 @@ bool Blockchain::start(std::string db_path)
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
                     history_to->m_block_id = cur_block_id;
+                    history_to->m_block_hash = block_hash;
                     history_to->m_change = amount;
                     history_to->m_utc = utc;
                     history_to->m_target_id = receiver->id();
@@ -2841,6 +2847,7 @@ bool Blockchain::start(std::string db_path)
                     history_to->m_tx_id = tx_id;
                     account->add_history(history_to);
                     history_from->m_block_id = cur_block_id;
+                    history_from->m_block_hash = block_hash;
                     history_from->m_change = amount;
                     history_from->m_utc = utc;
                     history_from->m_target_id = account->id();
@@ -2902,6 +2909,7 @@ bool Blockchain::start(std::string db_path)
                     m_topics.insert(std::make_pair(tx_id, topic));
                     auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = reward;
                     history->m_utc = utc;
                     history->m_tx_id = tx_id;
@@ -3073,6 +3081,7 @@ bool Blockchain::start(std::string db_path)
                     topic->m_reply_list.push_back(reply);
                     auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = amount;
                     history->m_utc = utc;
                     history->m_target_id = account->id();
@@ -3097,6 +3106,7 @@ bool Blockchain::start(std::string db_path)
             miner->add_balance(tx_num);
             auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = tx_num;
             history->m_utc = utc;
             miner->add_history(history);
@@ -3109,6 +3119,7 @@ bool Blockchain::start(std::string db_path)
             iter_block->m_miner_reward = true;
             auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = 5000;
             history->m_utc = utc;
             miner->add_history(history);
@@ -4385,6 +4396,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 referrer_referrer->add_balance(1);
                 auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 1;
                 history->m_target_id = referrer->id();
                 history->m_target_avatar = referrer->avatar();
@@ -4403,6 +4415,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             notify_register_account(reg_account);
             auto history = std::make_shared<History>(HISTORY_REG_FEE);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = 2;
             history->m_target_id = reg_account->id();
             history->m_target_avatar = reg_account->avatar();
@@ -4479,6 +4492,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 referrer->add_balance(1);
                 auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 1;
                 history->m_target_id = account->id();
                 history->m_target_avatar = account->avatar();
@@ -4491,6 +4505,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             account->sub_balance(2);
             auto history = std::make_shared<History>();
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = 2;
             history->m_utc = utc;
             history->m_tx_id = tx_id;
@@ -4584,6 +4599,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 account->sub_balance(amount);
                 receiver->add_balance(amount);
                 history_to->m_block_id = cur_block_id;
+                history_to->m_block_hash = block_hash;
                 history_to->m_change = amount;
                 history_to->m_utc = utc;
                 history_to->m_target_id = receiver->id();
@@ -4592,6 +4608,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 history_to->m_tx_id = tx_id;
                 account->add_history(history_to);
                 history_from->m_block_id = cur_block_id;
+                history_from->m_block_hash = block_hash;
                 history_from->m_change = amount;
                 history_from->m_utc = utc;
                 history_from->m_target_id = account->id();
@@ -4669,6 +4686,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 broadcast_new_topic(topic);
                 auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = reward;
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
@@ -4897,6 +4915,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 topic->m_reply_list.push_back(reply);
                 auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = amount;
                 history->m_utc = utc;
                 history->m_target_id = account->id();
@@ -4921,6 +4940,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         miner->add_balance(tx_num);
         auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
         history->m_block_id = cur_block_id;
+        history->m_block_hash = block_hash;
         history->m_change = tx_num;
         history->m_utc = utc;
         miner->add_history(history);
@@ -4933,6 +4953,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         cur_block->m_miner_reward = true;
         auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
         history->m_block_id = cur_block_id;
+        history->m_block_hash = block_hash;
         history->m_change = 5000;
         history->m_utc = utc;
         miner->add_history(history);
@@ -6237,6 +6258,7 @@ void Blockchain::switch_to_most_difficult()
                     referrer_referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = referrer->id();
                     history->m_target_avatar = referrer->avatar();
@@ -6292,6 +6314,7 @@ void Blockchain::switch_to_most_difficult()
                 notify_register_account(reg_account);
                 auto history = std::make_shared<History>(HISTORY_REG_FEE);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_target_id = reg_account->id();
                 history->m_target_avatar = reg_account->avatar();
@@ -6359,6 +6382,7 @@ void Blockchain::switch_to_most_difficult()
                     referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = account->id();
                     history->m_target_avatar = account->avatar();
@@ -6370,6 +6394,7 @@ void Blockchain::switch_to_most_difficult()
 
                 auto history = std::make_shared<History>();
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
@@ -6443,6 +6468,7 @@ void Blockchain::switch_to_most_difficult()
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
                     history_to->m_block_id = cur_block_id;
+                    history_to->m_block_hash = block_hash;
                     history_to->m_change = amount;
                     history_to->m_utc = utc;
                     history_to->m_target_id = receiver->id();
@@ -6451,6 +6477,7 @@ void Blockchain::switch_to_most_difficult()
                     history_to->m_tx_id = tx_id;
                     account->add_history(history_to);
                     history_from->m_block_id = cur_block_id;
+                    history_from->m_block_hash = block_hash;
                     history_from->m_change = amount;
                     history_from->m_utc = utc;
                     history_from->m_target_id = account->id();
@@ -6513,6 +6540,7 @@ void Blockchain::switch_to_most_difficult()
                     broadcast_new_topic(topic);
                     auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = reward;
                     history->m_utc = utc;
                     history->m_tx_id = tx_id;
@@ -6684,6 +6712,7 @@ void Blockchain::switch_to_most_difficult()
                     topic->m_reply_list.push_back(reply);
                     auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = amount;
                     history->m_utc = utc;
                     history->m_target_id = account->id();
@@ -6708,6 +6737,7 @@ void Blockchain::switch_to_most_difficult()
             miner->add_balance(tx_num);
             auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = tx_num;
             history->m_utc = utc;
             miner->add_history(history);
@@ -6720,6 +6750,7 @@ void Blockchain::switch_to_most_difficult()
             iter_block->m_miner_reward = true;
             auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = 5000;
             history->m_utc = utc;
             miner->add_history(history);
@@ -7215,6 +7246,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     referrer_referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = referrer->id();
                     history->m_target_avatar = referrer->avatar();
@@ -7270,6 +7302,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 notify_register_account(reg_account);
                 auto history = std::make_shared<History>(HISTORY_REG_FEE);
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_target_id = reg_account->id();
                 history->m_target_avatar = reg_account->avatar();
@@ -7337,6 +7370,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     referrer->add_balance(1);
                     auto history = std::make_shared<History>(HISTORY_REFERRER_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = 1;
                     history->m_target_id = account->id();
                     history->m_target_avatar = account->avatar();
@@ -7348,6 +7382,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
 
                 auto history = std::make_shared<History>();
                 history->m_block_id = cur_block_id;
+                history->m_block_hash = block_hash;
                 history->m_change = 2;
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
@@ -7421,6 +7456,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     account->sub_balance(amount);
                     receiver->add_balance(amount);
                     history_to->m_block_id = cur_block_id;
+                    history_to->m_block_hash = block_hash;
                     history_to->m_change = amount;
                     history_to->m_utc = utc;
                     history_to->m_target_id = receiver->id();
@@ -7429,6 +7465,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     history_to->m_tx_id = tx_id;
                     account->add_history(history_to);
                     history_from->m_block_id = cur_block_id;
+                    history_from->m_block_hash = block_hash;
                     history_from->m_change = amount;
                     history_from->m_utc = utc;
                     history_from->m_target_id = account->id();
@@ -7491,6 +7528,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     broadcast_new_topic(topic);
                     auto history = std::make_shared<History>(HISTORY_NEW_TOPIC_REWARD);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = reward;
                     history->m_utc = utc;
                     history->m_tx_id = tx_id;
@@ -7662,6 +7700,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     topic->m_reply_list.push_back(reply);
                     auto history = std::make_shared<History>(HISTORY_REWARD_FROM);
                     history->m_block_id = cur_block_id;
+                    history->m_block_hash = block_hash;
                     history->m_change = amount;
                     history->m_utc = utc;
                     history->m_target_id = account->id();
@@ -7686,6 +7725,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
             miner->add_balance(tx_num);
             auto history = std::make_shared<History>(HISTORY_MINER_TX_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = tx_num;
             history->m_utc = utc;
             miner->add_history(history);
@@ -7698,6 +7738,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
             iter_block->m_miner_reward = true;
             auto history = std::make_shared<History>(HISTORY_MINER_BLOCK_REWARD);
             history->m_block_id = cur_block_id;
+            history->m_block_hash = block_hash;
             history->m_change = 5000;
             history->m_utc = utc;
             miner->add_history(history);
