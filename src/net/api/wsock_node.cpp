@@ -1920,54 +1920,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         }
                         else if(tx_type == 4) // reply
                         {
-                            std::string topic_key = data["topic_key"].GetString();
-                            std::shared_ptr<Topic> topic;
-                            
-                            if(!get_topic(topic_key, topic))
-                            {
-                                ASKCOIN_EXIT(EXIT_FAILURE);
-                            }
-
-                            if(data.HasMember("reply_to"))
-                            {
-                                std::string reply_to_key = data["reply_to"].GetString();
-                                std::shared_ptr<Reply> reply_to;
-                        
-                                if(!topic->get_reply(reply_to_key, reply_to))
-                                {
-                                    ASKCOIN_EXIT(EXIT_FAILURE);
-                                }
-
-                                doc.AddMember("reply_to", rapidjson::StringRef(reply_to->get_owner()->name().c_str()), allocator);
-                                doc.AddMember("reply_to_pubkey", rapidjson::StringRef(reply_to->get_owner()->pubkey().c_str()), allocator);
-                            }
                         }
                         else if(tx_type == 5) // reward
                         {
-                            std::string topic_key = data["topic_key"].GetString();
-                            std::shared_ptr<Topic> topic;
-                            
-                            if(!get_topic(topic_key, topic))
-                            {
-                                ASKCOIN_EXIT(EXIT_FAILURE);
-                            }
-
-                            if(topic->get_owner() != account)
-                            {
-                                ASKCOIN_EXIT(EXIT_FAILURE);
-                            }
-
                             uint64 amount = data["amount"].GetUint64();
-                            std::string reply_to_key = data["reply_to"].GetString();
-                            std::shared_ptr<Reply> reply_to;
-                        
-                            if(!topic->get_reply(reply_to_key, reply_to))
-                            {
-                                ASKCOIN_EXIT(EXIT_FAILURE);
-                            }
-                            
-                            doc.AddMember("reward_to", rapidjson::StringRef(reply_to->get_owner()->name().c_str()), allocator);
-                            doc.AddMember("reward_to_pubkey", rapidjson::StringRef(reply_to->get_owner()->pubkey().c_str()), allocator);
                             doc.AddMember("reward", amount, allocator);
                         }
                     }
