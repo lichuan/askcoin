@@ -79,3 +79,15 @@ The configuration file (config.json) for askcoin is as follows:
 - network.websocket.port:  websocket port that mobile app and explorer can connect to.
 - network.websocket.max_conn:  maximum number of websocket connections allowed.
 - network.websocket.open:  whether to open websocket service.
+
+
+
+## Max open files
+
+On the Linux system, you can get the limit of the number of open files on the current system by typing the following commands:
+
+```bash
+ulimit -a
+```
+
+![max open files](files_limit.jpg)
