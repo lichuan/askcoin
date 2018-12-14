@@ -75,7 +75,7 @@ The configuration file (config.json) for askcoin is as follows:
 - network.p2p.port:  port number for P2P network communication.
 - network.p2p.max_conn:  maximum number of P2P network connections allowed.
 - network.p2p.init_peer:  initial peer nodes in P2P networks.
-- network.websocket.host:  websocket address that mobile app and explorer can connect to. If you only want to provide internal network access, you can set this address as a LAN address (192.168.1.234, for example).
+- network.websocket.host:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a LAN address (192.168.1.234, for example).
 - network.websocket.port:  websocket port that mobile app and explorer can connect to.
 - network.websocket.max_conn:  maximum number of websocket connections allowed.
 - network.websocket.open:  whether to open websocket service.
@@ -90,4 +90,44 @@ On the Linux system, you can get the limit of the number of open files on the cu
 ulimit -a
 ```
 
-![max open files](files_limit.jpg)
+![max open files](res/files_limit.jpg)
+
+If you want to provide websocket service on the full node to a large number of mobile app users, you need to increase the maximum number of open files allowed by the system. Here are two ways to do this:
+
+- modify the */etc/security/limits.conf* file (you can get how to do it by google)
+- start askcoin by running the *start.sh* script in the release package
+
+The following is the content of the **start.sh** script file:
+
+```bash
+#!/bin/bash
+ulimit -HSn 50000
+./askcoin
+```
+
+
+
+## Firewall ports
+
+As described in the **configuration** section above, askcoin needs to open two ports in the firewall:
+
+- P2P communication port (default 18050)
+- Websocket service port (default 19050)
+
+
+
+## Account model
+
+Unlike Bitcoin, askcoin uses an account model, so before using askcoin, you have to register an account in the block chain. In askcoin, there are five types of transactions:
+
+1. Register an account
+2. transfer
+3. Ask a question (or topic)
+4. Reply to a question
+5. Reward a reply
+
+In order to prevent DDoS attacks, 2 ASK fees are deducted from the initiator of each transaction. But if you are registering an account, who will pay for it? That's what your referrer should do.
+
+In askcoin, if you want to register an account, you need to enter your username, avatar, and the string signed by your referrer. When the full node receives your registration request, it will deduct 2 ASK from your referrer's account.
+
+Of the 2 ASK fees paid for each transaction you initiate since then, 1 ASK will be paid to the miner's account that put the transaction in the block, and another 1 ASK will be paid to your referrer's account.
