@@ -1245,7 +1245,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-
                 
                 auto block = m_blocks[block_hash];
                 auto reply_begin = *topic->m_reply_list.begin();
@@ -1312,6 +1311,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             
                             for(; iter != topic->m_reply_list.end(); ++iter)
                             {
+                                auto reply = *iter;
                                 auto owner = reply->get_owner();
                                 auto block = reply->m_block;
                                 auto &block_hash = block->hash();
