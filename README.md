@@ -117,7 +117,7 @@ ulimit -HSn 50000
 
 ## Firewall ports
 
-As described in the **configuration** section above, askcoin needs to open two ports in the firewall:
+As described in the ***configuration*** section above, askcoin needs to open two ports in the firewall:
 
 - P2P communication port (default 18050)
 - Websocket service port (default 19050)
@@ -183,3 +183,34 @@ If you want to be a miner, you need to do the following steps:
    When you register successfully, your account will automatically start mining, you can stop mining by executing the ***enable_mine*** command:
 
    ![enable_mine](res/enable_mine.jpg)
+
+
+
+
+
+## Build
+
+Askcoin is built through scons (2.5.1 compatible version). On CentOS 7.4, you can install it by running the following command:
+
+```shell
+yum install scons
+```
+
+The source code of askcoin will be open after it has passed its infancy, in order to protect its originality.
+
+
+
+
+
+## Big data on the chain
+
+
+
+
+
+
+
+
+
+
+
