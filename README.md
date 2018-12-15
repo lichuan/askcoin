@@ -72,17 +72,17 @@ The configuration file (config.json) for askcoin is as follows:
 }
 ```
 
-- **log_level**:  control the level of the log and the corresponding output content, its value can be "fatal", "error", "warn", "info", "debug".
-- **log_path**:  the directory in which the log files are stored.
-- **db_path**:  directory for storing leveldb database files.
-- **network.p2p.host**:  host address for P2P network communication (IP or domain name).
-- **network.p2p.port**:  port number for P2P network communication.
-- **network.p2p.max_conn**:  maximum number of P2P network connections allowed.
-- **network.p2p.init_peer**:  initial peer nodes in P2P networks.
-- **network.websocket.host**:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a LAN address (192.168.1.234, for example).
-- **network.websocket.port**:  websocket port that mobile app or explorer can connect to.
-- **network.websocket.max_conn**:  maximum number of websocket connections allowed.
-- **network.websocket.open**:  whether to open websocket service.
+- ***log_level***:  control the level of the log and the corresponding output content, its value can be "fatal", "error", "warn", "info", "debug".
+- ***log_path***:  the directory in which the log files are stored.
+- ***db_path***:  directory for storing leveldb database files.
+- ***network.p2p.host***:  host address for P2P network communication (IP or domain name).
+- ***network.p2p.port***:  port number for P2P network communication.
+- ***network.p2p.max_conn***:  maximum number of P2P network connections allowed.
+- ***network.p2p.init_peer***:  initial peer nodes in P2P networks.
+- ***network.websocket.host***:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a LAN address (192.168.1.234, for example).
+- ***network.websocket.port***:  websocket port that mobile app or explorer can connect to.
+- ***network.websocket.max_conn***:  maximum number of websocket connections allowed.
+- ***network.websocket.open***:  whether to open websocket service.
 
 
 
