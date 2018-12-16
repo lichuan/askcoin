@@ -196,7 +196,16 @@ Askcoin is built through scons (2.5.1 compatible version). On CentOS 7.4, you ca
 yum install scons
 ```
 
-The source code of askcoin will be open after it has passed its infancy, in order to protect its originality.
+The source code of askcoin will be open after it has passed its infancy in order to protect its originality.
+
+
+
+
+
+## Explorer & Mobile app
+
+- Block explorer: https://github.com/lichuan/askcoin-explorer
+- Mobile app: https://github.com/lichuan/askcoin-client
 
 
 
@@ -204,9 +213,9 @@ The source code of askcoin will be open after it has passed its infancy, in orde
 
 ## Big data on the chain
 
+With more and more users and transactions, the data on the block chain will become larger and larger. This will bring higher and higher costs to the people who run the full node. In fact, since the beginning of askcoin's design, the problem of data expansion on the chain has been considered. Askcoin is designed to focus on decentralization and real-time Q&A, the lifetime of each topic (or question) is about one day (equivalent to 4320 block intervals). When you run askcoin for several years, the amount of data on the chain may exceed what you can accept, you can freely cut out the expired topics from the chain and choose a widely accepted block as the merging point. You can safely delete all previous blocks, just keep all account information generated until the merge point. This process is also called pruning and merging. As long as the protocol of communication between all nodes remains unchanged or compatible, there will be no adverse impact.
 
-
-
+![merge](res/merge.jpg)
 
 
 
