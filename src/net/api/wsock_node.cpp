@@ -1851,7 +1851,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     uint64 tx_utc = data["utc"].GetUint64();
                     rapidjson::StringBuffer buffer;
                     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                    data.Accept(writer);
+                    tx_node.Accept(writer);
                     std::string raw_data(buffer.GetString(), buffer.GetSize());
                     std::string pubkey = data["pubkey"].GetString();
                     
