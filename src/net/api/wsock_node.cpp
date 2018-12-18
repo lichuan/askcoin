@@ -32,7 +32,7 @@ bool Wsock_Node::start(std::string host, uint16 port)
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
                                                                                 std::bind(&Wsock_Node::be_closed, this, _1),
-                                                                                cpu_num, 1000));
+                                                                                cpu_num, 1840));
     if(server->start())
     {
         CONSOLE_LOG_INFO("start websocket node success");
@@ -2878,7 +2878,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            if(topic_data.length() < 4 || topic_data.length() > 400)
+            if(topic_data.length() < 4 || topic_data.length() > 1336)
             {
                 connection->close();
                 ASKCOIN_RETURN;
@@ -2961,7 +2961,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
-            if(reply_data.length() < 4 || reply_data.length() > 400)
+            if(reply_data.length() < 4 || reply_data.length() > 1336)
             {
                 connection->close();
                 ASKCOIN_RETURN;

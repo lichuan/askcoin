@@ -1504,7 +1504,7 @@ bool Blockchain::start(std::string db_path)
     leveldb::Options options;
     options.create_if_missing = true;
     options.max_open_files = 50000;
-    options.max_file_size = 50 * (1 << 20);
+    options.max_file_size = 100 * (1 << 20);
     leveldb::Status s;
     
     // s = leveldb::RepairDB(db_path, options);
@@ -2891,7 +2891,7 @@ bool Blockchain::start(std::string db_path)
                         ASKCOIN_RETURN false;
                     }
 
-                    if(topic_data.length() < 4 || topic_data.length() > 400)
+                    if(topic_data.length() < 4 || topic_data.length() > 1336)
                     {
                         ASKCOIN_RETURN false;
                     }
@@ -2944,7 +2944,7 @@ bool Blockchain::start(std::string db_path)
                         ASKCOIN_RETURN false;
                     }
 
-                    if(reply_data.length() < 4 || reply_data.length() > 400)
+                    if(reply_data.length() < 4 || reply_data.length() > 1336)
                     {
                         ASKCOIN_RETURN false;
                     }
@@ -3677,7 +3677,8 @@ void Blockchain::mine_tx()
         
         m_tx_map.insert(std::make_pair(tx_id, cur_block));
         mined_txs.push_back(tx);
-
+        uv_2_txs.pop_front();
+        
         if(mined_txs.size() >= 2000)
         {
             break;
@@ -4667,7 +4668,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
-                if(topic_data.length() < 4 || topic_data.length() > 400)
+                if(topic_data.length() < 4 || topic_data.length() > 1336)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -4742,7 +4743,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
-                if(reply_data.length() < 4 || reply_data.length() > 400)
+                if(reply_data.length() < 4 || reply_data.length() > 1336)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -6521,7 +6522,7 @@ void Blockchain::switch_to_most_difficult()
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
-                    if(topic_data.length() < 4 || topic_data.length() > 400)
+                    if(topic_data.length() < 4 || topic_data.length() > 1336)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
@@ -6575,7 +6576,7 @@ void Blockchain::switch_to_most_difficult()
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
-                    if(reply_data.length() < 4 || reply_data.length() > 400)
+                    if(reply_data.length() < 4 || reply_data.length() > 1336)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
@@ -7509,7 +7510,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
-                    if(topic_data.length() < 4 || topic_data.length() > 400)
+                    if(topic_data.length() < 4 || topic_data.length() > 1336)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
@@ -7563,7 +7564,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
 
-                    if(reply_data.length() < 4 || reply_data.length() > 400)
+                    if(reply_data.length() < 4 || reply_data.length() > 1336)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }

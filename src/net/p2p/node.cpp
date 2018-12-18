@@ -34,7 +34,7 @@ bool Node::start(uint16 port)
                                                                               std::bind(&Node::dispatch, this, _1),
                                                                               std::bind(&Node::close, this, _1),
                                                                               std::bind(&Node::be_closed, this, _1),
-                                                                              m_poller, 1778586));
+                                                                              m_poller, 3650586));
     m_poller->start();
     m_port = port;
     
@@ -3265,7 +3265,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
 
-                    if(topic_data.length() < 4 || topic_data.length() > 400)
+                    if(topic_data.length() < 4 || topic_data.length() > 1336)
                     {
                         punish_peer(peer);
                         ASKCOIN_RETURN;
@@ -3353,7 +3353,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
 
-                    if(reply_data.length() < 4 || reply_data.length() > 400)
+                    if(reply_data.length() < 4 || reply_data.length() > 1336)
                     {
                         punish_peer(peer);
                         ASKCOIN_RETURN;
@@ -4907,7 +4907,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             break;
                         }
 
-                        if(topic_data.length() < 4 || topic_data.length() > 400)
+                        if(topic_data.length() < 4 || topic_data.length() > 1336)
                         {
                             failed_cb();
                             proc_tx_failed = true;
@@ -5012,7 +5012,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             break;
                         }
 
-                        if(reply_data.length() < 4 || reply_data.length() > 400)
+                        if(reply_data.length() < 4 || reply_data.length() > 1336)
                         {
                             failed_cb();
                             proc_tx_failed = true;
