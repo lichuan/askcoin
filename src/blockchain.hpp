@@ -69,6 +69,15 @@ public:
     void stop();
     void broadcast();
     void wait();
+
+    struct Merge_Point
+    {
+        uint64 m_block_id;
+        std::string m_block_hash;
+        std::string m_save_dir;
+    };
+    
+    std::shared_ptr<Merge_Point> m_merge_point;
     
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);

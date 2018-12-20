@@ -1,6 +1,6 @@
 
 Entering 'depend/fly'
-commit da0dc5ccb387895ae70d7d12748d28237b162436
+commit 5897ab864b7f3f4b461a414bb589bb7d921591ee
 Entering 'depend/fly/depend/cryptopp'
 commit 18ccd89965acb3fe6f67e6cdb2ded613868112ed
 Entering 'depend/fly/depend/rapidjson'
@@ -9,6 +9,8 @@ Entering 'depend/fly/depend/rapidjson/thirdparty/gtest'
 commit 0a439623f75c029912728d80cb7f1b8b48739ca4
 Entering 'depend/leveldb'
 commit 47cb9e2a211e1d7157078ba7bab536beb29e56dc
+Entering 'depend/openssl'
+commit 8a4b8ca9da1ed2322e0d28f4fe8a629c1376f15e
 Entering 'depend/secp256k1'
 commit 6ad5cdb42a1a8257289a0423d644dcbdeab0f83c
 Entering 'depend/snappy'
@@ -29,6 +31,9 @@ origin	https://github.com/google/googletest.git (push)
 Entering 'depend/leveldb'
 origin	git@github.com:lichuan/leveldb.git (fetch)
 origin	git@github.com:lichuan/leveldb.git (push)
+Entering 'depend/openssl'
+origin	git@github.com:lichuan/openssl-1.0.2k.git (fetch)
+origin	git@github.com:lichuan/openssl-1.0.2k.git (push)
 Entering 'depend/secp256k1'
 origin	git@github.com:lichuan/secp256k1.git (fetch)
 origin	git@github.com:lichuan/secp256k1.git (push)

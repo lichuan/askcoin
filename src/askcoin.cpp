@@ -88,13 +88,13 @@ public:
 
         if(!doc.HasMember("log_level"))
         {
-            std::cout << "config.json don't contain log_level field!" << std::endl;
+            std::cout << "config.json doesn't contain log_level field!" << std::endl;
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("log_path"))
         {
-            std::cout << "config.json don't contain log_path field!" << std::endl;
+            std::cout << "config.json doesn't contain log_path field!" << std::endl;
             return EXIT_FAILURE;
         }
 
@@ -127,7 +127,12 @@ public:
             return EXIT_FAILURE;
         }
         
-        fly::base::Logger::instance()->init(log_level, "askcoin", doc["log_path"].GetString());
+        if(!fly::base::Logger::instance()->init(log_level, "askcoin", doc["log_path"].GetString()))
+        {
+            CONSOLE_ONLY("init logger failed");
+            return EXIT_FAILURE;
+        }
+        
         std::string git_sha1_of_current_code = "";
         CONSOLE_LOG_INFO("start askcoin, version: %s, verno: %u, git_sha1: %s", ASKCOIN_VERSION_NAME, ASKCOIN_VERSION, git_sha1_of_current_code.c_str());
         
@@ -139,14 +144,67 @@ public:
 
         if(!doc.HasMember("db_path"))
         {
-            CONSOLE_LOG_FATAL("config.json don't contain db_path field!");
+            CONSOLE_LOG_FATAL("config.json doesn't contain db_path field!");
             return EXIT_FAILURE;
         }
 
         if(!doc.HasMember("network"))
         {
-            CONSOLE_LOG_FATAL("config.json don't contain network field!");
+            CONSOLE_LOG_FATAL("config.json doesn't contain network field!");
             return EXIT_FAILURE;
+        }
+
+        if(doc.HasMember("merge_point"))
+        {
+            auto &mp = doc["merge_point"];
+
+            if(!mp.HasMember("block_id"))
+            {
+                CONSOLE_LOG_FATAL("merge_point doesn't contain block_id field!");
+                return EXIT_FAILURE;
+            }
+
+            if(!mp.HasMember("block_hash"))
+            {
+                CONSOLE_LOG_FATAL("merge_point doesn't contain block_hash field!");
+                return EXIT_FAILURE;
+            }
+
+            if(!mp.HasMember("save_dir"))
+            {
+                CONSOLE_LOG_FATAL("merge_point doesn't contain save_dir field!");
+                return EXIT_FAILURE;
+            }
+
+            uint64 block_id = mp["block_id"].GetUint64();
+
+            if(block_id == 0)
+            {
+                CONSOLE_LOG_FATAL("merge_point block_id must greater than 0");
+                return EXIT_FAILURE;
+            }
+
+            std::string block_hash = mp["block_hash"].GetString();
+            
+            if(block_hash.empty())
+            {
+                CONSOLE_LOG_FATAL("merge_point block_hash can't be empty");
+                return EXIT_FAILURE;
+            }
+            
+            std::string save_dir = mp["save_dir"].GetString();
+            
+            if(save_dir.empty())
+            {
+                CONSOLE_LOG_FATAL("merge_point save_dir can't be empty");
+                return EXIT_FAILURE;
+            }
+
+            std::shared_ptr<Blockchain::Merge_Point> mp_ptr(new Blockchain::Merge_Point);
+            mp_ptr->m_block_id = block_id;
+            mp_ptr->m_block_hash = block_hash;
+            mp_ptr->m_save_dir = save_dir;
+            Blockchain::instance()->m_merge_point = mp_ptr;
         }
         
         std::string host = doc["network"]["p2p"]["host"].GetString();
@@ -179,6 +237,11 @@ public:
         {
             CONSOLE_LOG_FATAL("load from leveldb failed");
             return EXIT_FAILURE;
+        }
+
+        if(Blockchain::instance()->m_merge_point)
+        {
+            return EXIT_SUCCESS;
         }
         
         for(int32 i = 0; i < init_peer.Size(); ++i)

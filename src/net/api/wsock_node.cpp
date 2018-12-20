@@ -3220,6 +3220,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
+
+            if(reply_to->get_owner() == account)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
             
             std::shared_ptr<tx::Tx_Reward> tx_reward(new tx::Tx_Reward);
             tx_reward->m_id = tx_id;

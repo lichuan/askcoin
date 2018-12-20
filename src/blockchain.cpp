@@ -1,5 +1,7 @@
 #include <netinet/in.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fstream>
 #include "leveldb/comparator.h"
 #include "leveldb/write_batch.h"
 #include "fly/base/logger.hpp"
@@ -13,6 +15,7 @@
 #include "rapidjson/error/en.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include "rapidjson/ostreamwrapper.h"
 #include "net/p2p/node.hpp"
 #include "net/p2p/message.hpp"
 #include "net/api/wsock_node.hpp"
@@ -1361,19 +1364,6 @@ void Blockchain::do_message()
         bool peer_empty = false;
         bool wsock_empty = false;
         std::list<std::unique_ptr<fly::net::Message<Json>>> peer_messages;
-
-        if(m_peer_messages.pop(peer_messages))
-        {
-            for(auto &message : peer_messages)
-            {
-                do_peer_message(message);
-            }
-        }
-        else
-        {
-            peer_empty = true;
-        }
-        
         std::list<std::unique_ptr<fly::net::Message<Wsock>>> wsock_messages;
         
         if(m_wsock_messages.pop(wsock_messages))
@@ -1386,6 +1376,18 @@ void Blockchain::do_message()
         else
         {
             wsock_empty = true;
+        }
+
+        if(m_peer_messages.pop(peer_messages))
+        {
+            for(auto &message : peer_messages)
+            {
+                do_peer_message(message);
+            }
+        }
+        else
+        {
+            peer_empty = true;
         }
 
         bool command_empty = false;
@@ -1402,7 +1404,7 @@ void Blockchain::do_message()
         {
             command_empty = true;
         }
-
+        
         bool called = m_timer_ctl.run();
 
         if(m_block_changed)
@@ -1456,7 +1458,7 @@ void Blockchain::do_message()
         else if(peer_empty && wsock_empty && !called && command_empty)
         {
             RandAddSeedSleep();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 }
@@ -1472,6 +1474,7 @@ void Blockchain::wait()
     m_mine_thread.join();
     m_score_thread.join();
 }
+
 
 bool Blockchain::start(std::string db_path)
 {
@@ -2309,6 +2312,7 @@ bool Blockchain::start(std::string db_path)
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block = the_most_difficult_block;
     m_most_difficult_block = the_most_difficult_block;
+    bool merge_point_exist = false;
 
     while(iter_block->id() != 0)
     {
@@ -3072,6 +3076,11 @@ bool Blockchain::start(std::string db_path)
                     {
                         ASKCOIN_RETURN false;
                     }
+
+                    if(reply_to->get_owner() == account)
+                    {
+                        ASKCOIN_RETURN false;
+                    }
                     
                     reply->set_reply_to(reply_to);
                     topic->sub_balance(amount);
@@ -3146,6 +3155,59 @@ bool Blockchain::start(std::string db_path)
         {
             m_broadcast_doc = doc_ptr;
         }
+
+        if(m_merge_point)
+        {
+            if(cur_block_id == m_merge_point->m_block_id)
+            {
+                if(block_hash != m_merge_point->m_block_hash)
+                {
+                    CONSOLE_LOG_FATAL("merge_point block not in the main chain, block_hash != m_merge_point->m_block_hash");
+                    ASKCOIN_RETURN false;
+                }
+
+                merge_point_exist = true;
+                break;
+            }
+            
+            if(block_hash == m_merge_point->m_block_hash)
+            {
+                CONSOLE_LOG_FATAL("merge_point block not int the main chain, cur_block_id != m_merge_point->m_block_id");
+                ASKCOIN_RETURN false;
+            }
+        }
+    }
+
+    if(m_merge_point)
+    {
+        if(!merge_point_exist)
+        {
+            CONSOLE_LOG_FATAL("merge_point block not int the main chain");
+            ASKCOIN_RETURN false;
+        }
+
+        if(!check_balance())
+        {
+            CONSOLE_LOG_FATAL("check_balance failed");
+
+            ASKCOIN_RETURN false;
+        }
+
+        if(fly::base::mkpath(m_merge_point->m_save_dir) == -1)
+        {
+            CONSOLE_LOG_FATAL("merge_point mkpath save_dir: %s failed, reason: %s", \
+                              m_merge_point->m_save_dir.c_str(), strerror(errno));
+            ASKCOIN_RETURN false;
+        }
+        
+        // ofstream ofs("merge_point.json");
+        // rapidjson::OStreamWrapper osw(ofs);
+        // rapidjson::Writer<OStreamWrapper> writer(osw);
+        // doc.Accept(writer);
+
+        CONSOLE_LOG_INFO("merge_point block_id: %lu, block_hash: %s successfully", \
+                         m_merge_point->m_block_id, m_merge_point->m_block_hash.c_str());
+        return true;
     }
     
     char hash_raw[32];
@@ -3655,6 +3717,14 @@ void Blockchain::mine_tx()
                 }
                 
                 if(reply_to->type() != 0)
+                {
+                    failed_cb();
+                    uv_2_txs.push_back(tx);
+                    uv_2_txs.pop_front();
+                    continue;
+                }
+                
+                if(reply_to->get_owner() == account)
                 {
                     failed_cb();
                     uv_2_txs.push_back(tx);
@@ -4907,7 +4977,12 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
-
+                
+                if(reply_to->get_owner() == account)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
                 reply->set_reply_to(reply_to);
                 topic->sub_balance(amount);
                 reply_to->add_balance(amount);
@@ -5386,6 +5461,14 @@ void Blockchain::do_uv_tx()
                 }
                 
                 if(reply_to->type() != 0)
+                {
+                    punish_peer(tx_reward->m_peer);
+                    iter = m_uv_1_txs.erase(iter);
+                    m_uv_tx_ids.erase(tx_id);
+                    continue;
+                }
+                
+                if(reply_to->get_owner() == account)
                 {
                     punish_peer(tx_reward->m_peer);
                     iter = m_uv_1_txs.erase(iter);
@@ -6704,7 +6787,12 @@ void Blockchain::switch_to_most_difficult()
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
-                    
+
+                    if(reply_to->get_owner() == account)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
                     reply->set_reply_to(reply_to);
                     topic->sub_balance(amount);
                     reply_to->add_balance(amount);
@@ -7692,7 +7780,12 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
-                    
+
+                    if(reply_to->get_owner() == account)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
                     reply->set_reply_to(reply_to);
                     topic->sub_balance(amount);
                     reply_to->add_balance(amount);

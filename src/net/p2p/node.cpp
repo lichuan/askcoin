@@ -3638,6 +3638,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
                     
+                    if(reply_to->get_owner() == account)
+                    {
+                        punish_peer(peer);
+                        ASKCOIN_RETURN;
+                    }
+                    
                     account->m_uv_spend += 2;
                     topic->m_uv_reward += amount;
                     topic->m_uv_reply += 1;
@@ -5268,6 +5274,14 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         }
 
                         if(reply_to->type() != 0)
+                        {
+                            failed_cb();
+                            proc_tx_failed = true;
+                            ASKCOIN_TRACE;
+                            break;
+                        }
+
+                        if(reply_to->get_owner() == account)
                         {
                             failed_cb();
                             proc_tx_failed = true;
