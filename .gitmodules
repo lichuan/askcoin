@@ -1,15 +1,15 @@
 [submodule "depend/fly"]
 	path = depend/fly
-	url = git@github.com:lichuan/fly.git
-[submodule "depend/secp256k1"]
-	path = depend/secp256k1
-	url = git@github.com:lichuan/secp256k1.git
-[submodule "depend/leveldb"]
-	path = depend/leveldb
-	url = git@github.com:lichuan/leveldb.git
-[submodule "depend/snappy"]
-	path = depend/snappy
-	url = git@github.com:lichuan/snappy.git
+	url = https://github.com/lichuan/fly.git
 [submodule "depend/openssl"]
 	path = depend/openssl
-	url = git@github.com:lichuan/openssl-1.0.2k.git
+	url = https://github.com/lichuan/openssl-1.0.2k.git
+[submodule "depend/snappy"]
+	path = depend/snappy
+	url = https://github.com/lichuan/snappy.git
+[submodule "depend/secp256k1"]
+	path = depend/secp256k1
+	url = https://github.com/lichuan/secp256k1.git
+[submodule "depend/leveldb"]
+	path = depend/leveldb
+	url = https://github.com/lichuan/leveldb.git
