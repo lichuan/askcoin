@@ -1,6 +1,6 @@
 
 Entering 'depend/fly'
-commit 5897ab864b7f3f4b461a414bb589bb7d921591ee
+commit 8c530a893b8d1e3448636766cbfa6ee8e773026e
 Entering 'depend/fly/depend/cryptopp'
 commit 18ccd89965acb3fe6f67e6cdb2ded613868112ed
 Entering 'depend/fly/depend/rapidjson'
@@ -17,27 +17,27 @@ Entering 'depend/snappy'
 commit 193fc5d11b819b15826dc382a20f1e5729fa5004
 
 Entering 'depend/fly'
-origin	git@github.com:lichuan/fly.git (fetch)
-origin	git@github.com:lichuan/fly.git (push)
+origin	https://github.com/lichuan/fly.git (fetch)
+origin	https://github.com/lichuan/fly.git (push)
 Entering 'depend/fly/depend/cryptopp'
-origin	git@github.com:lichuan/cryptopp.git (fetch)
-origin	git@github.com:lichuan/cryptopp.git (push)
+origin	https://github.com/lichuan/cryptopp.git (fetch)
+origin	https://github.com/lichuan/cryptopp.git (push)
 Entering 'depend/fly/depend/rapidjson'
-origin	git@github.com:lichuan/rapidjson.git (fetch)
-origin	git@github.com:lichuan/rapidjson.git (push)
+origin	https://github.com/lichuan/rapidjson.git (fetch)
+origin	https://github.com/lichuan/rapidjson.git (push)
 Entering 'depend/fly/depend/rapidjson/thirdparty/gtest'
 origin	https://github.com/google/googletest.git (fetch)
 origin	https://github.com/google/googletest.git (push)
 Entering 'depend/leveldb'
-origin	git@github.com:lichuan/leveldb.git (fetch)
-origin	git@github.com:lichuan/leveldb.git (push)
+origin	https://github.com/lichuan/leveldb.git (fetch)
+origin	https://github.com/lichuan/leveldb.git (push)
 Entering 'depend/openssl'
-origin	git@github.com:lichuan/openssl-1.0.2k.git (fetch)
-origin	git@github.com:lichuan/openssl-1.0.2k.git (push)
+origin	https://github.com/lichuan/openssl-1.0.2k.git (fetch)
+origin	https://github.com/lichuan/openssl-1.0.2k.git (push)
 Entering 'depend/secp256k1'
-origin	git@github.com:lichuan/secp256k1.git (fetch)
-origin	git@github.com:lichuan/secp256k1.git (push)
+origin	https://github.com/lichuan/secp256k1.git (fetch)
+origin	https://github.com/lichuan/secp256k1.git (push)
 Entering 'depend/snappy'
-origin	git@github.com:lichuan/snappy.git (fetch)
-origin	git@github.com:lichuan/snappy.git (push)
+origin	https://github.com/lichuan/snappy.git (fetch)
+origin	https://github.com/lichuan/snappy.git (push)
 

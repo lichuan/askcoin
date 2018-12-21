@@ -1,4 +1,7 @@
 Import("env")
+Import("crypto")
 
-askcoin = env.Program("askcoin", Glob("*.cpp") + Glob("*/*.cpp") + Glob("*/*/*.cpp"))
+srcfiles = Glob("*.cpp") + Glob("*/*.cpp") + Glob("*/*/*.cpp")
+Depends(srcfiles, crypto)
+askcoin = env.Program("askcoin", srcfiles)
 Return("askcoin")

@@ -48,10 +48,7 @@ lib_path = [
 ]
 
 env.Replace(LIBS=libs, LIBPATH=lib_path)
-
 Export("env")
+Export("crypto")
 askcoin = SConscript("src/SConscript", variant_dir="build/askcoin", duplicate=0)
 env.Install("build/bin", askcoin)
-
-# test_client = SConscript("test/SConscript", variant_dir="build/test_client", duplicate=0)
-# env.Install("build/bin", test_client)
