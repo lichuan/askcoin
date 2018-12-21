@@ -17,8 +17,9 @@ env = Environment(CCFLAGS='-fpermissive -g -O2 -std=c++11', LINKFLAGS='-pthread'
     "#depend/leveldb/include",
     "#depend/fly/depend/rapidjson/include",
     "#depend/fly/depend",
-    "#depend/secp256k1/include"
-    ])
+    "#depend/secp256k1/include",
+    "#depend/openssl/include"
+])
 
 fly = File('#depend/fly/build/bin/libfly.a')
 crypto = File('#depend/openssl/libcrypto.a')
