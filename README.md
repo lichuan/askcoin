@@ -190,13 +190,24 @@ If you want to be a miner, you need to do the following steps:
 
 ## Build
 
-Askcoin is built through scons (2.5.1 compatible version). On CentOS 7.4, you can install it by running the following command:
+Askcoin is built through scons (2.5.1 compatible version). On CentOS 7.4, you can install it and some other dependency packages by running the following command:
 
 ```shell
-yum install scons
+yum install -y scons cmake3 gcc-c++ autoconf automake libtool
 ```
 
-The source code of askcoin will be open after it has passed its infancy in order to protect its originality.
+The source code of askcoin will be open after it has passed its infancy in order to protect its originality. When it's open source, you can clone it and its submodules by executing the following command:
+
+```shell
+git clone https://github.com/lichuan/askcoin.git --recursive
+```
+
+You can then go to askcoin directory and compile askcoin's source code using ***scons*** command:
+
+```shell
+cd askcoin
+scons
+```
 
 
 
