@@ -154,11 +154,11 @@ If you want to be a miner, you need to do the following steps:
 
 2. Run the askcoin full node by executing the ***start.sh*** script
 
-3. Run the command ***tail -f log/askcoin.log*** to check the log output generated, waiting for your full node to synchronize to the latest block
-
-   When your full node is successfully started and synchronized to the latest block, you will see the following output on the shell terminal:
+3. When your full node is successfully started, you will see the following output on the shell terminal:
 
    ![start](res/start.jpg)
+
+   you can run the command ***tail -f log/askcoin.log*** to check the log's output generated, waiting for your full node to synchronize to the latest block
 
 4. If you haven't registered an account before, you need to execute ***gen_privkey*** to generate a new private key:
 
