@@ -3193,17 +3193,19 @@ bool Blockchain::start(std::string db_path)
             ASKCOIN_RETURN false;
         }
 
-        if(fly::base::mkpath(m_merge_point->m_save_dir) == -1)
+        if(fly::base::mkpath(m_merge_point->m_data_dir) == -1)
         {
-            CONSOLE_LOG_FATAL("merge_point mkpath save_dir: %s failed, reason: %s", \
-                              m_merge_point->m_save_dir.c_str(), strerror(errno));
+            CONSOLE_LOG_FATAL("merge_point mkpath data_dir: %s failed, reason: %s", \
+                              m_merge_point->m_data_dir.c_str(), strerror(errno));
             ASKCOIN_RETURN false;
         }
         
-        // ofstream ofs("merge_point.json");
+        // std::ofstream ofs(m_merge_point->m_data_dir + "merge_point.json");
         // rapidjson::OStreamWrapper osw(ofs);
         // rapidjson::Writer<OStreamWrapper> writer(osw);
         // doc.Accept(writer);
+
+        //todo
 
         CONSOLE_LOG_INFO("merge_point block_id: %lu, block_hash: %s successfully", \
                          m_merge_point->m_block_id, m_merge_point->m_block_hash.c_str());

@@ -170,9 +170,9 @@ public:
                 return EXIT_FAILURE;
             }
 
-            if(!mp.HasMember("save_dir"))
+            if(!mp.HasMember("data_dir"))
             {
-                CONSOLE_LOG_FATAL("merge_point doesn't contain save_dir field!");
+                CONSOLE_LOG_FATAL("merge_point doesn't contain data_dir field!");
                 return EXIT_FAILURE;
             }
 
@@ -192,18 +192,18 @@ public:
                 return EXIT_FAILURE;
             }
             
-            std::string save_dir = mp["save_dir"].GetString();
+            std::string data_dir = mp["data_dir"].GetString();
             
-            if(save_dir.empty())
+            if(data_dir.empty())
             {
-                CONSOLE_LOG_FATAL("merge_point save_dir can't be empty");
+                CONSOLE_LOG_FATAL("merge_point data_dir can't be empty");
                 return EXIT_FAILURE;
             }
 
             std::shared_ptr<Blockchain::Merge_Point> mp_ptr(new Blockchain::Merge_Point);
             mp_ptr->m_block_id = block_id;
             mp_ptr->m_block_hash = block_hash;
-            mp_ptr->m_save_dir = save_dir;
+            mp_ptr->m_data_dir = data_dir;
             Blockchain::instance()->m_merge_point = mp_ptr;
         }
         

@@ -1431,13 +1431,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(iter_broadcast == m_broadcast_by_peer_key.end())
             {
-                m_broadcast_by_peer_key[key] = 0;
+                Broadcast_Ratio ratio;
+                m_broadcast_by_peer_key[key] = ratio;
                 m_broadcast_keys.push_back(key);
             }
             
             if(block_id > m_cur_block->id() + DISTANCE)
             {
-                if(m_broadcast_by_peer_key[key] != 100)
+                if(m_broadcast_by_peer_key[key].m_ratio_cnt != 100)
                 {
                     auto iter = m_chains_by_peer_key.find(key);
                     
@@ -1448,20 +1449,25 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
                     if(have_ratio)
                     {
-                        if(++m_broadcast_by_peer_key[key] > 3)
+                        if(++m_broadcast_by_peer_key[key].m_ratio_cnt > 3)
                         {
-                            m_broadcast_by_peer_key[key] = 100; // 100 is a flag, means no need send BLOCK_BROADCAST_1 message
+                            m_broadcast_by_peer_key[key].m_ratio_cnt = 100; // 100 is a flag, means no need send BLOCK_BROADCAST_1 message
                             goto no_need_broadcast_1;
                         }
                     }
                     else
                     {
-                        if(m_broadcast_by_peer_key[key] >= 1)
+                        if(m_broadcast_by_peer_key[key].m_ratio_cnt >= 1)
                         {
-                            ASKCOIN_RETURN;
+                            if(++m_broadcast_by_peer_key[key].m_cnt <= 10)
+                            {
+                                ASKCOIN_RETURN;
+                            }
+
+                            m_broadcast_by_peer_key[key].m_ratio_cnt = 0;
                         }
-                        
-                        ++m_broadcast_by_peer_key[key];
+
+                        ++m_broadcast_by_peer_key[key].m_ratio_cnt;
                     }
                     
                     rapidjson::Document doc;
@@ -1478,16 +1484,17 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
     
                     doc.AddMember("pow", pow_arr, allocator);
                     doc.AddMember("id", m_cur_block->id(), allocator);
-                    doc.AddMember("ratio", m_broadcast_by_peer_key[key], allocator);
+                    doc.AddMember("ratio", m_broadcast_by_peer_key[key].m_ratio_cnt, allocator);
                     connection->send(doc);
                     ASKCOIN_RETURN;
                 }
             }
             else
             {
-                m_broadcast_by_peer_key[key] = 0;
+                m_broadcast_by_peer_key[key].m_ratio_cnt = 0;
+                m_broadcast_by_peer_key[key].m_cnt = 0;
             }
-
+            
         no_need_broadcast_1:
             if(!data.HasMember("utc"))
             {

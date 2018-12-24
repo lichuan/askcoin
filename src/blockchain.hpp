@@ -69,12 +69,24 @@ public:
     void stop();
     void broadcast();
     void wait();
-
+    
+    struct Broadcast_Ratio
+    {
+        Broadcast_Ratio()
+        {
+            m_ratio_cnt = 0;
+            m_cnt = 0;
+        }
+        
+        uint32 m_ratio_cnt;
+        uint32 m_cnt;
+    };
+    
     struct Merge_Point
     {
         uint64 m_block_id;
         std::string m_block_hash;
-        std::string m_save_dir;
+        std::string m_data_dir;
     };
     
     std::shared_ptr<Merge_Point> m_merge_point;
@@ -123,7 +135,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
     std::unordered_map<std::string, std::shared_ptr<Pending_Chain>> m_chains_by_peer_key;
-    std::unordered_map<std::string, uint32> m_broadcast_by_peer_key;
+    std::unordered_map<std::string, Broadcast_Ratio> m_broadcast_by_peer_key;
     std::list<std::string> m_broadcast_keys;
     std::unordered_map<std::string, std::shared_ptr<Pending_Brief_Request>> m_pending_brief_reqs;
     std::unordered_map<std::string, std::shared_ptr<Pending_Detail_Request>> m_pending_detail_reqs;
