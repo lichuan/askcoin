@@ -3199,11 +3199,13 @@ bool Blockchain::start(std::string db_path)
                               m_merge_point->m_data_dir.c_str(), strerror(errno));
             ASKCOIN_RETURN false;
         }
-        
-        // std::ofstream ofs(m_merge_point->m_data_dir + "merge_point.json");
-        // rapidjson::OStreamWrapper osw(ofs);
-        // rapidjson::Writer<OStreamWrapper> writer(osw);
-        // doc.Accept(writer);
+
+        rapidjson::Document doc;
+        doc.SetObject();
+        std::ofstream ofs(m_merge_point->m_data_dir + "merge_point.json");
+        rapidjson::OStreamWrapper osw(ofs);
+        rapidjson::Writer<rapidjson::OStreamWrapper> writer(osw);
+        doc.Accept(writer);
 
         //todo
 

@@ -941,9 +941,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
+
                 std::string block_hash = doc["block_hash"].GetString();
-            
+                
                 if(block_hash.length() != 44)
                 {
                     connection->close();
@@ -955,16 +955,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-
-                auto iter = m_blocks.find(block_hash);
-
-                if(iter == m_blocks.end())
-                {
-                    connection->close();
-                    ASKCOIN_RETURN;
-                }
                 
-                auto block = m_blocks[block_hash];
                 rapidjson::Document doc;
                 doc.SetObject();
                 rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -972,7 +963,24 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("msg_cmd", net::api::TOPIC_QUESTION_PROBE, allocator);
                 doc.AddMember("msg_id", msg_id, allocator);
                 doc.AddMember("topic_key", rapidjson::StringRef(topic_key.c_str()), allocator);
+                auto iter = m_blocks.find(block_hash);
+                
+                if(iter == m_blocks.end())
+                {
+                    doc.AddMember("result", 2, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                auto block = m_blocks[block_hash];
 
+                if(!block->m_in_main_chain)
+                {
+                    doc.AddMember("result", 2, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
+                
                 if(account->m_topic_list.empty())
                 {
                     doc.AddMember("result", 0, allocator);
@@ -1023,9 +1031,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     {
                         doc.AddMember("result", 2, allocator);
                         connection->send(doc);
-                        return;
+                        ASKCOIN_RETURN;
                     }
-
+                    
                     if(topic->key() == topic_key)
                     {
                         if(block_hash == topic->m_block->hash())
@@ -1242,12 +1250,20 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 if(iter == m_blocks.end())
                 {
-                    connection->close();
+                    doc.AddMember("result", 2, allocator);
+                    connection->send(doc);
                     ASKCOIN_RETURN;
                 }
                 
                 auto block = m_blocks[block_hash];
                 auto reply_begin = *topic->m_reply_list.begin();
+                
+                if(!block->m_in_main_chain)
+                {
+                    doc.AddMember("result", 2, allocator);
+                    connection->send(doc);
+                    ASKCOIN_RETURN;
+                }
                 
                 if(block->id() < reply_begin->m_block->id())
                 {
