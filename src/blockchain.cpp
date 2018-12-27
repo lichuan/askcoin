@@ -3229,6 +3229,7 @@ bool Blockchain::start(std::string db_path)
             if(m_last_mine_time + 5 < utc_now)
             {
                 mine_tx();
+                m_last_mine_time = time(NULL);
             }
         }, 1000);
     
@@ -3349,13 +3350,11 @@ bool Blockchain::check_balance()
 
 void Blockchain::mine_tx()
 {
-    m_last_mine_time = time(NULL);
-    
     if(!m_enable_mine.load(std::memory_order_relaxed))
     {
         return;
     }
-    
+
     std::unique_lock<std::mutex> lock(m_mine_mutex);
     
     if(m_miner_privkey.empty())
@@ -3364,6 +3363,7 @@ void Blockchain::mine_tx()
     }
     
     lock.unlock();
+    m_mine_id_1.fetch_add(1, std::memory_order_relaxed);
     std::shared_ptr<Account> miner;
     
     if(!get_account(m_miner_pubkey, miner))
@@ -3920,7 +3920,6 @@ void Blockchain::mine_tx()
 
     lock.lock();
     m_mined_txs = std::move(mined_txs);
-    m_mine_id_1.fetch_add(1, std::memory_order_relaxed);
     m_mine_cur_block_id = m_cur_block->id();
     m_mine_cur_block_hash = m_cur_block->hash();
     m_mine_cur_block_utc = m_cur_block->utc();
