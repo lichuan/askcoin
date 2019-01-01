@@ -675,6 +675,11 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         
         printf(">");
     }
+    else if(command->m_cmd == "clear_uv_tx")
+    {
+        m_uv_1_txs.clear();
+        m_uv_2_txs.clear();
+    }
     else if(command->m_cmd == "info")
     {
         net::api::Wsock_Node *wsock_node = net::api::Wsock_Node::instance();

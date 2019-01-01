@@ -420,6 +420,14 @@ public:
                         continue;
                     }
                 }
+                else if(cmd == "clear_uv_tx")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "clear_uv_tx doesn't need any param" << endl;
+                        continue;
+                    }
+                }
                 else if(cmd == "enable_mine")
                 {
                     if(param_num != 1)
