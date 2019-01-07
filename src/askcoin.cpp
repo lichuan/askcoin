@@ -176,6 +176,12 @@ public:
                 return EXIT_FAILURE;
             }
 
+            if(!mp.HasMember("mode"))
+            {
+                CONSOLE_LOG_FATAL("merge_point doesn't contain mode field!");
+                return EXIT_FAILURE;
+            }
+
             uint64 block_id = mp["block_id"].GetUint64();
 
             if(block_id == 0)
@@ -200,10 +206,24 @@ public:
                 return EXIT_FAILURE;
             }
 
+            if(data_dir[data_dir.size() - 1] != '/')
+            {
+                data_dir += '/';
+            }
+            
+            std::string mode = mp["mode"].GetString();
+
+            if(mode != "export" && mode != "import")
+            {
+                CONSOLE_LOG_FATAL("merge_point mode must be 'export' or 'import'");
+                return EXIT_FAILURE;
+            }
+            
             std::shared_ptr<Blockchain::Merge_Point> mp_ptr(new Blockchain::Merge_Point);
             mp_ptr->m_block_id = block_id;
             mp_ptr->m_block_hash = block_hash;
             mp_ptr->m_data_dir = data_dir;
+            mp_ptr->m_mode = mode;
             Blockchain::instance()->m_merge_point = mp_ptr;
         }
         

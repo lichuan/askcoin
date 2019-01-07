@@ -2318,7 +2318,13 @@ bool Blockchain::start(std::string db_path)
     m_cur_block = the_most_difficult_block;
     m_most_difficult_block = the_most_difficult_block;
     bool merge_point_exist = false;
-
+    bool merge_point_export = false;
+    
+    if(m_merge_point && m_merge_point->m_mode == "export")
+    {
+        merge_point_export = true;
+    }
+    
     while(iter_block->id() != 0)
     {
         iter_block->m_in_main_chain = true;
@@ -3161,7 +3167,7 @@ bool Blockchain::start(std::string db_path)
             m_broadcast_doc = doc_ptr;
         }
 
-        if(m_merge_point)
+        if(merge_point_export)
         {
             if(cur_block_id == m_merge_point->m_block_id)
             {
@@ -3183,7 +3189,7 @@ bool Blockchain::start(std::string db_path)
         }
     }
 
-    if(m_merge_point)
+    if(merge_point_export)
     {
         if(!merge_point_exist)
         {
@@ -3210,11 +3216,146 @@ bool Blockchain::start(std::string db_path)
         std::ofstream ofs(m_merge_point->m_data_dir + "merge_point.json");
         rapidjson::OStreamWrapper osw(ofs);
         rapidjson::Writer<rapidjson::OStreamWrapper> writer(osw);
+        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+        rapidjson::Value accounts(rapidjson::kArrayType);
+        rapidjson::Value pow_arr(rapidjson::kArrayType);
+        doc.AddMember("block_id", m_merge_point->m_block_id, allocator);
+        doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_block_hash.c_str()), allocator);
+        // todo, version field?
+        auto mp_block = m_blocks[m_merge_point->m_block_hash];
+
+        for(int32 i = 0; i < 9; ++i)
+        {
+            pow_arr.PushBack(mp_block->m_accum_pow.m_n32[i], allocator);
+        }
+
+        doc.AddMember("pow", pow_arr, allocator);
+        
+        for(auto p : m_account_by_id)
+        {
+            rapidjson::Value obj(rapidjson::kObjectType);
+            auto account = p.second;
+            obj.AddMember("id", account->id(), allocator);
+            obj.AddMember("name", rapidjson::StringRef(account->name().c_str()), allocator);
+            obj.AddMember("avatar", account->avatar(), allocator);
+            obj.AddMember("balance", account->get_balance(), allocator);
+            obj.AddMember("pubkey", rapidjson::StringRef(account->pubkey().c_str()), allocator);
+            obj.AddMember("block_id", account->block_id(), allocator);
+
+            if(account->id() > 1)
+            {
+                auto referrer = account->get_referrer();
+                obj.AddMember("referrer", rapidjson::StringRef(referrer->pubkey().c_str()), allocator);
+            }
+
+            accounts.PushBack(obj, allocator);
+        }
+
+        doc.AddMember("accounts", accounts, allocator);
+        rapidjson::Value tx_map(rapidjson::kArrayType);
+        std::unordered_map<std::string, std::shared_ptr<Block>> blocks;
+        
+        for(auto &p : m_tx_map)
+        {
+            auto &block = p.second;
+            
+            if(block->id() + 200 < m_merge_point->m_block_id + 1)
+            {
+                continue;
+            }
+            
+            const std::string& block_hash = block->hash();
+            
+            if(blocks.find(block_hash) == blocks.end())
+            {
+                blocks.insert(std::make_pair(block_hash, block));
+            }
+            
+            rapidjson::Value obj(rapidjson::kObjectType);
+            obj.AddMember("block_id", block->id(), allocator);
+            obj.AddMember("tx_id", rapidjson::StringRef(p.first.c_str()), allocator);
+            tx_map.PushBack(obj, allocator);
+        }
+        
+        doc.AddMember("tx_map", tx_map, allocator);
+        rapidjson::Value topics(rapidjson::kArrayType);
+        
+        for(auto &topic : m_topic_list)
+        {
+            rapidjson::Value obj(rapidjson::kObjectType);
+            obj.AddMember("key", rapidjson::StringRef(topic->key().c_str()), allocator);
+            obj.AddMember("data", rapidjson::StringRef(topic->m_data.c_str()), allocator);
+            obj.AddMember("balance", topic->get_balance(), allocator);
+            obj.AddMember("total", topic->get_total(), allocator);
+            obj.AddMember("owner", topic->get_owner()->id(), allocator);
+            auto &block = topic->m_block;
+            const std::string& block_hash = block->hash();
+            
+            if(blocks.find(block_hash) == blocks.end())
+            {
+                blocks.insert(std::make_pair(block_hash, block));
+            }
+            
+            obj.AddMember("block_id", block->id(), allocator);
+            rapidjson::Value members(rapidjson::kArrayType);
+
+            for(auto member : topic->m_members)
+            {
+                members.PushBack(member.second->id(), allocator);
+            }
+
+            obj.AddMember("members", members, allocator);
+            rapidjson::Value replies(rapidjson::kArrayType);
+            
+            for(auto &reply : topic->m_reply_list)
+            {
+                rapidjson::Value obj(rapidjson::kObjectType);
+                obj.AddMember("key", rapidjson::StringRef(reply->key().c_str()), allocator);
+                obj.AddMember("data", rapidjson::StringRef(reply->m_data.c_str()), allocator);
+                obj.AddMember("balance", reply->get_balance(), allocator);
+                obj.AddMember("type", reply->type(), allocator);
+                obj.AddMember("owner", reply->get_owner()->id(), allocator);
+                auto reply_to = reply->get_reply_to();
+                
+                if(reply_to)
+                {
+                    obj.AddMember("reply_to", rapidjson::StringRef(reply_to->key().c_str()), allocator);
+                }
+                
+                auto &block = reply->m_block;
+                const std::string& block_hash = block->hash();
+                
+                if(blocks.find(block_hash) == blocks.end())
+                {
+                    blocks.insert(std::make_pair(block_hash, block));
+                }
+                
+                obj.AddMember("block_id", block->id(), allocator);
+                replies.PushBack(obj, allocator);
+            }
+            
+            obj.AddMember("replies", replies, allocator);
+            topics.PushBack(obj, allocator);
+        }
+        
+        doc.AddMember("topics", topics, allocator);
+        rapidjson::Value block_arr(rapidjson::kArrayType);
+        
+        for(auto &p : blocks)
+        {
+            auto block = p.second;
+            rapidjson::Value block_obj(rapidjson::kObjectType);
+            block_obj.AddMember("id", block->id(), allocator);
+            block_obj.AddMember("utc", block->utc(), allocator);
+            block_obj.AddMember("version", block->version(), allocator);
+            block_obj.AddMember("zero_bits", block->zero_bits(), allocator);
+            block_obj.AddMember("hash", rapidjson::StringRef(block->hash().c_str()), allocator);
+            block_arr.PushBack(block_obj, allocator);
+        }
+        
+        doc.AddMember("blocks", block_arr, allocator);
         doc.Accept(writer);
-
-        //todo
-
-        CONSOLE_LOG_INFO("merge_point block_id: %lu, block_hash: %s successfully", \
+        CONSOLE_LOG_INFO("export merge_point.json block_id: %lu, block_hash: %s successfully", \
                          m_merge_point->m_block_id, m_merge_point->m_block_hash.c_str());
         return true;
     }

@@ -87,6 +87,7 @@ public:
         uint64 m_block_id;
         std::string m_block_hash;
         std::string m_data_dir;
+        std::string m_mode;
     };
     
     std::shared_ptr<Merge_Point> m_merge_point;
@@ -129,7 +130,7 @@ private:
     std::unordered_set<std::string> m_uv_account_names; //unverified acc names
     std::unordered_set<std::string> m_miner_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Account>> m_account_by_pubkey;
-    std::unordered_map<uint64, std::shared_ptr<Account>> m_account_by_id;
+    std::map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::unordered_set<std::string> m_uv_account_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
