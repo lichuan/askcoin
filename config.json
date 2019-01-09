@@ -19,10 +19,10 @@
             ]
         },
         "websocket": {
+            "enable": true,
             "host": "0.0.0.0",
             "port": 19050,
-            "max_conn": 5000,
-            "open": true
+            "max_conn": 5000
         }
     }
 }

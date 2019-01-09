@@ -242,7 +242,7 @@ public:
         const rapidjson::Value &init_peer = doc["network"]["p2p"]["init_peer"];
         std::string websocket_host = doc["network"]["websocket"]["host"].GetString();
         uint16 websocket_port = doc["network"]["websocket"]["port"].GetUint();
-        bool open_websocket = doc["network"]["websocket"]["open"].GetBool();
+        bool enable_websocket = doc["network"]["websocket"]["enable"].GetBool();
         uint32 websocket_max_conn = doc["network"]["websocket"]["max_conn"].GetUint();
         
         if(websocket_max_conn == 0)
@@ -277,7 +277,7 @@ public:
             return EXIT_FAILURE;
         }
 
-        if(open_websocket)
+        if(enable_websocket)
         {            
             if(!net::api::Wsock_Node::instance()->start(websocket_host, websocket_port))
             {
@@ -296,6 +296,7 @@ public:
             ">top100\n"
             ">enable_mine [true|false]\n"
             ">info\n"
+            ">myinfo\n"
             ">help\n"
             "\nfor example, if you want to stop askcoin, yout can input 'stop' command:";
 
@@ -356,7 +357,7 @@ public:
                         continue;
                     }
                     
-                    if(open_websocket)
+                    if(enable_websocket)
                     {
                         net::api::Wsock_Node::instance()->stop();
                     }
@@ -440,6 +441,14 @@ public:
                         continue;
                     }
                 }
+                else if(cmd == "myinfo")
+                {
+                    if(param_num > 0)
+                    {
+                        cout << "myinfo doesn't need any param" << endl;
+                        continue;
+                    }
+                }
                 else if(cmd == "clear_uv_tx")
                 {
                     if(param_num > 0)
@@ -469,7 +478,7 @@ public:
         
         cmd_thread.join();
         
-        if(open_websocket)
+        if(enable_websocket)
         {
             net::api::Wsock_Node::instance()->wait();
         }

@@ -1722,7 +1722,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 m_pending_blocks.insert(std::make_pair(block_hash, pending_block));
                 m_pending_block_hashes.push_back(block_hash);
                 auto iter_brief_req = m_pending_brief_reqs.find(block_hash);
-                
+            
                 if(iter_brief_req != m_pending_brief_reqs.end())
                 {
                     std::shared_ptr<Pending_Brief_Request> request = iter_brief_req->second;
@@ -1935,14 +1935,23 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-            
+
+            rapidjson::Document doc_rsp;
+            doc_rsp.SetObject();
+            rapidjson::Document::AllocatorType &allocator = doc_rsp.GetAllocator();
+            doc_rsp.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
+            doc_rsp.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_RSP, allocator);
+            doc_rsp.AddMember("hash", rapidjson::StringRef(block_hash.c_str()), allocator);
             auto iter = m_blocks.find(block_hash);
             
             if(iter == m_blocks.end())
             {
+                doc_rsp.AddMember("result", 0, allocator);
+                connection->send(doc_rsp);
                 ASKCOIN_RETURN;
             }
-
+            
+            doc_rsp.AddMember("result", 1, allocator);
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
             
@@ -1975,60 +1984,27 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             rapidjson::Value &sign_node = doc["sign"];
             rapidjson::Value &data = doc["data"];
-            {
-                rapidjson::Document doc;
-                doc.SetObject();
-                rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-                doc.AddMember("msg_type", net::p2p::MSG_BLOCK, allocator);
-                doc.AddMember("msg_cmd", net::p2p::BLOCK_BRIEF_RSP, allocator);
-                doc.AddMember("hash", hash_node, allocator);
-                doc.AddMember("sign", sign_node, allocator);
-                doc.AddMember("data", data, allocator);
-                connection->send(doc);
-            }
+            doc_rsp.AddMember("sign", sign_node, allocator);
+            doc_rsp.AddMember("data", data, allocator);
+            connection->send(doc_rsp);
         }
         else if(cmd == net::p2p::BLOCK_BRIEF_RSP)
         {
-            if(doc.MemberCount() != 5)
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-            
             if(!doc.HasMember("hash"))
             {
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-
-            if(!doc.HasMember("sign"))
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-
+            
             if(!doc["hash"].IsString())
             {
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
 
-            if(!doc["sign"].IsString())
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
-            
             std::string block_hash = doc["hash"].GetString();
-            std::string block_sign = doc["sign"].GetString();
-
-            if(!is_base64_char(block_hash))
-            {
-                punish_peer(peer);
-                ASKCOIN_RETURN;
-            }
             
-            if(!is_base64_char(block_sign))
+            if(!is_base64_char(block_hash))
             {
                 punish_peer(peer);
                 ASKCOIN_RETURN;
@@ -2049,15 +2025,117 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             {
                 ASKCOIN_RETURN;
             }
-
+            
             auto iter_brief_req = m_pending_brief_reqs.find(block_hash);
             
             if(iter_brief_req == m_pending_brief_reqs.end())
             {
                 ASKCOIN_RETURN;
             }
-
+            
             std::shared_ptr<Pending_Brief_Request> request = iter_brief_req->second;
+            
+            if(!doc.HasMember("result"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["result"].IsUint())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            uint32 result = doc["result"].GetUint();
+
+            if(result == 0)
+            {
+                if(doc.MemberCount() != 4)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+
+                auto &key = peer->key();
+                auto iter = m_chains_by_peer_key.find(key);
+                
+                if(iter != m_chains_by_peer_key.end())
+                {
+                    auto &chain = iter->second;
+                    
+                    if(chain->m_brief_attached)
+                    {
+                        auto request = chain->m_brief_attached;
+                        
+                        for(auto iter = request->m_attached_chains.begin(); iter != request->m_attached_chains.end(); ++iter)
+                        {
+                            if(*iter == chain)
+                            {
+                                request->m_attached_chains.erase(iter);
+                                break;
+                            }
+                        }
+                        
+                        request->m_chains.erase(chain);
+                        m_chains_by_peer_key.erase(key);
+                    }
+                    else if(chain->m_detail_attached)
+                    {
+                        auto request = chain->m_detail_attached;
+            
+                        for(auto iter = request->m_attached_chains.begin(); iter != request->m_attached_chains.end(); ++iter)
+                        {
+                            if(*iter == chain)
+                            {
+                                request->m_attached_chains.erase(iter);
+                                break;
+                            }
+                        }
+            
+                        request->m_chains.erase(chain);
+                        m_chains_by_peer_key.erase(key);
+                    }
+                    else
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                }
+
+                ASKCOIN_RETURN;
+            }
+            
+            if(result != 1)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(doc.MemberCount() != 6)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc.HasMember("sign"))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
+            if(!doc["sign"].IsString())
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            std::string block_sign = doc["sign"].GetString();
+            
+            if(!is_base64_char(block_sign))
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
 
             if(!doc.HasMember("data"))
             {
@@ -2072,7 +2150,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 punish_peer(peer);
                 ASKCOIN_RETURN;
             }
-
+            
             if(data.MemberCount() != 8)
             {
                 punish_peer(peer);
@@ -3891,11 +3969,6 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
     auto &peer = pending_chain->m_peer;
     auto &key = peer->key();
     auto iter = m_chains_by_peer_key.find(key);
-
-    if(peer->m_connection->closed())
-    {
-        ASKCOIN_RETURN;
-    }
     
     if(iter != m_chains_by_peer_key.end())
     {
@@ -3944,6 +4017,11 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
+    }
+    
+    if(peer->m_connection->closed())
+    {
+        ASKCOIN_RETURN;
     }
     
     while(true)

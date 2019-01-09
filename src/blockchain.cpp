@@ -673,12 +673,59 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             printf("%-5u\t%-15s\t%-10lu\t%-7u\t%-22lu\n", cnt, raw_name, account->id(), account->avatar(), account->get_balance());
         }
         
+        printf("-------------------------------------------------------------\n");
         printf(">");
     }
     else if(command->m_cmd == "clear_uv_tx")
     {
         m_uv_1_txs.clear();
         m_uv_2_txs.clear();
+    }
+    else if(command->m_cmd == "myinfo")
+    {
+        std::unique_lock<std::mutex> lock(m_mine_mutex);
+        std::string miner_privkey = m_miner_privkey;
+        lock.unlock();
+        
+        if(miner_privkey.empty())
+        {
+            printf("you need import_privkey first\n>");
+            return;
+        }
+        
+        char privk[32];
+        fly::base::base64_decode(miner_privkey.c_str(), miner_privkey.length(), privk, 32);
+        CKey miner_priv_key;
+        miner_priv_key.Set(privk, privk + 32, false);
+        CPubKey miner_pub_key = miner_priv_key.GetPubKey();
+        std::string miner_pub_key_b64 = fly::base::base64_encode(miner_pub_key.begin(), miner_pub_key.size());
+        std::shared_ptr<Account> account;
+        
+        if(!get_account(miner_pub_key_b64, account))
+        {
+            printf("you need reg_account first\n>");
+            return;
+        }
+
+        char raw_name[16] = {0};
+        fly::base::base64_decode(account->name().c_str(), account->name().length(), raw_name, 16);
+        printf("your account's id: %lu\n", account->id());
+        printf("your account's name: %s\n", raw_name);
+        printf("your account's avatar: %u\n", account->avatar());
+        printf("your account's balance: %lu ASK\n>", account->get_balance());
+        printf("your account's quesion num: %u\n", account->m_topic_list.size());
+        printf("your account's answer num: %u\n", account->m_joined_topic_list.size());
+        auto referrer = account->get_referrer();
+        
+        if(referrer)
+        {
+            char raw_name[16] = {0};
+            fly::base::base64_decode(referrer->name().c_str(), referrer->name().length(), raw_name, 16);
+            printf("your account's referrer id: %lu\n", referrer->id());
+            printf("your account's referrer name: %s\n", raw_name);
+        }
+        
+        printf(">");
     }
     else if(command->m_cmd == "info")
     {
