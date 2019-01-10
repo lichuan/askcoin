@@ -55,18 +55,14 @@ The configuration file (config.json) for askcoin is as follows:
                 {
                     "host": "node2.askcoin.me",
                     "port": 18050
-                },
-                {
-                    "host": "node1.lichuan.me",
-                    "port": 18050
                 }
             ]
         },
         "websocket": {
+            "enable": true,
             "host": "0.0.0.0",
             "port": 19050,
-            "max_conn": 5000,
-            "open": true
+            "max_conn": 5000
         }
     }
 }
@@ -79,10 +75,10 @@ The configuration file (config.json) for askcoin is as follows:
 - ***network.p2p.port***:  port number for P2P network communication.
 - ***network.p2p.max_conn***:  maximum number of P2P network connections allowed.
 - ***network.p2p.init_peer***:  initial peer nodes in P2P networks.
+- ***network.websocket.enable***:  whether to open websocket service.
 - ***network.websocket.host***:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a LAN address (192.168.1.234, for example).
 - ***network.websocket.port***:  websocket port that mobile app or explorer can connect to.
 - ***network.websocket.max_conn***:  maximum number of websocket connections allowed.
-- ***network.websocket.open***:  whether to open websocket service.
 
 
 
