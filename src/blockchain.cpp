@@ -415,7 +415,6 @@ void Blockchain::do_score()
         doc.SetObject();
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         rapidjson::Value peers(rapidjson::kArrayType);
-        doc.AddMember("utc", time(NULL), allocator);
         std::unique_lock<std::mutex> lock(p2p_node->m_score_mutex);
         auto &peer_scores = p2p_node->m_peer_scores;
         
@@ -436,6 +435,7 @@ void Blockchain::do_score()
         }
         
         lock.unlock();
+        doc.AddMember("utc", time(NULL), allocator);
         doc.AddMember("peers", peers, allocator);
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
@@ -712,7 +712,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         printf("your account's id: %lu\n", account->id());
         printf("your account's name: %s\n", raw_name);
         printf("your account's avatar: %u\n", account->avatar());
-        printf("your account's balance: %lu ASK\n>", account->get_balance());
+        printf("your account's balance: %lu ASK\n", account->get_balance());
         printf("your account's quesion num: %u\n", account->m_topic_list.size());
         printf("your account's answer num: %u\n", account->m_joined_topic_list.size());
         auto referrer = account->get_referrer();
@@ -3268,9 +3268,8 @@ bool Blockchain::start(std::string db_path)
         rapidjson::Value pow_arr(rapidjson::kArrayType);
         doc.AddMember("block_id", m_merge_point->m_block_id, allocator);
         doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_block_hash.c_str()), allocator);
-        // todo, version field?
         auto mp_block = m_blocks[m_merge_point->m_block_hash];
-
+        
         for(int32 i = 0; i < 9; ++i)
         {
             pow_arr.PushBack(mp_block->m_accum_pow.m_n32[i], allocator);
@@ -8313,11 +8312,9 @@ void Blockchain::rollback(uint64 block_id)
         cur_block_id  = m_cur_block->id();
     }
 
-    uint64 target_block_id = block_id;
-    
-    while(cur_block_id > target_block_id)
+    while(cur_block_id > block_id)
     {
-        target_block_id = block_id;
+        uint64 target_block_id = block_id;
         uint64 iter_id = cur_block_id;
         auto iter_block = m_cur_block;
         uint32 count = 0;
