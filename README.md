@@ -228,5 +228,11 @@ With more and more users and transactions, the data on the block chain will beco
 
 
 
+## Donation
 
+At present, the development of askcoin is funded by ourselves. If you want to provide some financial assistance for this project, you can transfer some BTC to the address below:
+
+**1HiAvroczUyjBWQTCfZJigAB5QoUeP1U7S**
+
+Thank you for your support !
 
