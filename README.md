@@ -146,7 +146,7 @@ Of the 2 ASK fees paid for each transaction you initiate since then, 1 ASK will 
 
 If you want to be a miner, you need to do the following steps:
 
-1. Synchronize your system time with global UTC time
+1. Synchronize your system time with global UTC time (using **crontab** and **ntpdate**)
 
 2. Run the askcoin full node by executing the ***start.sh*** script
 
