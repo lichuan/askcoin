@@ -226,6 +226,66 @@ public:
             mp_ptr->m_mode = mode;
             Blockchain::instance()->m_merge_point = mp_ptr;
         }
+
+        auto &network = doc["network"];
+
+        if(!network.IsObject())
+        {
+            CONSOLE_LOG_FATAL("network field in config.json is not object!");
+            return EXIT_FAILURE;
+        }
+
+        if(!network.HasMember("p2p"))
+        {
+            CONSOLE_LOG_FATAL("config.json doesn't contain network.p2p field!");
+            return EXIT_FAILURE;
+        }
+
+        if(!network.HasMember("websocket"))
+        {
+            CONSOLE_LOG_FATAL("config.json doesn't contain network.websocket field!");
+            return EXIT_FAILURE;
+        }
+
+        auto &websocket = network["websocket"];
+
+        if(!websocket.IsObject())
+        {
+            CONSOLE_LOG_FATAL("network.websocket field in config.json is not object!");
+            return EXIT_FAILURE;
+        }
+
+        if(websocket.HasMember("exchange"))
+        {
+            auto &exchange = websocket["exchange"];
+
+            if(!exchange.HasMember("account_b64"))
+            {
+                CONSOLE_LOG_FATAL("exchange doesn't contain account_b64 field!");
+                return EXIT_FAILURE;
+            }
+
+            if(!exchange.HasMember("account_id"))
+            {
+                CONSOLE_LOG_FATAL("exchange doesn't contain account_id field!");
+                return EXIT_FAILURE;
+            }
+
+            if(!exchange.HasMember("password"))
+            {
+                CONSOLE_LOG_FATAL("exchange doesn't contain password field!");
+                return EXIT_FAILURE;
+            }
+            
+            std::string account_b64 = exchange["account_b64"].GetString();
+            std::string password = exchange["password"].GetString();
+            uint64 account_id = exchange["account_id"].GetUint64();
+            std::shared_ptr<Blockchain::Exchange_Account> exchange_account(new Blockchain::Exchange_Account);
+            exchange_account->m_id = account_id;
+            exchange_account->m_name = account_b64;
+            exchange_account->m_password = password;
+            Blockchain::instance()->m_exchange_account = exchange_account;
+        }
         
         std::string host = doc["network"]["p2p"]["host"].GetString();
         uint16 p2p_port = doc["network"]["p2p"]["port"].GetUint();

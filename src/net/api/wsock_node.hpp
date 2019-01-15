@@ -37,6 +37,8 @@ public:
     std::unordered_map<uint64, std::shared_ptr<User>> m_users;
     std::unordered_map<std::string, std::shared_ptr<User>> m_users_to_register;
     std::unordered_multimap<std::string, std::shared_ptr<User>> m_users_by_pubkey;
+    std::shared_ptr<User> m_exchange_user;
+    uint64 m_exchange_account_id = 0;
     std::mutex m_mutex;
     std::unique_ptr<fly::net::Server<Wsock>> m_server;
     std::thread m_timer_thread;

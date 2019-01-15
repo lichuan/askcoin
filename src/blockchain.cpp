@@ -251,77 +251,73 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
 
     m_rollback_txs.erase(cur_block_id - (TOPIC_LIFE_TIME + 1));
     auto &tx_pair = m_rollback_txs[cur_block_id - (TOPIC_LIFE_TIME + 1)];
-    std::shared_ptr<Block> iter_block = block;
-    uint32 count = 0;
+    uint64 id = cur_block_id - TOPIC_LIFE_TIME - 1;
+    auto iter = m_block_by_id.find(id);
     
-    while(iter_block->id() > 1)
+    if(iter == m_block_by_id.end())
     {
-        iter_block = iter_block->get_parent();
-
-        if(++count > TOPIC_LIFE_TIME)
-        {
-            std::string block_data;
-            leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+        return true;
+    }
+    
+    auto &expired_block = iter->second;
+    std::string block_data;
+    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), expired_block->hash(), &block_data);
             
-            if(!s.ok())
-            {
-                return false;
-            }
+    if(!s.ok())
+    {
+        return false;
+    }
             
-            rapidjson::Document doc;
-            const char *block_data_str = block_data.c_str();
-            doc.Parse(block_data_str);
+    rapidjson::Document doc;
+    const char *block_data_str = block_data.c_str();
+    doc.Parse(block_data_str);
         
-            if(doc.HasParseError())
-            {
-                return false;
-            }
+    if(doc.HasParseError())
+    {
+        return false;
+    }
 
-            if(!doc.IsObject())
-            {
-                return false;
-            }
+    if(!doc.IsObject())
+    {
+        return false;
+    }
             
-            if(!doc.HasMember("data"))
-            {
-                return false;
-            }
+    if(!doc.HasMember("data"))
+    {
+        return false;
+    }
 
-            const rapidjson::Value &data = doc["data"];
+    const rapidjson::Value &data = doc["data"];
 
-            if(!data.HasMember("tx_ids"))
-            {
-                return false;
-            }
+    if(!data.HasMember("tx_ids"))
+    {
+        return false;
+    }
         
-            const rapidjson::Value &tx_ids = data["tx_ids"];
+    const rapidjson::Value &tx_ids = data["tx_ids"];
 
-            if(!tx_ids.IsArray())
-            {
-                return false;
-            }
+    if(!tx_ids.IsArray())
+    {
+        return false;
+    }
             
-            uint32 tx_num = tx_ids.Size();
+    uint32 tx_num = tx_ids.Size();
             
-            if(tx_num > 2000)
-            {
-                return false;
-            }
-
-            tx_pair.first = iter_block;
-            
-            for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
-            {
-                std::string tx_id = iter->GetString();
-                tx_pair.second.push_front(tx_id);
+    if(tx_num > 2000)
+    {
+        return false;
+    }
+    
+    tx_pair.first = expired_block;
+    
+    for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
+    {
+        std::string tx_id = iter->GetString();
+        tx_pair.second.push_front(tx_id);
                 
-                if(m_tx_map.erase(tx_id) != 1)
-                {
-                    return false;
-                }
-            }
-            
-            break;
+        if(m_tx_map.erase(tx_id) != 1)
+        {
+            return false;
         }
     }
     
@@ -1907,6 +1903,7 @@ bool Blockchain::start(std::string db_path)
     genesis_block->set_miner_pubkey(pubkey);
     genesis_block->m_in_main_chain = true;
     m_blocks.insert(std::make_pair(block_hash, genesis_block));
+    m_block_by_id.insert(std::make_pair(0, genesis_block));
     std::shared_ptr<Block> the_most_difficult_block = genesis_block;
     
     struct Child_Block
@@ -3206,7 +3203,8 @@ bool Blockchain::start(std::string db_path)
             CONSOLE_ONLY("load block progress: cur_block_id: %lu, cur_block_hash: %s (hex: %s)", \
                    cur_block_id, iter_block->hash().c_str(), hex_hash.c_str());
         }
-        
+
+        m_block_by_id.insert(std::make_pair(cur_block_id, iter_block));
         block_chain.pop_front();
         
         if(block_chain.empty())
@@ -4882,6 +4880,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 history_from->m_target_name = account->name();
                 history_from->m_tx_id = tx_id;
                 receiver->add_history(history_from);
+                notify_exchange_account_deposit(receiver, history_from);
             }
             else if(tx_type == 3) // new topic
             {
@@ -5349,6 +5348,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     LOG_INFO("mined_new_block, zero_bits: %u, block_id: %lu, block_hash: %s (hex: %s), write to leveldb completely", \
              zero_bits, block_id, block_hash.c_str(), hex_hash.c_str());
     m_blocks.insert(std::make_pair(block_hash, cur_block));
+    m_block_by_id.insert(std::make_pair(block_id, cur_block));
     m_cur_block = cur_block;
     m_cur_block->m_in_main_chain = true;
     
@@ -6764,6 +6764,7 @@ void Blockchain::switch_to_most_difficult()
                     history_from->m_target_name = account->name();
                     history_from->m_tx_id = tx_id;
                     receiver->add_history(history_from);
+                    notify_exchange_account_deposit(receiver, history_from);
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -7046,6 +7047,7 @@ void Blockchain::switch_to_most_difficult()
 
         m_miner_pubkeys.insert(miner->pubkey());
         m_block_changed = true;
+        m_block_by_id.insert(std::make_pair(cur_block_id, iter_block));
     }
 }
 
@@ -7757,6 +7759,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     history_from->m_target_name = account->name();
                     history_from->m_tx_id = tx_id;
                     receiver->add_history(history_from);
+                    notify_exchange_account_deposit(receiver, history_from);
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -8039,6 +8042,7 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
 
         m_miner_pubkeys.insert(miner->pubkey());
         m_block_changed = true;
+        m_block_by_id.insert(std::make_pair(cur_block_id, iter_block));
     }
     
     return pending_start;
@@ -8308,6 +8312,7 @@ void Blockchain::rollback(uint64 block_id)
         }
 
         m_cur_block->m_in_main_chain = false;
+        m_block_by_id.erase(cur_block_id);
         m_cur_block = m_cur_block->get_parent();
         cur_block_id  = m_cur_block->id();
     }
@@ -8912,6 +8917,7 @@ void Blockchain::rollback(uint64 block_id)
             }
 
             m_cur_block->m_in_main_chain = false;
+            m_block_by_id.erase(cur_block_id);
             m_cur_block = m_cur_block->get_parent();
             cur_block_id  = m_cur_block->id();
         }

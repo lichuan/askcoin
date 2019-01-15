@@ -1832,18 +1832,17 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             auto iter_block = m_most_difficult_block;
             uint64 iter_block_id = iter_block->id();
-            
-            while(iter_block_id > 0)
-            {
-                if(iter_block_id <= block_id + DISTANCE)
-                {
-                    break;
-                }
-                
-                iter_block = iter_block->get_parent();
-                iter_block_id = iter_block->id();
-            }
 
+            if(iter_block_id > block_id + DISTANCE)
+            {
+                auto iter = m_block_by_id.find(block_id + DISTANCE);
+
+                if(iter != m_block_by_id.end())
+                {
+                    iter_block = iter->second;
+                }
+            }
+            
             if(!(iter_block->m_accum_pow > declared_pow))
             {
                 iter_block = m_most_difficult_block;
@@ -4915,6 +4914,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                         history_from->m_target_name = account->name();
                         history_from->m_tx_id = tx_id;
                         receiver->add_history(history_from);
+                        notify_exchange_account_deposit(receiver, history_from);
                     }
                     else if(tx_type == 3) // new topic
                     {
@@ -5720,6 +5720,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
             LOG_INFO("finish_detail, block_id: %lu, block_hash: %s (hex: %s), write to leveldb completely", block_id, \
                      block_hash.c_str(), hex_hash.c_str());
             m_blocks.insert(std::make_pair(block_hash, cur_block));
+            m_block_by_id.insert(std::make_pair(block_id, cur_block));
             m_cur_block = cur_block;
             m_cur_block->m_in_main_chain = true;
 

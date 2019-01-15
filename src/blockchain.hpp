@@ -89,8 +89,16 @@ public:
         std::string m_data_dir;
         std::string m_mode;
     };
+
+    struct Exchange_Account
+    {
+        uint64 m_id;
+        std::string m_name;
+        std::string m_password;
+    };
     
     std::shared_ptr<Merge_Point> m_merge_point;
+    std::shared_ptr<Exchange_Account> m_exchange_account;
     
 private:
     void do_peer_message(std::unique_ptr<fly::net::Message<Json>> &message);
@@ -104,6 +112,7 @@ private:
     void do_detail_chain(std::shared_ptr<Pending_Chain> chain);
     void notify_register_account(std::shared_ptr<Account> account);
     void notify_register_failed(std::string pubkey, uint32 reason);
+    void notify_exchange_account_deposit(std::shared_ptr<Account> receiver, std::shared_ptr<History> history);
     
 private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
@@ -133,6 +142,7 @@ private:
     std::map<uint64, std::shared_ptr<Account>> m_account_by_id;
     std::unordered_set<std::string> m_uv_account_pubkeys;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_blocks;
+    std::unordered_map<uint64, std::shared_ptr<Block>> m_block_by_id;
     std::unordered_map<std::string, std::shared_ptr<Pending_Block>> m_pending_blocks;
     std::list<std::string> m_pending_block_hashes;
     std::unordered_map<std::string, std::shared_ptr<Pending_Chain>> m_chains_by_peer_key;

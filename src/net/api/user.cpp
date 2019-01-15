@@ -8,6 +8,7 @@ User::User()
     m_state = 0;
     m_timer_id = 0;
     m_reg_probe = false;
+    m_exchange = false;
 }
 
 User::~User()
