@@ -3398,6 +3398,73 @@ bool Blockchain::start(std::string db_path)
         }
         
         doc.AddMember("blocks", block_arr, allocator);
+        std::string peer_data;
+        s = m_db->Get(leveldb::ReadOptions(), "peer_score", &peer_data);
+        
+        if(!s.ok())
+        {
+            CONSOLE_LOG_FATAL("read peer score data from leveldb failed: %s", s.ToString().c_str());
+
+            return false;
+        }
+        
+        rapidjson::Document doc_peer;
+        const char *peer_data_str = peer_data.c_str();
+        doc_peer.Parse(peer_data_str);
+        
+        if(doc_peer.HasParseError())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        if(!doc_peer.IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        if(!doc_peer.HasMember("peers"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!doc_peer.HasMember("utc"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!doc_peer["utc"].IsUint64())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        const rapidjson::Value &peers = doc_peer["peers"];
+        
+        if(!peers.IsArray())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        for(rapidjson::Value::ConstValueIterator iter = peers.Begin(); iter != peers.End(); ++iter)
+        {
+            const rapidjson::Value &peer_info = *iter;
+
+            if(!peer_info.HasMember("host"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!peer_info.HasMember("port"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!peer_info.HasMember("score"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        }
+
+        doc.AddMember("peer_score", doc_peer, allocator);
         doc.Accept(writer);
         CONSOLE_LOG_INFO("export merge_point.json block_id: %lu, block_hash: %s successfully", \
                          m_merge_point->m_block_id, m_merge_point->m_block_hash.c_str());
