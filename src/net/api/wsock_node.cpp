@@ -91,7 +91,7 @@ bool Wsock_Node::init(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     lock.unlock();
     user->m_timer_id = m_timer_ctl.add_timer([=]() {
             connection->close();
-        }, 30000, true);
+        }, 1800000, true);
     return true;
 }
 
@@ -171,7 +171,7 @@ void Wsock_Node::close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     m_users_to_register.erase(user->m_pubkey);
     m_users_by_pubkey.erase(user->m_pubkey);
 
-    if(user->m_exchange)
+    if(user == m_exchange_user)
     {
         m_exchange_user.reset();
     }
@@ -190,7 +190,7 @@ void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connecti
     m_users_to_register.erase(user->m_pubkey);
     m_users_by_pubkey.erase(user->m_pubkey);
     
-    if(user->m_exchange)
+    if(user == m_exchange_user)
     {
         m_exchange_user.reset();
     }
@@ -496,7 +496,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 uint64 utc_now = time(NULL);
                 std::string tx_sign = doc["sign"].GetString();
                 
-                if(utc + 10 < utc_now || utc_now + 10 < utc)
+                if(utc + 3600 < utc_now || utc_now + 3600 < utc)
                 {
                     connection->close();
                     ASKCOIN_RETURN;
@@ -599,7 +599,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             doc.AddMember("avatar", receiver->avatar(), allocator);
             doc.AddMember("name", rapidjson::StringRef(receiver->name().c_str()), allocator);
             doc.AddMember("pubkey", rapidjson::StringRef(receiver->pubkey().c_str()), allocator);
-            doc.AddMember("reg_block_id", receiver->block_id(), allocator);
             connection->send(doc);
         }
         else if(cmd == net::api::ACCOUNT_HISTORY)
@@ -720,7 +719,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             uint64 utc_now = time(NULL);
             std::string tx_sign = doc["sign"].GetString();
             
-            if(utc + 10 < utc_now || utc_now + 10 < utc)
+            if(utc + 3600 < utc_now || utc_now + 3600 < utc)
             {
                 connection->close();
                 ASKCOIN_RETURN;
@@ -1644,6 +1643,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             }
 
             doc.AddMember("utc", iter_block->utc(), allocator);
+            doc.AddMember("version", iter_block->version(), allocator);
             doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
             doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
             doc.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
@@ -2343,7 +2343,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         rsp_doc.AddMember("msg_type", type, allocator);
         rsp_doc.AddMember("msg_cmd", cmd, allocator);
         rsp_doc.AddMember("msg_id", msg_id, allocator);
-
+        rsp_doc.AddMember("cur_block_id", m_cur_block->id(), allocator);
+        
         if(cmd == net::api::EXCHANGE_LOGIN)
         {
             if(wsock_node->m_exchange_user)
@@ -2500,7 +2501,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     first_not_null_passed = true;
                     auto iter_block = iter->second;
                     uint64 cur_block_id = iter_block->id();
-                    std::string block_hash = iter_block->hash();
+                    const std::string& block_hash = iter_block->hash();
                     std::string block_data;
                     leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
                     
@@ -2704,7 +2705,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         obj.AddMember("block_id", cur_block_id, allocator);
                         obj.AddMember("block_hash", rapidjson::StringRef(block_hash.c_str()), allocator);
                         obj.AddMember("utc", utc, allocator);
-                        obj.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
+                        obj.AddMember("tx_id", rapidjson::Value(tx_id.c_str(), allocator), allocator);
                         obj.AddMember("amount", amount, allocator);
                         
                         if(data.HasMember("memo"))
@@ -2731,7 +2732,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 ASKCOIN_EXIT(EXIT_FAILURE);
                             }
 
-                            obj.AddMember("memo", rapidjson::StringRef(memo.c_str()), allocator);
+                            obj.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
                         }
                         
                         if(account != sender && account != receiver)
@@ -2756,7 +2757,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 rsp_doc.AddMember("deposit", deposit, allocator);
-                rsp_doc.AddMember("withdraw", deposit, allocator);
+                rsp_doc.AddMember("withdraw", withdraw, allocator);
             }
             
             connection->send(rsp_doc);
@@ -2837,7 +2838,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     ASKCOIN_RETURN;
                 }
 
-                rsp_doc.AddMember("cur_block_id", m_cur_block->id(), allocator);
                 rsp_doc.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
                 auto iter = m_blocks.find(block_hash);
                 
@@ -2892,7 +2892,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 auto iter = m_block_by_id.find(iter_block_id);
                                 query_left = false;
                                 
-                                if(iter == m_block_by_id.end() || iter_block_id <= 1 || offset >= DISTANCE)
+                                if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE)
                                 {
                                     left_end = true;
                                     continue;
@@ -2905,7 +2905,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 query_left = true;
                                 ++offset;
                                 
-                                if(iter == m_block_by_id.end() || offset > DISTANCE)
+                                if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
                                 {
                                     right_end = true;
                                     continue;
@@ -2922,7 +2922,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             auto iter = m_block_by_id.find(iter_block_id);
                             ++offset;
 
-                            if(iter == m_block_by_id.end() || offset > DISTANCE)
+                            if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
                             {
                                 right_end = true;
                                 continue;
@@ -2932,10 +2932,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             iter_block_id = block_id - offset;
                             auto iter = m_block_by_id.find(iter_block_id);
-                            query_left = false;
                             ++offset;
                             
-                            if(iter == m_block_by_id.end() || iter_block_id <= 1 || offset > DISTANCE)
+                            if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE + 1)
                             {
                                 left_end = true;
                                 continue;
@@ -3097,8 +3096,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
-                rsp_doc.AddMember("cur_block_id", m_cur_block->id(), allocator);
+
                 rsp_doc.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
                 auto iter_tx = m_tx_map.find(tx_id);
                 
@@ -3131,7 +3129,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 auto iter = m_block_by_id.find(iter_block_id);
                                 query_left = false;
                                 
-                                if(iter == m_block_by_id.end() || iter_block_id <= 1 || offset >= DISTANCE)
+                                if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE)
                                 {
                                     left_end = true;
                                     continue;
@@ -3144,7 +3142,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 query_left = true;
                                 ++offset;
                                 
-                                if(iter == m_block_by_id.end() || offset > DISTANCE)
+                                if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
                                 {
                                     right_end = true;
                                     continue;
@@ -3161,7 +3159,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             auto iter = m_block_by_id.find(iter_block_id);
                             ++offset;
 
-                            if(iter == m_block_by_id.end() || offset > DISTANCE)
+                            if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
                             {
                                 right_end = true;
                                 continue;
@@ -3171,10 +3169,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             iter_block_id = block_id - offset;
                             auto iter = m_block_by_id.find(iter_block_id);
-                            query_left = false;
                             ++offset;
                             
-                            if(iter == m_block_by_id.end() || iter_block_id <= 1 || offset > DISTANCE)
+                            if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE + 1)
                             {
                                 left_end = true;
                                 continue;

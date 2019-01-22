@@ -676,6 +676,29 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
     {
         m_uv_1_txs.clear();
         m_uv_2_txs.clear();
+        printf("clear_uv_tx successfully\n>");
+    }
+    else if(command->m_cmd == "clear_peer")
+    {
+        rapidjson::Document peer_doc;
+        peer_doc.SetObject();
+        rapidjson::Document::AllocatorType &peer_allocator = peer_doc.GetAllocator();
+        rapidjson::Value peers(rapidjson::kArrayType);
+        peer_doc.AddMember("utc", time(NULL), peer_allocator);
+        peer_doc.AddMember("peers", peers, peer_allocator);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        peer_doc.Accept(writer);
+        leveldb::Status s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer.GetString());
+        
+        if(!s.ok())
+        {
+            printf("clear_peer failed, reason: %s\n", s.ToString().c_str());
+        } else {
+            printf("clear_peer successfully\n");
+        }
+        
+        printf(">");
     }
     else if(command->m_cmd == "myinfo")
     {
@@ -709,6 +732,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         printf("your account's name: %s\n", raw_name);
         printf("your account's avatar: %u\n", account->avatar());
         printf("your account's balance: %lu ASK\n", account->get_balance());
+        printf("your account's reg_block_id: %lu\n", account->block_id());
         printf("your account's quesion num: %u\n", account->m_topic_list.size());
         printf("your account's answer num: %u\n", account->m_joined_topic_list.size());
         auto referrer = account->get_referrer();

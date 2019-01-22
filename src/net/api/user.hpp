@@ -18,7 +18,6 @@ public:
     std::string m_pubkey;
     uint64 m_timer_id;
     bool m_reg_probe;
-    bool m_exchange;
 };
 
 }
