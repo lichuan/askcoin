@@ -12,7 +12,7 @@ In order to weaken the advantages of ASIC mining machine, the mining algorithm o
 
 ## System requirement (recommend)
 
-#### *Hardware requirements:*
+### *Hardware requirements:*
 
 | Resource |     Require      |
 | :------: | :--------------: |
@@ -23,7 +23,7 @@ In order to weaken the advantages of ASIC mining machine, the mining algorithm o
 
 
 
-#### *Operating system:*
+### *Operating system:*
 
 Askcoin can run on any Linux distribution *(64bit and support c++11)* such as Centos, Ubuntu, Debian, etc.
 
