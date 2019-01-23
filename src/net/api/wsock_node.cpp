@@ -2051,13 +2051,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
 
             rapidjson::Value tx_list(rapidjson::kArrayType);
 
-            for(auto history : account->m_history)
+            for(auto history : account->m_history_for_explorer)
             {
-                if(history->m_type == HISTORY_MINER_TX_REWARD || history->m_type == HISTORY_MINER_BLOCK_REWARD)
-                {
-                    continue;
-                }
-                
                 rapidjson::Value obj(rapidjson::kObjectType);
                 obj.AddMember("tx", rapidjson::StringRef(history->m_tx_id.c_str()), allocator);
                 obj.AddMember("block_hash", rapidjson::StringRef(history->m_block_hash.c_str()), allocator);
@@ -2114,20 +2109,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 rapidjson::Value tx_list(rapidjson::kArrayType);
                 
-                for(auto history : account->m_history)
+                for(auto history : account->m_history_for_explorer)
                 {
-                    if(history->m_type == HISTORY_MINER_TX_REWARD || history->m_type == HISTORY_MINER_BLOCK_REWARD)
-                    {
-                        continue;
-                    }
-                
                     rapidjson::Value obj(rapidjson::kObjectType);
                     obj.AddMember("tx", rapidjson::StringRef(history->m_tx_id.c_str()), allocator);
                     obj.AddMember("block_hash", rapidjson::StringRef(history->m_block_hash.c_str()), allocator);
                     obj.AddMember("utc", history->m_utc, allocator);
                     tx_list.PushBack(obj, allocator);
                 }
-            
+                
                 doc.AddMember("txs", tx_list, allocator);
                 connection->send(doc);
             }

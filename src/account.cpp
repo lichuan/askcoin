@@ -69,9 +69,19 @@ void Account::add_history(std::shared_ptr<History> history)
 {
     m_history.push_back(history);
     
-    while(m_history.size() > 200)
+    if(m_history.size() > 200)
     {
         m_history.pop_front();
+    }
+    
+    if(history->m_type != HISTORY_REFERRER_REWARD && history->m_type != HISTORY_MINER_TX_REWARD && history->m_type != HISTORY_MINER_BLOCK_REWARD)
+    {
+        m_history_for_explorer.push_back(history);
+
+        if(m_history_for_explorer.size() > 200)
+        {
+            m_history_for_explorer.pop_front();
+        }
     }
 }
 
@@ -80,6 +90,14 @@ void Account::pop_history()
     if(!m_history.empty())
     {
         m_history.pop_back();
+    }
+}
+
+void Account::pop_history_for_explorer()
+{
+    if(!m_history_for_explorer.empty())
+    {
+        m_history_for_explorer.pop_back();
     }
 }
 
@@ -102,6 +120,25 @@ void Account::proc_history_expired(uint64 cur_block_id)
     while(m_history.size() > 200)
     {
         m_history.pop_front();
+    }
+    
+    while(!m_history_for_explorer.empty())
+    {
+        auto h = m_history_for_explorer.front();
+        
+        if(h->m_block_id + TOPIC_LIFE_TIME * 30 < cur_block_id)
+        {
+            m_history_for_explorer.pop_front();
+        }
+        else
+        {
+            break;
+        }
+    }
+    
+    while(m_history_for_explorer.size() > 200)
+    {
+        m_history_for_explorer.pop_front();
     }
 }
 

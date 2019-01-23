@@ -8264,6 +8264,7 @@ void Blockchain::rollback(uint64 block_id)
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                 referrer->add_balance(2);
                 referrer->pop_history();
+                referrer->pop_history_for_explorer();
                 
                 if(!referrer_referrer)
                 {
@@ -8292,6 +8293,7 @@ void Blockchain::rollback(uint64 block_id)
                 std::shared_ptr<Account> referrer = account->get_referrer();
                 account->add_balance(2);
                 account->pop_history();
+                account->pop_history_for_explorer();
                 
                 if(!referrer)
                 {
@@ -8317,7 +8319,9 @@ void Blockchain::rollback(uint64 block_id)
                     account->add_balance(amount);
                     receiver->sub_balance(amount);
                     account->pop_history();
+                    account->pop_history_for_explorer();
                     receiver->pop_history();
+                    receiver->pop_history_for_explorer();
                 }
                 else if(tx_type == 3) // new topic
                 {
@@ -8327,6 +8331,7 @@ void Blockchain::rollback(uint64 block_id)
                     m_topic_list.pop_back();
                     m_topics.erase(tx_id);
                     account->pop_history();
+                    account->pop_history_for_explorer();
                 }
                 else if(tx_type == 4) // reply
                 {
@@ -8360,6 +8365,7 @@ void Blockchain::rollback(uint64 block_id)
                     reply_to->get_owner()->sub_balance(amount);
                     topic->m_reply_list.pop_back();
                     reply_to->get_owner()->pop_history();
+                    reply_to->get_owner()->pop_history_for_explorer();
                 }
                 else
                 {
@@ -8869,6 +8875,7 @@ void Blockchain::rollback(uint64 block_id)
                     std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
                     referrer->add_balance(2);
                     referrer->pop_history();
+                    referrer->pop_history_for_explorer();
                 
                     if(!referrer_referrer)
                     {
@@ -8897,6 +8904,7 @@ void Blockchain::rollback(uint64 block_id)
                     std::shared_ptr<Account> referrer = account->get_referrer();
                     account->add_balance(2);
                     account->pop_history();
+                    account->pop_history_for_explorer();
                 
                     if(!referrer)
                     {
@@ -8922,7 +8930,9 @@ void Blockchain::rollback(uint64 block_id)
                         account->add_balance(amount);
                         receiver->sub_balance(amount);
                         account->pop_history();
+                        account->pop_history_for_explorer();
                         receiver->pop_history();
+                        receiver->pop_history_for_explorer();
                     }
                     else if(tx_type == 3) // new topic
                     {
@@ -8932,6 +8942,7 @@ void Blockchain::rollback(uint64 block_id)
                         m_topic_list.pop_back();
                         m_topics.erase(tx_id);
                         account->pop_history();
+                        account->pop_history_for_explorer();
                     }
                     else if(tx_type == 4) // reply
                     {
@@ -8965,6 +8976,7 @@ void Blockchain::rollback(uint64 block_id)
                         reply_to->get_owner()->sub_balance(amount);
                         topic->m_reply_list.pop_back();
                         reply_to->get_owner()->pop_history();
+                        reply_to->get_owner()->pop_history_for_explorer();
                     }
                     else
                     {

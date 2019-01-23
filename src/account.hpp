@@ -43,16 +43,18 @@ public:
     uint64 block_id();
     void add_history(std::shared_ptr<History> history);
     void pop_history();
+    void pop_history_for_explorer();
     void proc_history_expired(uint64 cur_block_id);
     bool joined_topic(std::shared_ptr<Topic> topic);
     void leave_topic(std::shared_ptr<Topic> topic);
     std::list<std::shared_ptr<Topic>> m_topic_list;
     std::list<std::shared_ptr<Topic>> m_joined_topic_list;
     std::list<std::shared_ptr<History>> m_history;
+    std::list<std::shared_ptr<History>> m_history_for_explorer;
     uint64 m_uv_spend;
     uint32 m_uv_topic;
     uint32 m_uv_join_topic;
-
+    
 private:
     std::string m_name;
     uint64 m_id;
