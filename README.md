@@ -35,7 +35,7 @@ The binary release archive on GitHub is currently built on CentOS 7.4
 
 ## Configuration
 
-The configuration file (config.json) for askcoin is as follows:
+The configuration file (***config.json***) for askcoin is as follows:
 
 ```json
 {
@@ -204,6 +204,202 @@ You can then go to askcoin directory and compile askcoin's source code using ***
 cd askcoin
 scons
 ```
+
+
+
+
+
+## Exchange API
+
+If some centralized exchanges wish to list ASK coin, they can follow the steps described in this section.
+
+1. Add an `exchange` field under the `websocket` field of the ***config.json*** file in the **full node** you run, then fill in the ID and name (base64) of the account representing the exchange wallet , and set a password to add a layer of security check:
+
+   ```json
+   {
+       "log_level": "info",
+       "log_path": "./log",
+       "db_path": "./db",
+       "network": {
+           "p2p": {
+               "host": "here should be your host (domain or ip address)",
+               "port": 18050,
+               "max_conn": 1000,
+               "init_peer": [
+                   {
+                       "host": "node1.askcoin.me",
+                       "port": 18050
+                   },
+                   {
+                       "host": "node2.askcoin.me",
+                       "port": 18050
+                   }
+               ]
+           },
+           "websocket": {
+               "enable": true,
+               "host": "0.0.0.0",
+               "port": 19050,
+               "max_conn": 5000,
+               "exchange": {
+                   "account_id": 123,
+                   "account_b64": "ZXhjaGFuZ2VfdXNlcg==",
+                   "password": "exchange_api_password"
+               }
+           }
+       }
+   }
+   ```
+
+2. Establish a websocket connection to your **full node** and send **EXCHANGE_LOGIN** message:
+
+   ```javascript
+   var WebSocket = require('ws');
+   // change the following to your own account
+   var exchange_account_id = 123;
+   var exchange_account_b64 = "ZXhjaGFuZ2VfdXNlcg=="; // base64 of account name
+   var exchange_password = "exchange_api_password";
+   var exchange_account_privkey_str = "Vm1wSmQwMVhSWGxUYTJScVUwWktXRmxzVWtKaVJUQjN=";
+   var privkey_buf = Buffer.from(exchange_account_privkey_str, 'base64');
+   var exchange_account_privkey = ec.keyFromPrivate(privkey_buf);
+   var pubkey_hex = exchange_account_privkey.getPublic('hex');
+   var exchange_account_pubkey_b64 = Buffer.from(pubkey_hex, 'hex').toString('base64');
+   var ws = new WebSocket('ws://your-full-node.com:19050');
+   ws.on('open', function() {
+       // send EXCHANGE_LOGIN message
+       ws.send(JSON.stringify({
+           msg_type: 6,
+           msg_cmd: 0,
+           msg_id: 0,
+           account_id: exchange_account_id,
+           account_b64: exchange_account_b64,
+           password: exchange_password
+           
+           // If you miss some blocks due to network interruption or downtime,
+           // you can add the following two fields to the next EXCHANGE_LOGIN message
+           // to query the withdrawal and deposit records within the blocks.
+           // block_id_from: 1000,
+           // block_id_to: 2000
+       }));
+   });
+   ```
+
+   From now on, if someone transfers ASK coin to your exchange account, you will receive a real-time notification message (**EXCHANGE_NOTIFY_DEPOSIT**) containing the sender's account information, the amount of transfer and **memo**. You can identify the depositor's account according to the **memo**.
+
+   Since **consensus algorithm** judges which chain is the **main chain** based on **cumulative difficulty**, it may abandon the current branch chain and switch to the new main chain many times in the process of consensus, it is these characteristics that you need to constantly send **EXCHANGE_DEPOSIT_TX_PROBE** messages to check whether the transaction receives enough confirmations from miners.
+
+3. If someone initiates withdrawal of ASK coin, the first thing to do is to construct an **ACCOUNT_QUERY** message, fill in the ID of the account, and then send it to your **full node** to query the public key string of the account ID.
+
+   ```javascript
+   function request_for_withdrawal(user_name, receiver_id, receiver_name, amount,memo)
+   {
+       if(balance_of_each_user[user_name] < amount) {
+           console.log("Your account balance is insufficient");
+           return;
+       }
+   
+       withdraw_unique_id += 1;
+       
+       // Query the corresponding account public key
+       // from the Full-node according to the account ID
+       ws.send(JSON.stringify({ // send ACCOUNT_QUERY message
+           msg_type: 1,
+           msg_cmd: 3,
+           msg_id: withdraw_unique_id,
+           id: receiver_id
+       }));
+       
+       var pre_withdraw = {};
+       pre_withdraw.sender_name = user_name;
+       pre_withdraw.receiver_id = receiver_id;
+       pre_withdraw.receiver_name = receiver_name;
+       pre_withdraw.amount = amount;
+       pre_withdraw.memo = memo
+       pre_pending_withdraw_txs[withdraw_unique_id] = pre_withdraw;
+       console.log("withdraw_unique_id:", withdraw_unique_id);
+   }
+   ```
+
+   When you query the public key corresponding to the account id, you need to construct a transfer transaction, fill in the recipient's public key, transfer amount and other information, and calculate the transaction ID of the transaction, and use your private key to sign the transaction, and finally send the transaction to your **full node** again.
+
+   ```js
+   if(msg_obj.msg_type == 1 && msg_obj.msg_cmd == 3) // ACCOUNT_QUERY
+   {
+       var pre_withdraw = pre_pending_withdraw_txs[msg_obj.msg_id];
+   
+       if(msg_obj.err_code == 12) // ERR_RECEIVER_NOT_EXIST
+       {
+           console.log("receiver not exist");
+           pre_pending_withdraw_txs[msg_obj.msg_id] = null;
+           return;
+       }
+   
+       var buf = Buffer.from(pre_withdraw.receiver_name);
+       var receiver_b64 = buf.toString('base64');
+   
+       if(receiver_b64 != msg_obj.name) {
+           console.log("your receiver_name does not match the one from full-node");
+           pre_pending_withdraw_txs[msg_obj.msg_id] = null;
+           return;
+       }
+   
+       // sendcoin
+       var data_obj = {};
+       data_obj.type = 2;
+       data_obj.pubkey = exchange_account_pubkey_b64;
+       var utc = (Date.now() / 1000);
+       data_obj.utc = parseInt(utc);
+       data_obj.block_id = latest_block_id;
+       data_obj.fee = 2;
+       data_obj.amount = pre_withdraw.amount;
+   
+       if(pre_withdraw.memo && pre_withdraw.memo.length > 0) {
+           data_obj.memo = Buffer.from(pre_withdraw.memo).toString('base64');
+       }
+   
+       data_obj.receiver = msg_obj.pubkey;
+       var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+       var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+       var sign = exchange_account_privkey.sign(tx_hash_raw).toDER();
+       var sign_b64 = Buffer.from(sign).toString('base64');
+       ws.send(JSON.stringify({
+           msg_type: 2,
+           msg_cmd: 0,
+           msg_id: 0,
+           sign: sign_b64,
+           data: data_obj
+       }));
+   
+       var withdraw_info = {};
+       withdraw_info.sender_name = pre_withdraw.sender_name;
+       withdraw_info.tx_id = tx_id;
+       withdraw_info.block_id = data_obj.block_id;
+       withdraw_info.utc = data_obj.utc;
+       withdraw_info.receiver_name = pre_withdraw.receiver_name;
+       withdraw_info.receiver_id = pre_withdraw.receiver_id;
+       withdraw_info.amount = pre_withdraw.amount;
+       withdraw_info.memo = data_obj.memo;
+       pending_withdraw_txs[tx_id] = withdraw_info;
+       pre_pending_withdraw_txs[withdraw_unique_id] = null;
+   }
+   ```
+
+4. Similar to the **EXCHANGE_DEPOSIT_TX_PROBE** message, the withdrawal process also needs to send **EXCHANGE_WITHDRAW_TX_PROBE** message periodically to confirm whether enough confirmations have been received from miners.
+
+   ```javascript
+   setTimeout(function() {
+       // send EXCHANGE_WITHDRAW_TX_PROBE message
+       ws.send(JSON.stringify({
+           msg_type: 6,
+           msg_cmd: 3,
+           msg_id: 0,
+           block_id: withdraw_info.block_id,
+           tx_id: tx_id
+       }));
+   }, 10000);
+   ```
+
+You can refer to the [***exchange_api.js***](api_usage/exchange_api.js) file in the **api_usage** directory for a complete usage of the exchange api, which contains all the examples needed for deposit and withdrawal.
 
 
 
