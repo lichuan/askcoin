@@ -2769,9 +2769,11 @@ bool Blockchain::start(std::string db_path)
                 history->m_block_id = cur_block_id;
                 history->m_block_hash = block_hash;
                 history->m_change = 2;
-                history->m_target_id = reg_account->id();
-                history->m_target_avatar = reg_account->avatar();
-                history->m_target_name = reg_account->name();
+                
+                // history->m_target_id = reg_account->id();
+                // history->m_target_avatar = reg_account->avatar();
+                // history->m_target_name = reg_account->name();
+                
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
                 referrer->add_history(history);
@@ -4772,9 +4774,11 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
             history->m_block_id = cur_block_id;
             history->m_block_hash = block_hash;
             history->m_change = 2;
-            history->m_target_id = reg_account->id();
-            history->m_target_avatar = reg_account->avatar();
-            history->m_target_name = reg_account->name();
+            
+            // history->m_target_id = reg_account->id();
+            // history->m_target_avatar = reg_account->avatar();
+            // history->m_target_name = reg_account->name();
+            
             history->m_utc = utc;
             history->m_tx_id = tx_id;
             referrer->add_history(history);
@@ -6686,9 +6690,11 @@ void Blockchain::switch_to_most_difficult()
                 history->m_block_id = cur_block_id;
                 history->m_block_hash = block_hash;
                 history->m_change = 2;
-                history->m_target_id = reg_account->id();
-                history->m_target_avatar = reg_account->avatar();
-                history->m_target_name = reg_account->name();
+                
+                // history->m_target_id = reg_account->id();
+                // history->m_target_avatar = reg_account->avatar();
+                // history->m_target_name = reg_account->name();
+                
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
                 referrer->add_history(history);
@@ -7681,9 +7687,11 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 history->m_block_id = cur_block_id;
                 history->m_block_hash = block_hash;
                 history->m_change = 2;
-                history->m_target_id = reg_account->id();
-                history->m_target_avatar = reg_account->avatar();
-                history->m_target_name = reg_account->name();
+                
+                // history->m_target_id = reg_account->id();
+                // history->m_target_avatar = reg_account->avatar();
+                // history->m_target_name = reg_account->name();
+                
                 history->m_utc = utc;
                 history->m_tx_id = tx_id;
                 referrer->add_history(history);

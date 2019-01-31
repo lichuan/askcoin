@@ -4629,9 +4629,11 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     history->m_block_id = cur_block_id;
                     history->m_block_hash = block_hash;
                     history->m_change = 2;
-                    history->m_target_id = reg_account->id();
-                    history->m_target_avatar = reg_account->avatar();
-                    history->m_target_name = reg_account->name();
+                    
+                    // history->m_target_id = reg_account->id();
+                    // history->m_target_avatar = reg_account->avatar();
+                    // history->m_target_name = reg_account->name();
+                    
                     history->m_utc = utc;
                     history->m_tx_id = tx_id;
                     referrer->add_history(history);
