@@ -169,8 +169,19 @@ void Wsock_Node::close(std::shared_ptr<fly::net::Connection<Wsock>> connection)
     m_timer_ctl.del_timer(user->m_timer_id);
     m_users.erase(conn_id);
     m_users_to_register.erase(user->m_pubkey);
-    m_users_by_pubkey.erase(user->m_pubkey);
+    auto rg = m_users_by_pubkey.equal_range(user->m_pubkey);
 
+    for(auto iter = rg.first; iter != rg.second; ++iter)
+    {
+        auto u = iter->second;
+
+        if(u == user)
+        {
+            m_users_by_pubkey.erase(iter);
+            break;
+        }
+    }
+    
     if(user == m_exchange_user)
     {
         m_exchange_user.reset();
@@ -188,7 +199,18 @@ void Wsock_Node::be_closed(std::shared_ptr<fly::net::Connection<Wsock>> connecti
     m_timer_ctl.del_timer(user->m_timer_id);
     m_users.erase(conn_id);
     m_users_to_register.erase(user->m_pubkey);
-    m_users_by_pubkey.erase(user->m_pubkey);
+    auto rg = m_users_by_pubkey.equal_range(user->m_pubkey);
+    
+    for(auto iter = rg.first; iter != rg.second; ++iter)
+    {
+        auto u = iter->second;
+        
+        if(u == user)
+        {
+            m_users_by_pubkey.erase(iter);
+            break;
+        }
+    }
     
     if(user == m_exchange_user)
     {
