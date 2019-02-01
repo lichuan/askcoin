@@ -415,7 +415,9 @@ var data_obj = {};
 data_obj.block_id = latest_block_id;
 data_obj.fee = 2;
 data_obj.name = Buffer.from("username").toString('base64');
-data_obj.referrer = 'BC9YHbvohhgCxA+8FbHbcJozcVKl0W9ltw3veDxzO066ulbmu19Hb4kY2OS3NnNmIDFNKSzh8fjl7u6KqcUoWQA='; // change to your pubkey
+
+// change the public key in the following line to your own
+data_obj.referrer = 'BC9YHbvohhgCxA+8FbHbcJozcVKl0W9ltw3veDxzO066ulbmu19Hb4kY2OS3NnNmIDFNKSzh8fjl7u6KqcUoWQA=';
 var data_obj_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
 var sign = your_privkey.sign(data_obj_hash_raw).toDER();
 var sign_b64 = Buffer.from(sign).toString('base64');
