@@ -425,7 +425,7 @@ var sign_string = '{"sign":"' + sign_b64 + '","sign_data":' + JSON.stringify(dat
 console.log("sign_string is:", sign_string);
 ```
 
-You can refer to the [***exchange_api.js***](api_usage/exchange_api.js) file in the **api_usage** directory for a complete usage of the process of generating registration string.
+You can refer to the [***askcoin-gen-reg-sign***](https://github.com/lichuan/askcoin-gen-reg-sign) for a complete usage of the process of generating registration string.
 
 
 
