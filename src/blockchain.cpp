@@ -733,7 +733,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         printf("your account's avatar: %u\n", account->avatar());
         printf("your account's balance: %lu ASK\n", account->get_balance());
         printf("your account's reg_block_id: %lu\n", account->block_id());
-        printf("your account's quesion num: %u\n", account->m_topic_list.size());
+        printf("your account's question num: %u\n", account->m_topic_list.size());
         printf("your account's answer num: %u\n", account->m_joined_topic_list.size());
         auto referrer = account->get_referrer();
         
