@@ -193,7 +193,7 @@ Askcoin is built through scons (2.5.1 compatible version). On CentOS 7.4, you ca
 yum install -y scons cmake3 gcc-c++ autoconf automake libtool
 ```
 
-Askcoin is open source now, so you can clone it and its submodules by executing the following command:
+Askcoin is open-source now, so you can clone it and its submodules by executing the following command:
 
 ```shell
 git clone https://github.com/lichuan/askcoin.git --recursive
