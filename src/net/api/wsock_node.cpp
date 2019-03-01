@@ -2341,6 +2341,20 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     
     if(type == net::api::MSG_EXCHANGE)
     {
+        if(cmd == net::api::EXCHANGE_CURRENT_SUPPLY)
+        {
+            uint64 cur_supply = (uint64)1000000000000UL - m_reserve_fund_account->get_balance();
+            rapidjson::Document rsp_doc;
+            rsp_doc.SetObject();
+            rapidjson::Document::AllocatorType &allocator = rsp_doc.GetAllocator();
+            rsp_doc.AddMember("msg_type", type, allocator);
+            rsp_doc.AddMember("msg_cmd", cmd, allocator);
+            rsp_doc.AddMember("msg_id", msg_id, allocator);
+            rsp_doc.AddMember("cur_supply", cur_supply, allocator);
+            connection->send(rsp_doc);
+            return;
+        }
+        
         auto &exchange_account = Blockchain::instance()->m_exchange_account;
 
         if(!exchange_account)
@@ -2783,8 +2797,684 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 connection->close();
                 ASKCOIN_RETURN;
             }
+
+            if(cmd == net::api::EXCHANGE_LOCK)
+            {
+                // if(m_is_locked)
+                // {
+                //     rsp_doc.AddMember("err_code", net::api::ERR_EXCHANGE_CAN_NOT_REPEAT_LOCKING, allocator);
+                //     connection->send(rsp_doc);
+                //     ASKCOIN_RETURN;
+                // }
+                
+                // if(!doc.HasMember("password"))
+                // {
+                //     connection->close();
+                //     ASKCOIN_RETURN;
+                // }
+                
+                // if(!doc["password"].IsString())
+                // {
+                //     connection->close();
+                //     ASKCOIN_RETURN;
+                // }
+
+                // std::string password = doc["password"].GetString();
+                
+                // if(password.empty())
+                // {
+                //     connection->close();
+                //     ASKCOIN_RETURN;
+                // }
+                
+                // char sha1_buf[20] = {0};
+                // fly::base::sha1(password.c_str(), password.length(), sha1_buf, 20);
+                // m_lock_password.assign(sha1_buf, 20);
+                m_is_locked = true;
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_IS_LOCKED)
+            {
+                rsp_doc.AddMember("is_locked", m_is_locked, allocator);
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_INFO)
+            {
+                auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
+                
+                if(iter == m_account_by_id.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto &account = iter->second;
+                rsp_doc.AddMember("latest_block_id", m_cur_block->id(), allocator);
+                rsp_doc.AddMember("version", rapidjson::StringRef(ASKCOIN_VERSION_NAME), allocator);
+                auto p2p_node = net::p2p::Node::instance();
+                std::unique_lock<std::mutex> lock_p2p(p2p_node->m_peer_mutex);
+                uint32 p2p_conn_num = p2p_node->m_peers.size();
+                lock_p2p.unlock();
+                rsp_doc.AddMember("connections", p2p_conn_num, allocator);
+                rsp_doc.AddMember("reserves", account->get_balance(), allocator);
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_UNLOCK)
+            {
+                if(!m_is_locked)
+                {
+                    rsp_doc.AddMember("err_code", net::api::ERR_EXCHANGE_CAN_NOT_REPEAT_UNLOCKING, allocator);
+                    connection->send(rsp_doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc.HasMember("password"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["password"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                std::string password = doc["password"].GetString();
+                
+                if(password.empty())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                char sha1_buf[20] = {0};
+                fly::base::sha1(password.c_str(), password.length(), sha1_buf, 20);
+                std::string password_sha1(sha1_buf, 20);
             
-            if(cmd == net::api::EXCHANGE_DEPOSIT_TX_PROBE)
+                if(password_sha1 != m_lock_password)
+                {
+                    rsp_doc.AddMember("err_code", net::api::ERR_EXCHANGE_UNLOCK_NOT_VALID, allocator);
+                    connection->send(rsp_doc);
+                    ASKCOIN_RETURN;
+                }
+                
+                m_is_locked = false;
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_CHANGE_KEY)
+            {
+                if(!doc.HasMember("newkey"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(!doc["newkey"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                std::string newkey = doc["newkey"].GetString();
+                
+                if(newkey.empty())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(m_is_locked)
+                {
+                    if(!doc.HasMember("key"))
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    if(!doc["key"].IsString())
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+
+                    std::string old_key = doc["key"].GetString();
+
+                    if(old_key.empty())
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                    
+                    char sha1_buf[20] = {0};
+                    fly::base::sha1(old_key.c_str(), old_key.length(), sha1_buf, 20);
+                    std::string password_sha1(sha1_buf, 20);
+                    
+                    if(password_sha1 != m_lock_password)
+                    {
+                        rsp_doc.AddMember("err_code", net::api::ERR_EXCHANGE_CHANGE_KEY_NOT_VALID, allocator);
+                        connection->send(rsp_doc);
+                        ASKCOIN_RETURN;
+                    }
+                }
+                else
+                {
+                    m_is_locked = true;
+                }
+                
+                char sha1_buf[20] = {0};
+                fly::base::sha1(newkey.c_str(), newkey.length(), sha1_buf, 20);
+                m_lock_password.assign(sha1_buf, 20);
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_LIST_DEPOSIT)
+            {
+                if(!doc.HasMember("required_confirms"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(!doc["required_confirms"].IsUint())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                uint32 required_confirms = doc["required_confirms"].GetUint();
+
+                if(required_confirms == 0)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(!doc.HasMember("block_id"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(!doc["block_id"].IsUint64())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                uint64 block_id_need = doc["block_id"].GetUint64();
+                
+                if(block_id_need == 0)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
+                
+                if(iter == m_account_by_id.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto &account_of_exchange = iter->second;
+                uint64 iter_block_id = block_id_need;
+                uint64 iter_num = 0;
+                rapidjson::Value deposits(rapidjson::kArrayType);
+                
+                while(++iter_num <= required_confirms)
+                {
+                    if(iter_block_id == 0)
+                    {
+                        break;
+                    }
+                    
+                    auto iter_1 = m_block_by_id.find(iter_block_id);
+                    
+                    if(iter_1 == m_block_by_id.end())
+                    {
+                        break;
+                    }
+                    
+                    std::shared_ptr<Block> iter_block = iter_1->second;
+                    std::string block_data;
+                    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                    
+                    if(!s.ok())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    rapidjson::Document doc_1;
+                    const char *block_data_str = block_data.c_str();
+                    doc_1.Parse(block_data_str);
+        
+                    if(doc_1.HasParseError())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!doc_1.HasMember("data"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.HasMember("tx"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    const rapidjson::Value &data = doc_1["data"];
+        
+                    if(!data.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!data.HasMember("tx_ids"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    const rapidjson::Value &tx_ids = data["tx_ids"];
+                    const rapidjson::Value &tx = doc_1["tx"];
+        
+                    if(!tx_ids.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!tx.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    uint32 tx_num = tx_ids.Size();
+
+                    if(tx_num > 2000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(tx.Size() != tx_num)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    for(uint32 i = 0; i < tx_num; ++i)
+                    {
+                        std::string tx_id = tx_ids[i].GetString();
+                        const rapidjson::Value &tx_node = tx[i];
+                    
+                        if(!tx_node.IsObject())
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!tx_node.HasMember("sign"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!tx_node.HasMember("data"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    
+                        std::string tx_sign = tx_node["sign"].GetString();
+                        const rapidjson::Value &data = tx_node["data"];
+
+                        if(!is_base64_char(tx_sign))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("pubkey"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!data.HasMember("type"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("utc"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        std::string pubkey = data["pubkey"].GetString();
+                        uint64 tx_utc = data["utc"].GetUint64();
+                        rapidjson::StringBuffer buffer;
+                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                        tx_node.Accept(writer);
+                        std::string raw_data(buffer.GetString(), buffer.GetSize());
+
+                        if(!verify_sign(pubkey, tx_id, tx_sign))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    
+                        uint32 tx_type = data["type"].GetUint();
+
+                        if(tx_type != 2)
+                        {
+                            continue;
+                        }
+                        
+                        std::shared_ptr<Account> account;
+                        
+                        if(!get_account(pubkey, account))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        std::string receiver_pubkey = data["receiver"].GetString();
+                        
+                        if(receiver_pubkey != account_of_exchange->pubkey())
+                        {
+                            continue;
+                        }
+
+                        rapidjson::Value deposit(rapidjson::kObjectType);
+                        std::shared_ptr<Account> receiver;
+                        
+                        if(!get_account(receiver_pubkey, receiver))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(data.HasMember("memo"))
+                        {
+                            std::string memo = data["memo"].GetString();
+                            deposit.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
+                        }
+                        
+                        uint64 amount = data["amount"].GetUint64();
+                        deposit.AddMember("amount", amount, allocator);
+                        deposit.AddMember("tx_id", rapidjson::Value(tx_id.c_str(), allocator), allocator);
+                        deposit.AddMember("confirms", block_id_need - iter_block_id + 1, allocator);
+                        deposit.AddMember("sender_id", account->id(), allocator);
+                        deposit.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                        
+                        if(iter_num == required_confirms)
+                        {
+                            deposit.AddMember("confirmed", true, allocator);
+                        }
+                        else
+                        {
+                            deposit.AddMember("confirmed", false, allocator);
+                        }
+                        
+                        deposits.PushBack(deposit, allocator);
+                    }
+                    
+                    --iter_block_id;
+                }
+                
+                rsp_doc.AddMember("deposits", deposits, allocator);
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_LIST_WITHDRAW)
+            {
+                if(!doc.HasMember("required_confirms"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["required_confirms"].IsUint())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 required_confirms = doc["required_confirms"].GetUint();
+
+                if(required_confirms == 0)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                if(!doc.HasMember("block_id"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(!doc["block_id"].IsUint64())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                uint64 block_id_need = doc["block_id"].GetUint64();
+                
+                if(block_id_need == 0)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
+                
+                if(iter == m_account_by_id.end())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                auto &account_of_exchange = iter->second;
+                uint64 iter_block_id = block_id_need;
+                uint64 iter_num = 0;
+                rapidjson::Value withdraws(rapidjson::kArrayType);
+                
+                while(++iter_num <= required_confirms)
+                {
+                    if(iter_block_id == 0)
+                    {
+                        break;
+                    }
+                    
+                    auto iter_1 = m_block_by_id.find(iter_block_id);
+                    
+                    if(iter_1 == m_block_by_id.end())
+                    {
+                        break;
+                    }
+                    
+                    std::shared_ptr<Block> iter_block = iter_1->second;
+                    std::string block_data;
+                    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                    
+                    if(!s.ok())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
+                    rapidjson::Document doc_1;
+                    const char *block_data_str = block_data.c_str();
+                    doc_1.Parse(block_data_str);
+        
+                    if(doc_1.HasParseError())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!doc_1.HasMember("data"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.HasMember("tx"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    const rapidjson::Value &data = doc_1["data"];
+        
+                    if(!data.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!data.HasMember("tx_ids"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    const rapidjson::Value &tx_ids = data["tx_ids"];
+                    const rapidjson::Value &tx = doc_1["tx"];
+        
+                    if(!tx_ids.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!tx.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    uint32 tx_num = tx_ids.Size();
+
+                    if(tx_num > 2000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(tx.Size() != tx_num)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    for(uint32 i = 0; i < tx_num; ++i)
+                    {
+                        std::string tx_id = tx_ids[i].GetString();
+                        const rapidjson::Value &tx_node = tx[i];
+                    
+                        if(!tx_node.IsObject())
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!tx_node.HasMember("sign"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!tx_node.HasMember("data"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    
+                        std::string tx_sign = tx_node["sign"].GetString();
+                        const rapidjson::Value &data = tx_node["data"];
+
+                        if(!is_base64_char(tx_sign))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("pubkey"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!data.HasMember("type"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("utc"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        std::string pubkey = data["pubkey"].GetString();
+                        uint64 tx_utc = data["utc"].GetUint64();
+                        rapidjson::StringBuffer buffer;
+                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                        tx_node.Accept(writer);
+                        std::string raw_data(buffer.GetString(), buffer.GetSize());
+
+                        if(!verify_sign(pubkey, tx_id, tx_sign))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    
+                        uint32 tx_type = data["type"].GetUint();
+
+                        if(tx_type != 2)
+                        {
+                            continue;
+                        }
+                        
+                        std::shared_ptr<Account> account;
+                        
+                        if(!get_account(pubkey, account))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(pubkey != account_of_exchange->pubkey())
+                        {
+                            continue;
+                        }
+
+                        std::string receiver_pubkey = data["receiver"].GetString();
+                        rapidjson::Value withdraw(rapidjson::kObjectType);
+                        std::shared_ptr<Account> receiver;
+                        
+                        if(!get_account(receiver_pubkey, receiver))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(data.HasMember("memo"))
+                        {
+                            std::string memo = data["memo"].GetString();
+                            withdraw.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
+                        }
+                        
+                        uint64 amount = data["amount"].GetUint64();
+                        withdraw.AddMember("amount", amount, allocator);
+                        withdraw.AddMember("tx_id", rapidjson::Value(tx_id.c_str(), allocator), allocator);
+                        withdraw.AddMember("confirms", block_id_need - iter_block_id + 1, allocator);
+                        withdraw.AddMember("receiver_id", receiver->id(), allocator);
+                        withdraw.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                        
+                        if(iter_num == required_confirms)
+                        {
+                            withdraw.AddMember("confirmed", true, allocator);
+                        }
+                        else
+                        {
+                            withdraw.AddMember("confirmed", false, allocator);
+                        }
+
+                        withdraws.PushBack(withdraw, allocator);
+                    }
+                    
+                    --iter_block_id;
+                }
+
+                rsp_doc.AddMember("withdraws", withdraws, allocator);
+                connection->send(rsp_doc);
+            }
+            else if(cmd == net::api::EXCHANGE_DEPOSIT_TX_PROBE)
             {
                 if(!doc.HasMember("block_hash"))
                 {

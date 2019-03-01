@@ -354,6 +354,8 @@ public:
             ">send_coin [account_id] [amount] [memo]\n"
             ">get_balance\n"
             ">top100\n"
+            ">lock [password]\n"
+            ">unlock [password]\n"
             ">enable_mine [true|false]\n"
             ">info\n"
             ">myinfo\n"
@@ -522,6 +524,22 @@ public:
                     if(param_num > 0)
                     {
                         cout << "clear_uv_tx doesn't need any param" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "lock")
+                {
+                    if(param_num != 1)
+                    {
+                        cout << "usage: lock [password]" << endl;
+                        continue;
+                    }
+                }
+                else if(cmd == "unlock")
+                {
+                    if(param_num != 1)
+                    {
+                        cout << "usage: unlock [password]" << endl;
                         continue;
                     }
                 }

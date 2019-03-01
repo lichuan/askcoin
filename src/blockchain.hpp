@@ -190,6 +190,8 @@ private:
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Wsock>>> m_wsock_messages;
     fly::base::Lock_Queue<std::shared_ptr<Command>> m_commands;
     std::shared_ptr<rapidjson::Document> m_broadcast_doc;
+    std::string m_lock_password;
+    bool m_is_locked = false;
 };
 
 #endif

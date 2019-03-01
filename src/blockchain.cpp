@@ -786,10 +786,61 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
         printf("cur block_hash (hex): %s\n>", hex_hash.c_str());
     }
+    else if(command->m_cmd == "lock")
+    {
+        if(m_is_locked)
+        {
+            printf("can't repeat locking\n>");
+            return;
+        }
+        
+        std::string password = command->m_params[0];
+        
+        if(password.empty())
+        {
+            printf("password can't be empty\n>");
+            return;
+        }
+
+        char sha1_buf[20] = {0};
+        fly::base::sha1(password.c_str(), password.length(), sha1_buf, 20);
+        m_lock_password.assign(sha1_buf, 20);
+        m_is_locked = true;
+        printf("your wallet is locked\n>");
+    }
+    else if(command->m_cmd == "unlock")
+    {
+        if(!m_is_locked)
+        {
+            printf("can't repeat unlocking\n>");
+            return;
+        }
+        
+        std::string password = command->m_params[0];
+
+        if(password.empty())
+        {
+            printf("password can't be empty\n>");
+            return;
+        }
+
+        char sha1_buf[20] = {0};
+        fly::base::sha1(password.c_str(), password.length(), sha1_buf, 20);
+        std::string password_sha1(sha1_buf, 20);
+        
+        if(password_sha1 != m_lock_password)
+        {
+            printf("password is not correct\n>");
+            return;
+        }
+        
+        m_is_locked = false;
+        printf("your wallet is unlocked\n>");
+    }
     else if(command->m_cmd == "enable_mine")
     {
         std::string enable = command->m_params[0];
-
+        
         if(enable != "true" && enable != "false")
         {
             printf("the param of enable_mine must be true or false\n>");
@@ -838,6 +889,12 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
     }
     else if(command->m_cmd == "send_coin")
     {
+        if(m_is_locked)
+        {
+            printf("you need unlock your wallet first\n>");
+            return;
+        }
+        
         uint64 account_id;
         uint64 amount;
         fly::base::string_to(command->m_params[0], account_id);
