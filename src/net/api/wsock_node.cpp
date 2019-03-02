@@ -2237,6 +2237,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 rsp_doc.AddMember("utc", iter_block->utc(), allocator);
+                rsp_doc.AddMember("version", iter_block->version(), allocator);
                 rsp_doc.AddMember("zero_bits", iter_block->zero_bits(), allocator);
                 rsp_doc.AddMember("tx_num", iter_block->m_tx_num, allocator);
                 rsp_doc.AddMember("miner_name", rapidjson::StringRef(iter_block->get_miner()->name().c_str()), allocator);
