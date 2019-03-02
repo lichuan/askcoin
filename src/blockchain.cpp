@@ -784,7 +784,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         char hash_raw[32];
         fly::base::base64_decode(block_hash.c_str(), block_hash.length(), hash_raw, 32);
         std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
-        printf("cur block_hash (hex): %s\n>", hex_hash.c_str());
+        printf("cur block hash (hex): %s\n>", hex_hash.c_str());
     }
     else if(command->m_cmd == "lock")
     {
