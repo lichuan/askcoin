@@ -406,12 +406,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     {
         if(cmd == net::api::ACCOUNT_TOP100)
         {
-            if(user->m_state != 2)
-            {
-                connection->close();
-                ASKCOIN_RETURN;
-            }
-            
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
