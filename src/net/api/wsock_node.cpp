@@ -2997,11 +2997,17 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 uint64 block_id_need = doc["block_id"].GetUint64();
-                
+
                 if(block_id_need == 0)
                 {
-                    connection->close();
-                    ASKCOIN_RETURN;
+                    block_id_need = 1;
+                }
+
+                uint64 cur_block_id = m_cur_block->id();
+                
+                if(block_id_need > cur_block_id)
+                {
+                    block_id_need = cur_block_id;
                 }
                 
                 auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
@@ -3014,16 +3020,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 auto &account_of_exchange = iter->second;
                 uint64 iter_block_id = block_id_need;
-                uint64 iter_num = 0;
                 rapidjson::Value deposits(rapidjson::kArrayType);
-                
-                while(++iter_num <= required_confirms)
+
+                while(iter_block_id <= cur_block_id)
                 {
-                    if(iter_block_id == 0)
-                    {
-                        break;
-                    }
-                    
                     auto iter_1 = m_block_by_id.find(iter_block_id);
                     
                     if(iter_1 == m_block_by_id.end())
@@ -3190,15 +3190,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             std::string memo = data["memo"].GetString();
                             deposit.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
                         }
-                        
+
+                        uint32 confirm_num = cur_block_id - iter_block_id + 1;
                         uint64 amount = data["amount"].GetUint64();
                         deposit.AddMember("amount", amount, allocator);
                         deposit.AddMember("tx_id", rapidjson::Value(tx_id.c_str(), allocator), allocator);
-                        deposit.AddMember("confirms", block_id_need - iter_block_id + 1, allocator);
+                        deposit.AddMember("confirms", confirm_num, allocator);
                         deposit.AddMember("sender_id", account->id(), allocator);
                         deposit.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
                         
-                        if(iter_num == required_confirms)
+                        if(confirm_num == required_confirms)
                         {
                             deposit.AddMember("confirmed", true, allocator);
                         }
@@ -3209,11 +3210,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         
                         deposits.PushBack(deposit, allocator);
                     }
-                    
-                    --iter_block_id;
+
+                    ++iter_block_id;
+                }
+
+                uint64 batch_id = 1;
+                
+                if(cur_block_id >= required_confirms)
+                {
+                    batch_id = cur_block_id - required_confirms + 2;
                 }
                 
                 rsp_doc.AddMember("deposits", deposits, allocator);
+                rsp_doc.AddMember("batchId", batch_id, allocator);
                 connection->send(rsp_doc);
             }
             else if(cmd == net::api::EXCHANGE_LIST_WITHDRAW)
@@ -3223,13 +3232,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
+
                 if(!doc["required_confirms"].IsUint())
                 {
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
+
                 uint32 required_confirms = doc["required_confirms"].GetUint();
 
                 if(required_confirms == 0)
@@ -3243,7 +3252,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
+
                 if(!doc["block_id"].IsUint64())
                 {
                     connection->close();
@@ -3251,13 +3260,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 uint64 block_id_need = doc["block_id"].GetUint64();
-                
+
                 if(block_id_need == 0)
                 {
-                    connection->close();
-                    ASKCOIN_RETURN;
+                    block_id_need = 1;
                 }
 
+                uint64 cur_block_id = m_cur_block->id();
+                
+                if(block_id_need > cur_block_id)
+                {
+                    block_id_need = cur_block_id;
+                }
+                
                 auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
                 
                 if(iter == m_account_by_id.end())
@@ -3268,16 +3283,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 auto &account_of_exchange = iter->second;
                 uint64 iter_block_id = block_id_need;
-                uint64 iter_num = 0;
                 rapidjson::Value withdraws(rapidjson::kArrayType);
-                
-                while(++iter_num <= required_confirms)
+
+                while(iter_block_id <= cur_block_id)
                 {
-                    if(iter_block_id == 0)
-                    {
-                        break;
-                    }
-                    
                     auto iter_1 = m_block_by_id.find(iter_block_id);
                     
                     if(iter_1 == m_block_by_id.end())
@@ -3416,19 +3425,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             continue;
                         }
-                        
+
                         std::shared_ptr<Account> account;
                         
                         if(!get_account(pubkey, account))
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-
+                        
                         if(pubkey != account_of_exchange->pubkey())
                         {
                             continue;
                         }
-
+                        
                         std::string receiver_pubkey = data["receiver"].GetString();
                         rapidjson::Value withdraw(rapidjson::kObjectType);
                         std::shared_ptr<Account> receiver;
@@ -3443,15 +3452,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             std::string memo = data["memo"].GetString();
                             withdraw.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
                         }
-                        
+
+                        uint32 confirm_num = cur_block_id - iter_block_id + 1;
                         uint64 amount = data["amount"].GetUint64();
                         withdraw.AddMember("amount", amount, allocator);
                         withdraw.AddMember("tx_id", rapidjson::Value(tx_id.c_str(), allocator), allocator);
-                        withdraw.AddMember("confirms", block_id_need - iter_block_id + 1, allocator);
+                        withdraw.AddMember("confirms", confirm_num, allocator);
                         withdraw.AddMember("receiver_id", receiver->id(), allocator);
                         withdraw.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
                         
-                        if(iter_num == required_confirms)
+                        if(confirm_num == required_confirms)
                         {
                             withdraw.AddMember("confirmed", true, allocator);
                         }
@@ -3463,10 +3473,18 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         withdraws.PushBack(withdraw, allocator);
                     }
                     
-                    --iter_block_id;
+                    ++iter_block_id;
                 }
-
+                
+                uint64 batch_id = 1;
+                
+                if(cur_block_id >= required_confirms)
+                {
+                    batch_id = cur_block_id - required_confirms + 2;
+                }
+                
                 rsp_doc.AddMember("withdraws", withdraws, allocator);
+                rsp_doc.AddMember("batchId", batch_id, allocator);
                 connection->send(rsp_doc);
             }
             else if(cmd == net::api::EXCHANGE_DEPOSIT_TX_PROBE)
