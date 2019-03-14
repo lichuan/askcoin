@@ -3357,6 +3357,7 @@ bool Blockchain::start(std::string db_path)
         }
 
         doc.AddMember("pow", pow_arr, allocator);
+        doc.AddMember("total_miner", m_miner_pubkeys.size(), allocator);
         
         for(auto p : m_account_by_id)
         {
