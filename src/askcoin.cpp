@@ -148,6 +148,13 @@ public:
             return EXIT_FAILURE;
         }
 
+        bool repair_db = false;
+
+        if(doc.HasMember("repair_db") && doc["repair_db"].IsTrue())
+        {
+            repair_db = true;
+        }
+        
         if(!doc.HasMember("network"))
         {
             CONSOLE_LOG_FATAL("config.json doesn't contain network field!");
@@ -156,79 +163,140 @@ public:
 
         if(doc.HasMember("merge_point"))
         {
-            auto &mp = doc["merge_point"];
-
-            if(!mp.HasMember("block_id"))
-            {
-                CONSOLE_LOG_FATAL("merge_point doesn't contain block_id field!");
-                return EXIT_FAILURE;
-            }
-
-            if(!mp.HasMember("block_hash"))
-            {
-                CONSOLE_LOG_FATAL("merge_point doesn't contain block_hash field!");
-                return EXIT_FAILURE;
-            }
-
-            if(!mp.HasMember("data_dir"))
-            {
-                CONSOLE_LOG_FATAL("merge_point doesn't contain data_dir field!");
-                return EXIT_FAILURE;
-            }
-
-            if(!mp.HasMember("mode"))
-            {
-                CONSOLE_LOG_FATAL("merge_point doesn't contain mode field!");
-                return EXIT_FAILURE;
-            }
-
-            uint64 block_id = mp["block_id"].GetUint64();
-
-            if(block_id == 0)
-            {
-                CONSOLE_LOG_FATAL("merge_point block_id must greater than 0");
-                return EXIT_FAILURE;
-            }
-
-            std::string block_hash = mp["block_hash"].GetString();
-            
-            if(block_hash.empty())
-            {
-                CONSOLE_LOG_FATAL("merge_point block_hash can't be empty");
-                return EXIT_FAILURE;
-            }
-            
-            std::string data_dir = mp["data_dir"].GetString();
-            
-            if(data_dir.empty())
-            {
-                CONSOLE_LOG_FATAL("merge_point data_dir can't be empty");
-                return EXIT_FAILURE;
-            }
-
-            if(data_dir[data_dir.size() - 1] != '/')
-            {
-                data_dir += '/';
-            }
-            
-            std::string mode = mp["mode"].GetString();
-
-            if(mode != "export" && mode != "import")
-            {
-                CONSOLE_LOG_FATAL("merge_point mode must be 'export' or 'import'");
-                return EXIT_FAILURE;
-            }
-            
             std::shared_ptr<Blockchain::Merge_Point> mp_ptr(new Blockchain::Merge_Point);
-            mp_ptr->m_block_id = block_id;
-            mp_ptr->m_block_hash = block_hash;
-            mp_ptr->m_data_dir = data_dir;
-            mp_ptr->m_mode = mode;
+            auto &mp = doc["merge_point"];
+            
+            if(mp.HasMember("export"))
+            {
+                if(!mp["export"].IsObject())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export should be object");
+                    return EXIT_FAILURE;
+                }
+
+                auto &exp = mp["export"];
+                
+                if(!exp.HasMember("block_id"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_id field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!exp.HasMember("block_hash"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_hash field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!exp.HasMember("export_path"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain export_path field!");
+                    return EXIT_FAILURE;
+                }
+
+                uint64 block_id = mp["block_id"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_id must be greater than 0");
+                    return EXIT_FAILURE;
+                }
+
+                std::string block_hash = mp["block_hash"].GetString();
+            
+                if(block_hash.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_hash can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                if(block_hash.length() != 44 || !Blockchain::instance()->is_base64_char(block_hash))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_hash is invalid");
+                    return EXIT_FAILURE;
+                }
+                
+                std::string export_path = mp["export_path"].GetString();
+                
+                if(export_path.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export_path can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                mp_ptr->m_export_block_id = block_id;
+                mp_ptr->m_export_block_hash = block_hash;
+                mp_ptr->m_export_path = export_path;
+            }
+            
+            if(mp.HasMember("import"))
+            {
+                if(!mp["import"].IsObject())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import should be object");
+                    return EXIT_FAILURE;
+                }
+
+                auto &imp = mp["import"];
+                
+                if(!imp.HasMember("block_id"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import doesn't contain block_id field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!imp.HasMember("block_hash"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import doesn't contain block_hash field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!imp.HasMember("import_path"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import doesn't contain import_path field!");
+                    return EXIT_FAILURE;
+                }
+
+                uint64 block_id = mp["block_id"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    CONSOLE_LOG_FATAL("merge_point import block_id must be greater than 0");
+                    return EXIT_FAILURE;
+                }
+
+                std::string block_hash = mp["block_hash"].GetString();
+            
+                if(block_hash.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import block_hash can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                if(block_hash.length() != 44 || !Blockchain::instance()->is_base64_char(block_hash))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import block_hash is invalid");
+                    return EXIT_FAILURE;
+                }
+                
+                std::string import_path = mp["import_path"].GetString();
+                
+                if(import_path.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import_path can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                mp_ptr->m_import_block_id = block_id;
+                mp_ptr->m_import_block_hash = block_hash;
+                mp_ptr->m_import_path = import_path;
+            }
+            
             Blockchain::instance()->m_merge_point = mp_ptr;
         }
-
+        
         auto &network = doc["network"];
-
+        
         if(!network.IsObject())
         {
             CONSOLE_LOG_FATAL("network field in config.json is not object!");
@@ -313,13 +381,18 @@ public:
 
         net::api::Wsock_Node::instance()->set_max_conn(websocket_max_conn);
 
-        if(!Blockchain::instance()->start(doc["db_path"].GetString()))
+        if(!Blockchain::instance()->start(doc["db_path"].GetString(), repair_db))
         {
             CONSOLE_LOG_FATAL("load from leveldb failed");
             return EXIT_FAILURE;
         }
 
-        if(Blockchain::instance()->m_merge_point)
+        if(repair_db)
+        {
+            return EXIT_SUCCESS;
+        }
+        
+        if(Blockchain::instance()->m_merge_point && Blockchain::instance()->m_merge_point->m_export_block_id > 0)
         {
             return EXIT_SUCCESS;
         }

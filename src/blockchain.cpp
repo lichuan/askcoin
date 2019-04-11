@@ -16,6 +16,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/ostreamwrapper.h"
+#include "rapidjson/istreamwrapper.h"
 #include "net/p2p/node.hpp"
 #include "net/p2p/message.hpp"
 #include "net/api/wsock_node.hpp"
@@ -1604,8 +1605,7 @@ void Blockchain::wait()
     m_score_thread.join();
 }
 
-
-bool Blockchain::start(std::string db_path)
+bool Blockchain::start(std::string db_path, bool repair_db)
 {
     // firstly, we need verify __asic_resistant_data__
     if(__asic_resistant_data__.size() != ASIC_RESISTANT_DATA_NUM)
@@ -1638,16 +1638,23 @@ bool Blockchain::start(std::string db_path)
     options.max_open_files = 50000;
     options.max_file_size = 100 * (1 << 20);
     leveldb::Status s;
-    
-    // s = leveldb::RepairDB(db_path, options);
-    
-    // if(!s.ok())
-    // {
-    //     CONSOLE_LOG_FATAL("repairdb failed: %s", s.ToString().c_str());
 
-    //     return false;
-    // }
+    if(repair_db)
+    {
+        s = leveldb::RepairDB(db_path, options);
+        
+        if(!s.ok())
+        {
+            CONSOLE_LOG_FATAL("repairdb failed: %s", s.ToString().c_str());
 
+            return false;
+        }
+
+        CONSOLE_LOG_INFO("repairdb successfully!");
+
+        return true;
+    }
+    
     s = leveldb::DB::Open(options, db_path, &m_db);
     
     if(!s.ok())
@@ -1656,336 +1663,6 @@ bool Blockchain::start(std::string db_path)
         
         return false;
     }
-    
-    std::string block_0;
-    s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
-    
-    if(!s.ok())
-    {
-        if(!s.IsNotFound())
-        {
-            CONSOLE_LOG_FATAL("read block_0 from leveldb failed: %s", s.ToString().c_str());
-
-            return false;
-        }
-
-        std::string genesis_block_data = "{\"hash\":\"\",\"sign\":\"\",\"data\":{\"id\":0,\"utc\":1518926400,\"version\":1,\"zero_bits\":0,\"intro\":\"Askcoin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
-        
-        rapidjson::Document doc;
-        doc.Parse(genesis_block_data.c_str());
-
-        if(doc.HasParseError())
-        {
-            CONSOLE_LOG_FATAL("parse genesis block failed, reason: %s", GetParseError_En(doc.GetParseError()));
-
-            return false;
-        }
-        
-        const rapidjson::Value &data = doc["data"];
-        rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
-        rapidjson::StringBuffer buffer_1;
-        rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
-        data.Accept(writer_1);
-        uint32 buf[16] = {0};
-        char *p = (char*)buf;
-        coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p);
-        char * ptr = buffer_1.Push(16);
-        memcpy(ptr, "another_32_bytes", 16);
-        coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p + 32);
-        uint32 arr_16[16] = {0};
-        
-        for(uint32 i = 0; i < 16; ++i)
-        {
-            arr_16[i] = ntohl(buf[i]);
-        }
-    
-        for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM;)
-        {
-            for(int j = 0; j < 16; ++j)
-            {
-                arr_16[j] = (arr_16[j] + __asic_resistant_data__[i + j]) * (arr_16[j] ^ __asic_resistant_data__[i + j]);
-            }
-        
-            i += 16;
-        }
-    
-        for(uint32 i = 0; i < 16; ++i)
-        {
-            buf[i] = htonl(arr_16[i]);
-        }
-        
-        ptr = buffer_1.Push(88);
-        std::string p_b64 = fly::base::base64_encode(p, 64);
-        memcpy(ptr, p_b64.data(), 88);
-        std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
-        std::string sign_b64 = "MEQCIAe9Demds6XNev/smZ4QkOcwgwTLjZP2gsAOwmd6OEEhAiB8dDdN3YJYQJjxvQFN/WxcE5Fx1kA7MwTQ/UmycVS98w==";
-        //sign_b64 = sign("", genesis_block_hash);
-        
-        doc["hash"].SetString(genesis_block_hash.c_str(), allocator);
-        doc["sign"].SetString(sign_b64.c_str(), allocator);
-        rapidjson::StringBuffer buffer_2;
-        rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
-        doc.Accept(writer_2);
-        s = m_db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
-        
-        if(!s.ok())
-        {
-            ASKCOIN_RETURN false;
-        }
-
-        rapidjson::Document peer_doc;
-        peer_doc.SetObject();
-        rapidjson::Document::AllocatorType &peer_allocator = peer_doc.GetAllocator();
-        rapidjson::Value peers(rapidjson::kArrayType);
-        peer_doc.AddMember("utc", time(NULL), peer_allocator);
-        peer_doc.AddMember("peers", peers, peer_allocator);
-        rapidjson::StringBuffer buffer_3;
-        rapidjson::Writer<rapidjson::StringBuffer> writer_3(buffer_3);
-        peer_doc.Accept(writer_3);
-        s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer_3.GetString());
-        
-        if(!s.ok())
-        {
-            ASKCOIN_RETURN false;
-        }
-        
-        //try get again
-        s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
-
-        if(!s.ok())
-        {
-            ASKCOIN_RETURN false;
-        }
-    }
-    
-    const char *block_0_str = block_0.c_str();
-    CONSOLE_LOG_INFO("genesis block: %s", block_0_str);
-    rapidjson::Document doc;
-    doc.Parse(block_0_str);
-    
-    if(doc.HasParseError())
-    {
-        CONSOLE_LOG_FATAL("parse leveldb block 0 failed, data: %s, reason: %s", block_0_str, GetParseError_En(doc.GetParseError()));
-
-        return false;
-    }
-
-    if(!doc.IsObject())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!doc.HasMember("hash"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!doc["hash"].IsString())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!doc.HasMember("sign"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!doc["sign"].IsString())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!doc.HasMember("data"))
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!doc.HasMember("children"))
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    std::string block_hash = doc["hash"].GetString();
-    std::string block_sign = doc["sign"].GetString();
-
-    if(block_hash != "zM9M0jTCRJKnhU+RIbPUCqFPCKYwUO9n6gLrAeMLBKE=")
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!is_base64_char(block_sign))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    const rapidjson::Value &data = doc["data"];
-
-    if(!data.IsObject())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("id"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["id"].IsUint64())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("utc"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["utc"].IsUint64())
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data.HasMember("version"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["version"].IsUint())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("zero_bits"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["zero_bits"].IsUint())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("intro"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["intro"].IsString())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("author"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["author"].IsObject())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!data.HasMember("init_account"))
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!data["init_account"].IsObject())
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    rapidjson::StringBuffer buffer;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-    data.Accept(writer);
-    std::string data_str(buffer.GetString(), buffer.GetSize());
-    
-    //base64 44 bytes length
-    if(block_hash.length() != 44)
-    {
-        CONSOLE_LOG_FATAL("parse leveldb block 0 failed, hash length is not 44 bytes");
-
-        return false;
-    }
-
-    const rapidjson::Value &init_account = data["init_account"];
-    std::string account = init_account["account"].GetString();
-    std::string pubkey = init_account["pubkey"].GetString();
-    uint64 account_id = init_account["id"].GetUint64();
-    uint32 avatar = init_account["avatar"].GetUint();
-
-    if(account != "lichuan" || pubkey != "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=" \
-       || account_id != 1 \
-       || avatar != 1)
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(!verify_sign(pubkey, block_hash, block_sign))
-    {
-        CONSOLE_LOG_FATAL("verify genesis block hash sign from leveldb failed");
-        
-        return false;
-    }
-    
-    std::string account_b64 = fly::base::base64_encode(account.data(), account.length());
-    std::string reserve_fund = "reserve_fund";
-    std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
-    m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 1, 0);
-    std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 1, 0));
-    m_account_by_id.insert(std::make_pair(0, m_reserve_fund_account));
-    m_account_by_id.insert(std::make_pair(1, author_account));
-    m_cur_account_id = 1;
-    m_account_names.insert(reserve_fund_b64);
-    m_account_names.insert(account_b64);
-    uint64 total = (uint64)1000000000000UL;
-    author_account->set_balance(total / 2);
-    m_reserve_fund_account->set_balance(total / 2);
-    m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
-    uint64 block_id = data["id"].GetUint64();
-    uint64 utc = data["utc"].GetUint64();
-    uint32 version = data["version"].GetUint();
-    uint32 zero_bits = data["zero_bits"].GetUint();
-
-    if(block_id != 0)
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(utc != 1518926400)
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(version != 1)
-    {
-        ASKCOIN_RETURN false;
-    }
-    
-    if(zero_bits != 0)
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    if(!verify_hash(block_hash, data_str, 0))
-    {
-        CONSOLE_LOG_FATAL("verify genesis block hash failed, hash: %s", block_hash.c_str());
-        return false;
-    }
-
-    const rapidjson::Value &children = doc["children"];
-    
-    if(!children.IsArray())
-    {
-        ASKCOIN_RETURN false;
-    }
-
-    std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
-    genesis_block->set_miner_pubkey(pubkey);
-    genesis_block->m_in_main_chain = true;
-    m_blocks.insert(std::make_pair(block_hash, genesis_block));
-    m_block_by_id.insert(std::make_pair(0, genesis_block));
-    std::shared_ptr<Block> the_most_difficult_block = genesis_block;
     
     struct Child_Block
     {
@@ -1998,13 +1675,379 @@ bool Blockchain::start(std::string db_path)
             m_hash = hash;
         }
     };
-
-    std::list<Child_Block> block_list;
     
-    for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
+    bool merge_point_exist = false;
+    bool merge_point_export = false;
+    bool merge_point_import = false;
+    std::list<Child_Block> block_list;
+    std::shared_ptr<Block> the_most_difficult_block;
+    
+    if(m_merge_point)
     {
-        Child_Block child_block(genesis_block, iter->GetString());
-        block_list.push_back(child_block);
+        if(m_merge_point->m_import_block_id > 0)
+        {
+            merge_point_import = true;
+        }
+
+        if(m_merge_point->m_export_block_id > 0)
+        {
+            merge_point_export = true;
+        }
+    }
+    
+    if(!merge_point_import)
+    {
+        std::string block_0;
+        s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
+    
+        if(!s.ok())
+        {
+            if(!s.IsNotFound())
+            {
+                CONSOLE_LOG_FATAL("read block_0 from leveldb failed: %s", s.ToString().c_str());
+
+                return false;
+            }
+
+            std::string genesis_block_data = "{\"hash\":\"\",\"sign\":\"\",\"data\":{\"id\":0,\"utc\":1518926400,\"version\":1,\"zero_bits\":0,\"intro\":\"Askcoin is a gift for those who love freedom.\",\"init_account\":{\"account\":\"lichuan\",\"id\":1,\"avatar\":1,\"pubkey\":\"BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=\"},\"author\":{\"name\":\"Chuan Li\",\"country\":\"China\",\"github\":\"https://github.com/lichuan\",\"mail\":\"308831759@qq.com\",\"belief\":\"In the beginning, God created the heavens and the earth.\"}},\"children\":[]}";
+        
+            rapidjson::Document doc;
+            doc.Parse(genesis_block_data.c_str());
+
+            if(doc.HasParseError())
+            {
+                CONSOLE_LOG_FATAL("parse genesis block failed, reason: %s", GetParseError_En(doc.GetParseError()));
+
+                return false;
+            }
+        
+            const rapidjson::Value &data = doc["data"];
+            rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+            rapidjson::StringBuffer buffer_1;
+            rapidjson::Writer<rapidjson::StringBuffer> writer_1(buffer_1);
+            data.Accept(writer_1);
+            uint32 buf[16] = {0};
+            char *p = (char*)buf;
+            coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p);
+            char * ptr = buffer_1.Push(16);
+            memcpy(ptr, "another_32_bytes", 16);
+            coin_hash(buffer_1.GetString(), buffer_1.GetSize(), p + 32);
+            uint32 arr_16[16] = {0};
+        
+            for(uint32 i = 0; i < 16; ++i)
+            {
+                arr_16[i] = ntohl(buf[i]);
+            }
+    
+            for(uint32 i = 0; i < ASIC_RESISTANT_DATA_NUM;)
+            {
+                for(int j = 0; j < 16; ++j)
+                {
+                    arr_16[j] = (arr_16[j] + __asic_resistant_data__[i + j]) * (arr_16[j] ^ __asic_resistant_data__[i + j]);
+                }
+        
+                i += 16;
+            }
+    
+            for(uint32 i = 0; i < 16; ++i)
+            {
+                buf[i] = htonl(arr_16[i]);
+            }
+        
+            ptr = buffer_1.Push(88);
+            std::string p_b64 = fly::base::base64_encode(p, 64);
+            memcpy(ptr, p_b64.data(), 88);
+            std::string genesis_block_hash = coin_hash_b64(buffer_1.GetString(), buffer_1.GetSize());
+            std::string sign_b64 = "MEQCIAe9Demds6XNev/smZ4QkOcwgwTLjZP2gsAOwmd6OEEhAiB8dDdN3YJYQJjxvQFN/WxcE5Fx1kA7MwTQ/UmycVS98w==";
+            //sign_b64 = sign("", genesis_block_hash);
+        
+            doc["hash"].SetString(genesis_block_hash.c_str(), allocator);
+            doc["sign"].SetString(sign_b64.c_str(), allocator);
+            rapidjson::StringBuffer buffer_2;
+            rapidjson::Writer<rapidjson::StringBuffer> writer_2(buffer_2);
+            doc.Accept(writer_2);
+            s = m_db->Put(leveldb::WriteOptions(), "0", buffer_2.GetString());
+        
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            rapidjson::Document peer_doc;
+            peer_doc.SetObject();
+            rapidjson::Document::AllocatorType &peer_allocator = peer_doc.GetAllocator();
+            rapidjson::Value peers(rapidjson::kArrayType);
+            peer_doc.AddMember("utc", time(NULL), peer_allocator);
+            peer_doc.AddMember("peers", peers, peer_allocator);
+            rapidjson::StringBuffer buffer_3;
+            rapidjson::Writer<rapidjson::StringBuffer> writer_3(buffer_3);
+            peer_doc.Accept(writer_3);
+            s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer_3.GetString());
+        
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            //try get again
+            s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
+
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN false;
+            }
+        }
+    
+        const char *block_0_str = block_0.c_str();
+        CONSOLE_LOG_INFO("genesis block: %s", block_0_str);
+        rapidjson::Document doc;
+        doc.Parse(block_0_str);
+    
+        if(doc.HasParseError())
+        {
+            CONSOLE_LOG_FATAL("parse leveldb block 0 failed, data: %s, reason: %s", block_0_str, GetParseError_En(doc.GetParseError()));
+
+            return false;
+        }
+
+        if(!doc.IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!doc.HasMember("hash"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!doc["hash"].IsString())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!doc.HasMember("sign"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!doc["sign"].IsString())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!doc.HasMember("data"))
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!doc.HasMember("children"))
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        std::string block_hash = doc["hash"].GetString();
+        std::string block_sign = doc["sign"].GetString();
+
+        if(block_hash != "zM9M0jTCRJKnhU+RIbPUCqFPCKYwUO9n6gLrAeMLBKE=")
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!is_base64_char(block_sign))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        const rapidjson::Value &data = doc["data"];
+
+        if(!data.IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("id"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["id"].IsUint64())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("utc"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["utc"].IsUint64())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data.HasMember("version"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["version"].IsUint())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("zero_bits"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["zero_bits"].IsUint())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("intro"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["intro"].IsString())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("author"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["author"].IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!data.HasMember("init_account"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!data["init_account"].IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        data.Accept(writer);
+        std::string data_str(buffer.GetString(), buffer.GetSize());
+    
+        //base64 44 bytes length
+        if(block_hash.length() != 44)
+        {
+            CONSOLE_LOG_FATAL("parse leveldb block 0 failed, hash length is not 44 bytes");
+
+            return false;
+        }
+
+        const rapidjson::Value &init_account = data["init_account"];
+        std::string account = init_account["account"].GetString();
+        std::string pubkey = init_account["pubkey"].GetString();
+        uint64 account_id = init_account["id"].GetUint64();
+        uint32 avatar = init_account["avatar"].GetUint();
+
+        if(account != "lichuan" || pubkey != "BH6PNUv9anrjG9GekAd+nus+emyYm1ClCT0gIut1O7A3w6uRl7dAihcD8HvKh+IpOopcgQAzkYxQZ+cxT+32WdM=" \
+           || account_id != 1 \
+           || avatar != 1)
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(!verify_sign(pubkey, block_hash, block_sign))
+        {
+            CONSOLE_LOG_FATAL("verify genesis block hash sign from leveldb failed");
+        
+            return false;
+        }
+    
+        std::string account_b64 = fly::base::base64_encode(account.data(), account.length());
+        std::string reserve_fund = "reserve_fund";
+        std::string reserve_fund_b64 = fly::base::base64_encode(reserve_fund.data(), reserve_fund.length());
+        m_reserve_fund_account = std::make_shared<Account>(0, reserve_fund_b64, "", 1, 0);
+        std::shared_ptr<Account> author_account(new Account(1, account_b64, pubkey, 1, 0));
+        m_account_by_id.insert(std::make_pair(0, m_reserve_fund_account));
+        m_account_by_id.insert(std::make_pair(1, author_account));
+        m_cur_account_id = 1;
+        m_account_names.insert(reserve_fund_b64);
+        m_account_names.insert(account_b64);
+        uint64 total = (uint64)1000000000000UL;
+        author_account->set_balance(total / 2);
+        m_reserve_fund_account->set_balance(total / 2);
+        m_account_by_pubkey.insert(std::make_pair(pubkey, author_account));
+        uint64 block_id = data["id"].GetUint64();
+        uint64 utc = data["utc"].GetUint64();
+        uint32 version = data["version"].GetUint();
+        uint32 zero_bits = data["zero_bits"].GetUint();
+
+        if(block_id != 0)
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(utc != 1518926400)
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(version != 1)
+        {
+            ASKCOIN_RETURN false;
+        }
+    
+        if(zero_bits != 0)
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!verify_hash(block_hash, data_str, 0))
+        {
+            CONSOLE_LOG_FATAL("verify genesis block hash failed, hash: %s", block_hash.c_str());
+            return false;
+        }
+        
+        const rapidjson::Value &children = doc["children"];
+        
+        if(!children.IsArray())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        std::shared_ptr<Block> genesis_block(new Block(block_id, utc, version, zero_bits, block_hash));
+        genesis_block->set_miner_pubkey(pubkey);
+        genesis_block->m_in_main_chain = true;
+        m_blocks.insert(std::make_pair(block_hash, genesis_block));
+        m_block_by_id.insert(std::make_pair(0, genesis_block));
+        the_most_difficult_block = genesis_block;
+
+        for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
+        {
+            Child_Block child_block(genesis_block, iter->GetString());
+            block_list.push_back(child_block);
+        }
+    }
+    else
+    {
+        std::ifstream ifs(m_merge_point->m_import_path);
+        rapidjson::IStreamWrapper isw(ifs);
+        rapidjson::Document doc;
+        doc.ParseStream(isw);
+
+        if(doc.HasParseError())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, import_path: %s, reason: %s", m_merge_point->m_import_path.c_str(), GetParseError_En(doc.GetParseError()));
+            
+            return false;
+        }
+
+        // todo
     }
     
     struct _Data
@@ -2360,7 +2403,7 @@ bool Blockchain::start(std::string db_path)
         if(utc > now)
         {
             CONSOLE_LOG_FATAL("verify block utc from leveldb failed, id: %lu, hash: %s, please check your system time", block_id, child_block.m_hash.c_str());
-
+            
             return false;
         }
         
@@ -2379,7 +2422,7 @@ bool Blockchain::start(std::string db_path)
         {
             ASKCOIN_RETURN false;
         }
-
+        
         cur_block->m_tx_num = tx_num;
         m_blocks.insert(std::make_pair(block_hash, cur_block));
         const rapidjson::Value &children = doc["children"];
@@ -2442,13 +2485,6 @@ bool Blockchain::start(std::string db_path)
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block = the_most_difficult_block;
     m_most_difficult_block = the_most_difficult_block;
-    bool merge_point_exist = false;
-    bool merge_point_export = false;
-    
-    if(m_merge_point && m_merge_point->m_mode == "export")
-    {
-        merge_point_export = true;
-    }
     
     while(iter_block->id() != 0)
     {
@@ -2556,7 +2592,7 @@ bool Blockchain::start(std::string db_path)
         {
             std::string tx_id = tx_ids[i].GetString();
             
-            // tx can not be replayed.
+            // tx can not be repeated.
             if(m_tx_map.find(tx_id) != m_tx_map.end())
             {
                 ASKCOIN_RETURN false;
@@ -3297,11 +3333,11 @@ bool Blockchain::start(std::string db_path)
 
         if(merge_point_export)
         {
-            if(cur_block_id == m_merge_point->m_block_id)
+            if(cur_block_id == m_merge_point->m_export_block_id)
             {
-                if(block_hash != m_merge_point->m_block_hash)
+                if(block_hash != m_merge_point->m_export_block_hash)
                 {
-                    CONSOLE_LOG_FATAL("merge_point block not in the main chain, block_hash != m_merge_point->m_block_hash");
+                    CONSOLE_LOG_FATAL("merge_point block not in the main chain, block_hash != m_merge_point->m_export_block_hash");
                     ASKCOIN_RETURN false;
                 }
 
@@ -3309,14 +3345,14 @@ bool Blockchain::start(std::string db_path)
                 break;
             }
             
-            if(block_hash == m_merge_point->m_block_hash)
+            if(block_hash == m_merge_point->m_export_block_hash)
             {
-                CONSOLE_LOG_FATAL("merge_point block not int the main chain, cur_block_id != m_merge_point->m_block_id");
+                CONSOLE_LOG_FATAL("merge_point block not int the main chain, cur_block_id != m_merge_point->m_export_block_id");
                 ASKCOIN_RETURN false;
             }
         }
     }
-
+    
     if(merge_point_export)
     {
         if(!merge_point_exist)
@@ -3328,28 +3364,37 @@ bool Blockchain::start(std::string db_path)
         if(!check_balance())
         {
             CONSOLE_LOG_FATAL("check_balance failed");
-
             ASKCOIN_RETURN false;
         }
 
-        if(fly::base::mkpath(m_merge_point->m_data_dir) == -1)
+        auto pos = std::string::npos;
+
+        if((pos = m_merge_point->m_export_path.find_last_of('/')) != std::string::npos)
         {
-            CONSOLE_LOG_FATAL("merge_point mkpath data_dir: %s failed, reason: %s", \
-                              m_merge_point->m_data_dir.c_str(), strerror(errno));
-            ASKCOIN_RETURN false;
-        }
+            if(pos > 0)
+            {
+                auto export_dir = m_merge_point->m_export_path.substr(0, pos);
 
+                if(fly::base::mkpath(export_dir) == -1)
+                {
+                    CONSOLE_LOG_FATAL("merge_point mkpath export_dir: %s failed, reason: %s", \
+                                      export_dir.c_str(), strerror(errno));
+                    ASKCOIN_RETURN false;
+                }
+            }
+        }
+        
         rapidjson::Document doc;
         doc.SetObject();
-        std::ofstream ofs(m_merge_point->m_data_dir + "merge_point.json");
+        std::ofstream ofs(m_merge_point->m_export_path);
         rapidjson::OStreamWrapper osw(ofs);
         rapidjson::Writer<rapidjson::OStreamWrapper> writer(osw);
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         rapidjson::Value accounts(rapidjson::kArrayType);
         rapidjson::Value pow_arr(rapidjson::kArrayType);
-        doc.AddMember("block_id", m_merge_point->m_block_id, allocator);
-        doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_block_hash.c_str()), allocator);
-        auto mp_block = m_blocks[m_merge_point->m_block_hash];
+        doc.AddMember("block_id", m_merge_point->m_export_block_id, allocator);
+        doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_export_block_hash.c_str()), allocator);
+        auto mp_block = m_blocks[m_merge_point->m_export_block_hash];
         
         for(int32 i = 0; i < 9; ++i)
         {
@@ -3357,7 +3402,14 @@ bool Blockchain::start(std::string db_path)
         }
 
         doc.AddMember("pow", pow_arr, allocator);
-        doc.AddMember("total_miner", m_miner_pubkeys.size(), allocator);
+        rapidjson::Value total_miner(rapidjson::kArrayType);
+
+        for(auto &miner_pubkey : m_miner_pubkeys)
+        {
+            total_miner.PushBack(rapidjson::StringRef(miner_pubkey.c_str()), allocator);
+        }
+        
+        doc.AddMember("total_miner", total_miner, allocator);
         
         for(auto p : m_account_by_id)
         {
@@ -3387,7 +3439,7 @@ bool Blockchain::start(std::string db_path)
         {
             auto &block = p.second;
             
-            if(block->id() + 200 < m_merge_point->m_block_id + 1)
+            if(block->id() + 100 < m_merge_point->m_export_block_id + 1)
             {
                 continue;
             }
@@ -3550,8 +3602,8 @@ bool Blockchain::start(std::string db_path)
 
         doc.AddMember("peer_score", doc_peer, allocator);
         doc.Accept(writer);
-        CONSOLE_LOG_INFO("export merge_point.json block_id: %lu, block_hash: %s successfully", \
-                         m_merge_point->m_block_id, m_merge_point->m_block_hash.c_str());
+        CONSOLE_LOG_INFO("merge_point export block_id: %lu, block_hash: %s successfully", \
+                         m_merge_point->m_export_block_id, m_merge_point->m_export_block_hash.c_str());
         return true;
     }
     
@@ -5220,7 +5272,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                         topic->add_member(tx_id, account);
                     }
                 }
-                        
+                
                 topic->m_reply_list.push_back(reply);
             }
             else if(tx_type == 5) // reward

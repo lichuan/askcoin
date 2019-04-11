@@ -2,6 +2,7 @@
     "log_level": "info",
     "log_path": "./log",
     "db_path": "./db",
+    "repair_db": false,
     "network": {
         "p2p": {
             "host": "here should be your host (domain or ip address)",

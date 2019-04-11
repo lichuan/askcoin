@@ -1713,7 +1713,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             if(is_new_pending_block)
             {
-                if(m_pending_block_hashes.size() > 1000000)
+                if(m_pending_block_hashes.size() > 100000)
                 {
                     m_pending_blocks.erase(m_pending_block_hashes.front());
                     m_pending_block_hashes.pop_front();
@@ -2375,7 +2375,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
             
-            if(m_pending_block_hashes.size() > 1000000)
+            if(m_pending_block_hashes.size() > 100000)
             {
                 m_pending_blocks.erase(m_pending_block_hashes.front());
                 m_pending_block_hashes.pop_front();

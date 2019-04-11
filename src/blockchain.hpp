@@ -47,7 +47,7 @@ class Blockchain : public fly::base::Singleton<Blockchain>
 public:    
     Blockchain();
     ~Blockchain();
-    bool start(std::string db_path);
+    bool start(std::string db_path, bool repair_db);
     bool get_account(std::string pubkey, std::shared_ptr<Account> &account);
     std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
@@ -84,12 +84,20 @@ public:
     
     struct Merge_Point
     {
-        uint64 m_block_id;
-        std::string m_block_hash;
-        std::string m_data_dir;
-        std::string m_mode;
+        uint64 m_export_block_id;
+        uint64 m_import_block_id;
+        std::string m_export_block_hash;
+        std::string m_import_block_hash;
+        std::string m_export_path;
+        std::string m_import_path;
+        
+        Merge_Point()
+        {
+            m_export_block_id = 0;
+            m_import_block_id = 0;
+        }
     };
-
+    
     struct Exchange_Account
     {
         uint64 m_id;
