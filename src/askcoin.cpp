@@ -194,7 +194,7 @@ public:
                     return EXIT_FAILURE;
                 }
 
-                uint64 block_id = mp["block_id"].GetUint64();
+                uint64 block_id = exp["block_id"].GetUint64();
                 
                 if(block_id == 0)
                 {
@@ -202,7 +202,7 @@ public:
                     return EXIT_FAILURE;
                 }
 
-                std::string block_hash = mp["block_hash"].GetString();
+                std::string block_hash = exp["block_hash"].GetString();
             
                 if(block_hash.empty())
                 {
@@ -216,7 +216,7 @@ public:
                     return EXIT_FAILURE;
                 }
                 
-                std::string export_path = mp["export_path"].GetString();
+                std::string export_path = exp["export_path"].GetString();
                 
                 if(export_path.empty())
                 {
@@ -257,7 +257,7 @@ public:
                     return EXIT_FAILURE;
                 }
 
-                uint64 block_id = mp["block_id"].GetUint64();
+                uint64 block_id = imp["block_id"].GetUint64();
                 
                 if(block_id == 0)
                 {
@@ -265,7 +265,7 @@ public:
                     return EXIT_FAILURE;
                 }
 
-                std::string block_hash = mp["block_hash"].GetString();
+                std::string block_hash = imp["block_hash"].GetString();
             
                 if(block_hash.empty())
                 {
@@ -279,7 +279,7 @@ public:
                     return EXIT_FAILURE;
                 }
                 
-                std::string import_path = mp["import_path"].GetString();
+                std::string import_path = imp["import_path"].GetString();
                 
                 if(import_path.empty())
                 {
