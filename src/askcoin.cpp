@@ -165,70 +165,7 @@ public:
         {
             std::shared_ptr<Blockchain::Merge_Point> mp_ptr(new Blockchain::Merge_Point);
             auto &mp = doc["merge_point"];
-            
-            if(mp.HasMember("export"))
-            {
-                if(!mp["export"].IsObject())
-                {
-                    CONSOLE_LOG_FATAL("merge_point export should be object");
-                    return EXIT_FAILURE;
-                }
 
-                auto &exp = mp["export"];
-                
-                if(!exp.HasMember("block_id"))
-                {
-                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_id field!");
-                    return EXIT_FAILURE;
-                }
-
-                if(!exp.HasMember("block_hash"))
-                {
-                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_hash field!");
-                    return EXIT_FAILURE;
-                }
-
-                if(!exp.HasMember("export_path"))
-                {
-                    CONSOLE_LOG_FATAL("merge_point export doesn't contain export_path field!");
-                    return EXIT_FAILURE;
-                }
-
-                uint64 block_id = exp["block_id"].GetUint64();
-                
-                if(block_id == 0)
-                {
-                    CONSOLE_LOG_FATAL("merge_point export block_id must be greater than 0");
-                    return EXIT_FAILURE;
-                }
-
-                std::string block_hash = exp["block_hash"].GetString();
-            
-                if(block_hash.empty())
-                {
-                    CONSOLE_LOG_FATAL("merge_point export block_hash can't be empty");
-                    return EXIT_FAILURE;
-                }
-
-                if(block_hash.length() != 44 || !Blockchain::instance()->is_base64_char(block_hash))
-                {
-                    CONSOLE_LOG_FATAL("merge_point export block_hash is invalid");
-                    return EXIT_FAILURE;
-                }
-                
-                std::string export_path = exp["export_path"].GetString();
-                
-                if(export_path.empty())
-                {
-                    CONSOLE_LOG_FATAL("merge_point export_path can't be empty");
-                    return EXIT_FAILURE;
-                }
-
-                mp_ptr->m_export_block_id = block_id;
-                mp_ptr->m_export_block_hash = block_hash;
-                mp_ptr->m_export_path = export_path;
-            }
-            
             if(mp.HasMember("import"))
             {
                 if(!mp["import"].IsObject())
@@ -291,6 +228,76 @@ public:
                 mp_ptr->m_import_block_hash = block_hash;
                 mp_ptr->m_import_path = import_path;
             }
+            
+            if(mp.HasMember("export"))
+            {
+                if(!mp["export"].IsObject())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export should be object");
+                    return EXIT_FAILURE;
+                }
+
+                auto &exp = mp["export"];
+                
+                if(!exp.HasMember("block_id"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_id field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!exp.HasMember("block_hash"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain block_hash field!");
+                    return EXIT_FAILURE;
+                }
+
+                if(!exp.HasMember("export_path"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export doesn't contain export_path field!");
+                    return EXIT_FAILURE;
+                }
+
+                uint64 block_id = exp["block_id"].GetUint64();
+                
+                if(block_id == 0)
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_id must be greater than 0");
+                    return EXIT_FAILURE;
+                }
+                
+                if(block_id < mp_ptr->m_import_block_id)
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_id can not be less than import block_id");
+                    return EXIT_FAILURE;
+                }
+                
+                std::string block_hash = exp["block_hash"].GetString();
+                
+                if(block_hash.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_hash can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                if(block_hash.length() != 44 || !Blockchain::instance()->is_base64_char(block_hash))
+                {
+                    CONSOLE_LOG_FATAL("merge_point export block_hash is invalid");
+                    return EXIT_FAILURE;
+                }
+                
+                std::string export_path = exp["export_path"].GetString();
+                
+                if(export_path.empty())
+                {
+                    CONSOLE_LOG_FATAL("merge_point export_path can't be empty");
+                    return EXIT_FAILURE;
+                }
+
+                mp_ptr->m_export_block_id = block_id;
+                mp_ptr->m_export_block_hash = block_hash;
+                mp_ptr->m_export_path = export_path;
+            }
+            
             
             Blockchain::instance()->m_merge_point = mp_ptr;
         }

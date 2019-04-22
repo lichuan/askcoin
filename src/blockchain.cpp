@@ -3337,7 +3337,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             {
                 if(block_hash != m_merge_point->m_export_block_hash)
                 {
-                    CONSOLE_LOG_FATAL("merge_point block not in the main chain, block_hash != m_merge_point->m_export_block_hash");
+                    CONSOLE_LOG_FATAL("merge_point block not in the main chain, block_id equal but block_hash != m_merge_point->m_export_block_hash");
                     ASKCOIN_RETURN false;
                 }
 
@@ -3347,7 +3347,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             
             if(block_hash == m_merge_point->m_export_block_hash)
             {
-                CONSOLE_LOG_FATAL("merge_point block not int the main chain, cur_block_id != m_merge_point->m_export_block_id");
+                CONSOLE_LOG_FATAL("merge_point block not int the main chain, block_hash equal but cur_block_id != m_merge_point->m_export_block_id");
                 ASKCOIN_RETURN false;
             }
         }
@@ -3392,8 +3392,40 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         rapidjson::Value accounts(rapidjson::kArrayType);
         rapidjson::Value pow_arr(rapidjson::kArrayType);
+
+        std::string block_data;
+        s = m_db->Get(leveldb::ReadOptions(), m_merge_point->m_export_block_hash, &block_data);
+        
+        if(!s.ok())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        rapidjson::Document doc_export_block;
+        const char *block_data_str = block_data.c_str();
+        doc_export_block.Parse(block_data_str);
+        
+        if(doc_export_block.HasParseError())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        if(!doc_export_block.IsObject())
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        doc_export_block["children"].Clear();
+        rapidjson::StringBuffer buffer;
+        {
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            doc_export_block.Accept(writer);
+        }
+        std::string export_block_data_str(buffer.GetString(), buffer.GetSize());
+
         doc.AddMember("block_id", m_merge_point->m_export_block_id, allocator);
         doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_export_block_hash.c_str()), allocator);
+        doc.AddMember("doc", doc_export_block, allocator);
         auto mp_block = m_blocks[m_merge_point->m_export_block_hash];
         
         for(int32 i = 0; i < 9; ++i)
@@ -3483,7 +3515,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             {
                 members.PushBack(member.second->id(), allocator);
             }
-
+            
             obj.AddMember("members", members, allocator);
             rapidjson::Value replies(rapidjson::kArrayType);
             
