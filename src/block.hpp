@@ -16,6 +16,7 @@ public:
     const std::string& hash();
     uint32 zero_bits();
     uint64 utc_diff();
+    void set_utc_diff(uint64 value);
     void set_parent(std::shared_ptr<Block> parent);
     std::shared_ptr<Block> get_parent();
     bool difficult_than_me(std::shared_ptr<Block> other);

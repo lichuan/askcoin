@@ -763,16 +763,33 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         std::unordered_set<std::string> miner_pubkeys;
         uint32 block_num = 0;
         
-        while(iter_block->id() != 0)
+        if(m_merge_point->m_import_block_id > 0)
         {
-            miner_pubkeys.insert(iter_block->miner_pubkey());
-
-            if(++block_num >= 10000)
+            while(iter_block->id() > m_merge_point->m_import_block_id)
             {
-                break;
-            }
+                miner_pubkeys.insert(iter_block->miner_pubkey());
+                
+                if(++block_num >= 10000)
+                {
+                    break;
+                }
 
-            iter_block = iter_block->get_parent();
+                iter_block = iter_block->get_parent();
+            }
+        }
+        else
+        {
+            while(iter_block->id() != 0)
+            {
+                miner_pubkeys.insert(iter_block->miner_pubkey());
+
+                if(++block_num >= 10000)
+                {
+                    break;
+                }
+
+                iter_block = iter_block->get_parent();
+            }
         }
         
         printf("miner count (latest 10000 blocks): %u\n", miner_pubkeys.size());
@@ -2042,12 +2059,955 @@ bool Blockchain::start(std::string db_path, bool repair_db)
 
         if(doc.HasParseError())
         {
-            CONSOLE_LOG_FATAL("merge_point import failed, import_path: %s, reason: %s", m_merge_point->m_import_path.c_str(), GetParseError_En(doc.GetParseError()));
-            
+            CONSOLE_LOG_FATAL("merge_point import failed, import_path: %s, reason: %s", \
+                              m_merge_point->m_import_path.c_str(), GetParseError_En(doc.GetParseError()));
             return false;
         }
 
-        // todo
+        if(!doc.HasMember("sha1"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, sha1 field not found");
+            return false;
+        }
+
+        if(!doc["sha1"].IsString())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, sha1 field should be string");
+            return false;
+        }
+
+        std::string sha1_b64 = doc["sha1"].GetString();
+
+        if(!is_base64_char(sha1_b64))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, sha1 field is invalid");
+            return false;
+        }
+
+        if(sha1_b64.length() != 28)
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, length of sha1 field is invalid");
+            return false;
+        }
+        
+        if(!doc.RemoveMember("sha1"))
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        rapidjson::StringBuffer buffer_sha1;
+        rapidjson::Writer<rapidjson::StringBuffer> writer_sha1(buffer_sha1);
+        doc.Accept(writer_sha1);
+        char buf[20] = {0};
+
+        if(!fly::base::sha1(buffer_sha1.GetString(), buffer_sha1.GetSize(), buf, 20))
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        std::string sha1_b64_verify = fly::base::base64_encode(buf, 20);
+
+        if(sha1_b64 != sha1_b64_verify)
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, data of import file is invalid");
+            return false;
+        }
+        
+        if(!doc.HasMember("accounts"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, accounts field not found");
+            return false;
+        }
+        
+        const rapidjson::Value &accounts = doc["accounts"];
+        
+        if(!accounts.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, accounts field should be array");
+            return false;
+        }
+
+        uint32 account_num = accounts.Size();
+
+        for(uint32 i = 0; i < account_num; ++i)
+        {
+            const rapidjson::Value &obj = accounts[i];
+
+            if(!obj.IsObject())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, account should be object");
+                return false;
+            }
+            
+            auto account = std::make_shared<Account>(obj["id"].GetUint64(), obj["name"].GetString(), \
+                                                     obj["pubkey"].GetString(), obj["avatar"].GetUint(), obj["block_id"].GetUint64());
+            uint64 account_id = account->id();
+            auto rp = m_account_by_id.insert(std::make_pair(account_id, account));
+
+            if(!rp.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated account id");
+                return false;
+            }
+
+            if(!is_base64_char(account->name()))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            auto rp1 = m_account_names.insert(account->name());
+
+            if(!rp1.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated account name");
+                return false;
+            }
+            
+            account->set_balance(obj["balance"].GetUint64());
+            
+            if(account_id == 0)
+            {
+                m_reserve_fund_account = account;
+            }
+            else
+            {
+                if(m_cur_account_id < account_id)
+                {
+                    m_cur_account_id = account_id;
+                }
+                
+                m_account_by_pubkey.insert(std::make_pair(account->pubkey(), account));
+            }
+        }
+
+        for(uint32 i = 0; i < account_num; ++i)
+        {
+            const rapidjson::Value &obj = accounts[i];
+            uint64 account_id = obj["id"].GetUint64();
+
+            if(account_id > 1)
+            {
+                auto &account = m_account_by_id[account_id];
+
+                if(!obj.HasMember("referrer"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, referrer field not found");
+                    return false;
+                }
+
+                auto iter = m_account_by_id.find(obj["referrer"].GetUint64());
+
+                if(iter == m_account_by_id.end())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, referrer not exist");
+                    return false;
+                }
+
+                account->set_referrer(iter->second);
+            }
+        }
+
+        if(!doc.HasMember("blocks"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, blocks field not found");
+            return false;
+        }
+        
+        const rapidjson::Value &blocks = doc["blocks"];
+
+        if(!blocks.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, blocks field should be array");
+            return false;
+        }
+
+        uint32 block_num = blocks.Size();
+
+        for(uint32 i = 0; i < block_num; ++i)
+        {
+            const rapidjson::Value &obj = blocks[i];
+
+            if(!obj.IsObject())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, block should be object");
+                return false;
+            }
+
+            uint64 block_id = obj["id"].GetUint64();
+            std::string block_hash = obj["hash"].GetString();
+
+            if(!is_base64_char(block_hash))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN false;
+            }
+            
+            std::shared_ptr<Block> block(new Block(block_id, obj["utc"].GetUint64(), obj["version"].GetUint(), \
+                                                   obj["zero_bits"].GetUint(), block_hash));
+            auto rp = m_blocks.insert(std::make_pair(block_hash, block));
+
+            if(!rp.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated block hash");
+                return false;
+            }
+
+            auto rp1 = m_block_by_id.insert(std::make_pair(block_id, block));
+
+            if(!rp1.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated block id");
+                return false;
+            }
+        }
+        
+        if(!doc.HasMember("miners"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, miners field not found");
+            return false;
+        }
+        
+        const rapidjson::Value &miners = doc["miners"];
+
+        if(!miners.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, miners field should be array");
+            return false;
+        }
+
+        uint32 miner_num = miners.Size();
+
+        for(uint32 i = 0; i < miner_num; ++i)
+        {
+            const rapidjson::Value &val = miners[i];
+
+            if(!val.IsString())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, miner should be string");
+                return false;
+            }
+
+            std::string pubkey = val.GetString();
+
+            if(!is_base64_char(pubkey))
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, miner pubkey is invalid");
+                return false;
+            }
+            
+            if(pubkey.length() != 88)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, miner pubkey length should be 88 bytes");
+                return false;
+            }
+            
+            auto rp = m_miner_pubkeys.insert(pubkey);
+            
+            if(!rp.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated miner pubkey");
+                return false;
+            }
+        }
+        
+        if(!doc.HasMember("tx_map"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, tx_map field not found");
+            return false;
+        }
+        
+        const rapidjson::Value &tx_map = doc["tx_map"];
+
+        if(!tx_map.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, tx_map field should be array");
+            return false;
+        }
+
+        uint32 tx_num = tx_map.Size();
+
+        for(uint32 i = 0; i < tx_num; ++i)
+        {
+            const rapidjson::Value &obj = tx_map[i];
+
+            if(!obj.IsObject())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, element in tx_map should be object");
+                return false;
+            }
+
+            uint64 block_id = obj["block_id"].GetUint64();
+            std::string tx_id = obj["tx_id"].GetString();
+
+            if(!is_base64_char(tx_id))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(tx_id.length() != 44)
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            auto iter = m_block_by_id.find(block_id);
+            
+            if(iter == m_block_by_id.end())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, block in tx_map not exist");
+                return false;
+            }
+            
+            auto rp = m_tx_map.insert(std::make_pair(tx_id,iter->second));
+
+            if(!rp.second)
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, duplicated tx id in tx_map");
+                return false;
+            }
+
+            m_import_tx_map[block_id].push_back(tx_id);
+        }
+        
+        if(!doc.HasMember("topics"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, topics field not found");
+            return false;
+        }
+        
+        const rapidjson::Value &topics = doc["topics"];
+
+        if(!topics.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, topics field should be array");
+            return false;
+        }
+
+        uint32 topic_num = topics.Size();
+
+        for(uint32 i = 0; i < topic_num; ++i)
+        {
+            const rapidjson::Value &obj = topics[i];
+
+            if(!obj.IsObject())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, topic should be object");
+                return false;
+            }
+
+            if(!obj.HasMember("block_id"))
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, block_id in topics not found");
+                return false;
+            }
+
+            if(!obj["block_id"].IsUint64())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, block_id in topics should be uint64");
+                return false;
+            }
+
+            uint64 block_id = obj["block_id"].GetUint64();
+            auto iter = m_block_by_id.find(block_id);
+
+            if(iter == m_block_by_id.end())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, block_id in topics not exist");
+                return false;
+            }
+
+            if(!obj.HasMember("owner"))
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, owner in topics not found");
+                return false;
+            }
+
+            if(!obj["owner"].IsUint64())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, owner in topics should be uint64");
+                return false;
+            }
+
+            uint64 owner_id = obj["owner"].GetUint64();
+            auto iter1 = m_account_by_id.find(owner_id);
+            
+            if(iter1 == m_account_by_id.end())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, owner in topics not exist");
+                return false;
+            }
+            
+            auto owner = iter1->second;
+            std::string tx_id = obj["key"].GetString();
+
+            if(!is_base64_char(tx_id))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(tx_id.length() != 44)
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            std::shared_ptr<Topic> topic(new Topic(tx_id, obj["data"].GetString(), iter->second, obj["total"].GetUint64()));
+            topic->set_balance(obj["balance"].GetUint64());
+            topic->set_owner(owner);
+            owner->m_topic_list.push_back(topic);
+            m_topic_list.push_back(topic);
+            m_topics.insert(std::make_pair(tx_id, topic));
+            
+            if(!obj.HasMember("members"))
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, members in topics not found");
+                return false;
+            }
+        
+            const rapidjson::Value &members = obj["members"];
+
+            if(!members.IsArray())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, members in topics should be array");
+                return false;
+            }
+
+            uint32 member_num = members.Size();
+
+            for(uint32 i = 0; i < member_num; ++i)
+            {
+                const rapidjson::Value &val = members[i];
+
+                if(!val.IsUint64())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, member should be uint64");
+                    return false;
+                }
+
+                uint64 member_id = val.GetUint64();
+                auto iter = m_account_by_id.find(member_id);
+
+                if(iter == m_account_by_id.end())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, member in topics not exist");
+                    return false;
+                }
+                
+                auto member = iter->second;
+                member->m_joined_topic_list.push_back(topic);
+                topic->add_member("tx_id", member);
+            }
+
+            if(!obj.HasMember("replies"))
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, replies in topics not found");
+                return false;
+            }
+        
+            const rapidjson::Value &replies = obj["replies"];
+
+            if(!replies.IsArray())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, replies in topics should be array");
+                return false;
+            }
+
+            uint32 reply_num = replies.Size();
+
+            for(uint32 i = 0; i < reply_num; ++i)
+            {
+                const rapidjson::Value &obj = replies[i];
+
+                if(!obj.IsObject())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, reply should be object");
+                    return false;
+                }
+
+                if(!obj.HasMember("block_id"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, block_id in reply not found");
+                    return false;
+                }
+
+                if(!obj["block_id"].IsUint64())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, block_id in reply should be uint64");
+                    return false;
+                }
+
+                uint64 block_id = obj["block_id"].GetUint64();
+                auto iter = m_block_by_id.find(block_id);
+
+                if(iter == m_block_by_id.end())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, block_id in reply not exist");
+                    return false;
+                }
+
+                if(!obj.HasMember("owner"))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, owner in reply not found");
+                    return false;
+                }
+
+                if(!obj["owner"].IsUint64())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, owner in reply should be uint64");
+                    return false;
+                }
+
+                uint64 owner_id = obj["owner"].GetUint64();
+                auto iter1 = m_account_by_id.find(owner_id);
+            
+                if(iter1 == m_account_by_id.end())
+                {
+                    CONSOLE_LOG_FATAL("merge_point import failed, owner in reply not exist");
+                    return false;
+                }
+                
+                auto owner = iter1->second;
+                std::string tx_id = obj["key"].GetString();
+
+                if(!is_base64_char(tx_id))
+                {
+                    ASKCOIN_RETURN false;
+                }
+
+                if(tx_id.length() != 44)
+                {
+                    ASKCOIN_RETURN false;
+                }
+                
+                std::shared_ptr<Reply> reply(new Reply(tx_id, obj["type"].GetUint(), iter->second, obj["data"].GetString()));
+                reply->set_owner(owner);
+                reply->set_balance(obj["balance"].GetUint64());
+
+                if(obj.HasMember("reply_to"))
+                {
+                    std::string to_key = obj["reply_to"].GetString();
+
+                    if(!is_base64_char(to_key))
+                    {
+                        ASKCOIN_RETURN false;
+                    }
+
+                    if(to_key.length() != 44)
+                    {
+                        ASKCOIN_RETURN false;
+                    }
+
+                    std::shared_ptr<Reply> reply_to;
+                    
+                    if(!topic->get_reply(to_key, reply_to))
+                    {
+                        CONSOLE_LOG_FATAL("merge_point import failed, reply_to not exist");
+                        return false;
+                    }
+                    
+                    if(reply_to->type() != 0)
+                    {
+                        ASKCOIN_RETURN false;
+                    }
+
+                    reply->set_reply_to(reply_to);
+                }
+                
+                topic->m_reply_list.push_back(reply);
+            }
+        }
+        
+        if(!doc.HasMember("peer_score"))
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, peer_score field not found");
+            return false;
+        }
+
+        const rapidjson::Value &peer_score = doc["peer_score"];
+
+        if(!peer_score.IsObject())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, peer_score field should be object");
+            return false;
+        }
+
+        if(!peer_score.HasMember("utc"))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(!peer_score.HasMember("peers"))
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        const rapidjson::Value &peers = peer_score["peers"];
+        
+        if(!peers.IsArray())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, peers field should be array");
+            return false;
+        }
+        
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        peer_score.Accept(writer);
+        leveldb::Status s = m_db->Put(leveldb::WriteOptions(), "peer_score", buffer.GetString());
+        
+        if(!s.ok())
+        {
+            CONSOLE_LOG_FATAL("merge_point import failed, write peers error: %s", s.ToString().c_str());
+            return false;
+        }
+        
+        uint64 merge_block_id = doc["id"].GetUint64();
+        std::string merge_block_hash = doc["hash"].GetString();
+        
+        if(!is_base64_char(merge_block_hash))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(merge_block_hash.length() != 44)
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(merge_block_id != m_merge_point->m_import_block_id)
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        if(merge_block_hash != m_merge_point->m_import_block_hash)
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        auto iter = m_block_by_id.find(merge_block_id);
+        std::shared_ptr<Block> merge_block;
+        
+        if(iter != m_block_by_id.end())
+        {
+            merge_block = iter->second;
+            
+            if(merge_block->hash() != merge_block_hash)
+            {
+                ASKCOIN_RETURN false;
+            }
+        }
+        else
+        {
+            std::shared_ptr<Block> block(new Block(merge_block_id, doc["utc"].GetUint64(), doc["version"].GetUint(), \
+                                                   doc["zero_bits"].GetUint(), merge_block_hash));
+            m_blocks.insert(std::make_pair(merge_block_hash, block));
+            m_block_by_id.insert(std::make_pair(merge_block_id, block));
+            merge_block = block;
+        }
+
+        merge_block->set_utc_diff(doc["utc_diff"].GetUint64());
+        auto &pow_array = doc["pow"];
+
+        if(!pow_array.IsArray())
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        if(pow_array.Size() != 9)
+        {
+            ASKCOIN_RETURN false;
+        }
+        
+        Accum_Pow accum_pow(pow_array[0].GetUint(), pow_array[1].GetUint(), pow_array[2].GetUint(), pow_array[3].GetUint(), pow_array[4].GetUint(), \
+                               pow_array[5].GetUint(), pow_array[6].GetUint(), pow_array[7].GetUint(), pow_array[8].GetUint());
+        merge_block->m_accum_pow = accum_pow;
+        merge_block->m_in_main_chain = true;
+        the_most_difficult_block = merge_block;
+        
+        std::string block_data;
+        s = m_db->Get(leveldb::ReadOptions(), merge_block_hash, &block_data);
+        
+        if(!s.ok())
+        {
+            if(!s.IsNotFound())
+            {
+                CONSOLE_LOG_FATAL("read merge_block from leveldb failed: %s", s.ToString().c_str());
+                return false;
+            }
+            
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            doc["detail"].Accept(writer);
+            leveldb::Status s = m_db->Put(leveldb::WriteOptions(), merge_block_hash, buffer.GetString());
+            
+            if(!s.ok())
+            {
+                CONSOLE_LOG_FATAL("merge_point import failed, write merge_block error: %s", s.ToString().c_str());
+                return false;
+            }
+
+            s = m_db->Get(leveldb::ReadOptions(), merge_block_hash, &block_data);
+
+            if(!s.ok())
+            {
+                ASKCOIN_RETURN false;
+            }
+        }
+
+        {
+            const char *block_data_str = block_data.c_str();
+            rapidjson::Document doc;
+            doc.Parse(block_data_str);
+        
+            if(doc.HasParseError())
+            {
+                CONSOLE_LOG_FATAL("parse leveldb block 0 failed, data: %s, reason: %s", block_data_str, GetParseError_En(doc.GetParseError()));
+                return false;
+            }
+
+            if(!doc.IsObject())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!doc.HasMember("hash"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!doc.HasMember("sign"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!doc["hash"].IsString())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!doc["sign"].IsString())
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            std::string block_hash = doc["hash"].GetString();
+            std::string block_sign = doc["sign"].GetString();
+
+            if(!is_base64_char(block_hash))
+            {
+                ASKCOIN_RETURN false;
+            }
+            
+            if(!is_base64_char(block_sign))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(block_hash != merge_block_hash)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!doc.HasMember("data"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!doc.HasMember("tx"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            const rapidjson::Value &tx = doc["tx"];
+
+            if(!tx.IsArray())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!doc.HasMember("children"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            const rapidjson::Value &data = doc["data"];
+        
+            if(!data.IsObject())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(data.MemberCount() != 8)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!data.HasMember("id"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!data.HasMember("utc"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!data.HasMember("version"))
+            {
+                ASKCOIN_RETURN false;
+            }
+    
+            if(!data.HasMember("zero_bits"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!data.HasMember("pre_hash"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!data.HasMember("miner"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!data.HasMember("tx_ids"))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            const rapidjson::Value &tx_ids = data["tx_ids"];
+
+            if(!tx_ids.IsArray())
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            uint32 tx_num = tx_ids.Size();
+
+            if(tx_num > 2000)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(tx.Size() != tx_num)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(!data.HasMember("nonce"))
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            data.Accept(writer);
+
+            if(block_hash.length() != 44)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            std::string data_str(buffer.GetString(), buffer.GetSize());
+            std::string miner_pubkey = data["miner"].GetString();
+        
+            if(!is_base64_char(miner_pubkey))
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(miner_pubkey.length() != 88)
+            {
+                ASKCOIN_RETURN false;
+            }
+
+            if(!verify_sign(miner_pubkey, block_hash, block_sign))
+            {
+                CONSOLE_LOG_FATAL("merge_point import, verify merge_block sign from leveldb failed");
+                return false;
+            }
+        
+            uint64 block_id = data["id"].GetUint64();
+            uint64 utc = data["utc"].GetUint64();
+            uint32 version = data["version"].GetUint();
+            uint32 zero_bits = data["zero_bits"].GetUint();
+
+            if(block_id != merge_block_id)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(zero_bits == 0 || zero_bits >= 256)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            std::string pre_hash = data["pre_hash"].GetString();
+            const rapidjson::Value &nonce = data["nonce"];
+
+            if(!version_compatible(version, ASKCOIN_VERSION))
+            {
+                CONSOLE_LOG_FATAL("merge_point import, verify merge_block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                                  block_hash.c_str(), version, ASKCOIN_VERSION);
+                return false;
+            }
+        
+            if(!nonce.IsArray())
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            if(nonce.Size() != 4)
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            for(uint32 i = 0; i < 4; ++i)
+            {
+                if(!nonce[i].IsUint64())
+                {
+                    ASKCOIN_RETURN false;
+                }
+            }
+
+            uint64 now = time(NULL);
+        
+            if(utc > now)
+            {
+                CONSOLE_LOG_FATAL("merge_point import, verify merge_block utc from leveldb failed, id: %lu, hash: %s, please check your system time", \
+                                  block_id, block_hash.c_str());
+                return false;
+            }
+        
+            if(!verify_hash(block_hash, data_str, zero_bits))
+            {
+                CONSOLE_LOG_FATAL("merge_block import, verify merge_block hash failed, hash: %s", block_hash.c_str());
+                return false;
+            }
+
+            merge_block->set_miner_pubkey(miner_pubkey);
+            merge_block->m_tx_num = tx_num;
+            const rapidjson::Value &children = doc["children"];
+        
+            if(!children.IsArray())
+            {
+                ASKCOIN_RETURN false;
+            }
+        
+            for(rapidjson::Value::ConstValueIterator iter = children.Begin(); iter != children.End(); ++iter)
+            {
+                Child_Block child_block(merge_block, iter->GetString());
+                block_list.push_back(child_block);
+            }
+        }
     }
     
     struct _Data
@@ -2485,12 +3445,24 @@ bool Blockchain::start(std::string db_path, bool repair_db)
     std::shared_ptr<Block> iter_block = the_most_difficult_block;
     m_cur_block = the_most_difficult_block;
     m_most_difficult_block = the_most_difficult_block;
-    
-    while(iter_block->id() != 0)
+
+    if(m_merge_point->m_import_block_id > 0)
     {
-        iter_block->m_in_main_chain = true;
-        block_chain.push_front(iter_block);
-        iter_block = iter_block->get_parent();
+        while(iter_block->id() > m_merge_point->m_import_block_id)
+        {
+            iter_block->m_in_main_chain = true;
+            block_chain.push_front(iter_block);
+            iter_block = iter_block->get_parent();
+        }
+    }
+    else
+    {
+        while(iter_block->id() != 0)
+        {
+            iter_block->m_in_main_chain = true;
+            block_chain.push_front(iter_block);
+            iter_block = iter_block->get_parent();
+        }
     }
     
     // now, load tx in every block in order
@@ -3392,7 +4364,6 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
         rapidjson::Value accounts(rapidjson::kArrayType);
         rapidjson::Value pow_arr(rapidjson::kArrayType);
-
         std::string block_data;
         s = m_db->Get(leveldb::ReadOptions(), m_merge_point->m_export_block_hash, &block_data);
         
@@ -3422,26 +4393,29 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             doc_export_block.Accept(writer);
         }
         std::string export_block_data_str(buffer.GetString(), buffer.GetSize());
-
-        doc.AddMember("block_id", m_merge_point->m_export_block_id, allocator);
-        doc.AddMember("block_hash", rapidjson::StringRef(m_merge_point->m_export_block_hash.c_str()), allocator);
-        doc.AddMember("doc", doc_export_block, allocator);
         auto mp_block = m_blocks[m_merge_point->m_export_block_hash];
+        doc.AddMember("id", mp_block->id(), allocator);
+        doc.AddMember("utc", mp_block->utc(), allocator);
+        doc.AddMember("version", mp_block->version(), allocator);
+        doc.AddMember("zero_bits", mp_block->zero_bits(), allocator);
+        doc.AddMember("utc_diff", mp_block->utc_diff(), allocator);
+        doc.AddMember("hash", rapidjson::StringRef(mp_block->hash().c_str()), allocator);
+        doc.AddMember("detail", doc_export_block, allocator);
         
         for(int32 i = 0; i < 9; ++i)
         {
             pow_arr.PushBack(mp_block->m_accum_pow.m_n32[i], allocator);
         }
-
+        
         doc.AddMember("pow", pow_arr, allocator);
-        rapidjson::Value total_miner(rapidjson::kArrayType);
-
+        rapidjson::Value miners(rapidjson::kArrayType);
+        
         for(auto &miner_pubkey : m_miner_pubkeys)
         {
-            total_miner.PushBack(rapidjson::StringRef(miner_pubkey.c_str()), allocator);
+            miners.PushBack(rapidjson::StringRef(miner_pubkey.c_str()), allocator);
         }
         
-        doc.AddMember("total_miner", total_miner, allocator);
+        doc.AddMember("miners", miners, allocator);
         
         for(auto p : m_account_by_id)
         {
@@ -3457,9 +4431,9 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             if(account->id() > 1)
             {
                 auto referrer = account->get_referrer();
-                obj.AddMember("referrer", rapidjson::StringRef(referrer->pubkey().c_str()), allocator);
+                obj.AddMember("referrer", referrer->id(), allocator);
             }
-
+            
             accounts.PushBack(obj, allocator);
         }
 
@@ -3470,8 +4444,8 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         for(auto &p : m_tx_map)
         {
             auto &block = p.second;
-            
-            if(block->id() + 100 < m_merge_point->m_export_block_id + 1)
+
+            if(block->id() + 200 < m_merge_point->m_export_block_id + 1)
             {
                 continue;
             }
@@ -3482,10 +4456,11 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             {
                 blocks.insert(std::make_pair(block_hash, block));
             }
-            
+
+            const std::string& tx_id = p.first;
             rapidjson::Value obj(rapidjson::kObjectType);
             obj.AddMember("block_id", block->id(), allocator);
-            obj.AddMember("tx_id", rapidjson::StringRef(p.first.c_str()), allocator);
+            obj.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
             tx_map.PushBack(obj, allocator);
         }
         
@@ -3633,6 +4608,18 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         }
 
         doc.AddMember("peer_score", doc_peer, allocator);
+        rapidjson::StringBuffer buffer_sha1;
+        rapidjson::Writer<rapidjson::StringBuffer> writer_sha1(buffer_sha1);
+        doc.Accept(writer_sha1);
+        char buf[20] = {0};
+
+        if(!fly::base::sha1(buffer_sha1.GetString(), buffer_sha1.GetSize(), buf, 20))
+        {
+            ASKCOIN_RETURN false;
+        }
+
+        std::string sha1_b64 = fly::base::base64_encode(buf, 20);
+        doc.AddMember("sha1", rapidjson::StringRef(sha1_b64.c_str()), allocator);
         doc.Accept(writer);
         CONSOLE_LOG_INFO("merge_point export block_id: %lu, block_hash: %s successfully", \
                          m_merge_point->m_export_block_id, m_merge_point->m_export_block_hash.c_str());

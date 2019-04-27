@@ -160,6 +160,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Pending_Detail_Request>> m_pending_detail_reqs;
     Timer_Controller m_timer_ctl;
     std::unordered_map<std::string, std::shared_ptr<Block>> m_tx_map;
+    std::unordered_map<uint64, std::list<std::string>> m_import_tx_map;
     std::unordered_map<std::string, std::shared_ptr<Topic>> m_topics;
     std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;
     std::unordered_map<uint64, std::pair<std::shared_ptr<Block>, std::list<std::string>>> m_rollback_txs;

@@ -48,6 +48,11 @@ void Reply::add_balance(uint64 value)
     m_balance += value;
 }
 
+void Reply::set_balance(uint64 value)
+{
+    m_balance = value;
+}
+
 uint64 Reply::get_balance()
 {
     return m_balance;

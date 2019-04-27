@@ -21,6 +21,7 @@ public:
     bool add_member(std::string tx_id, std::shared_ptr<Account> account);
     void sub_balance(uint64 value);
     void add_balance(uint64 value);
+    void set_balance(uint64 value);
     uint64 get_balance();
     uint64 get_total();
     std::list<std::shared_ptr<Reply>> m_reply_list;

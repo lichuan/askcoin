@@ -31,6 +31,11 @@ uint64 Block::utc_diff()
     return m_utc_diff;
 }
 
+void Block::set_utc_diff(uint64 value)
+{
+    m_utc_diff = value;
+}
+
 uint32 Block::zero_bits()
 {
     return m_zero_bits;

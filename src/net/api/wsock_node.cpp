@@ -2044,7 +2044,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             {
                 ASKCOIN_RETURN;
             }
-            
+
+            account->proc_history_expired(m_cur_block->id());
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -2106,6 +2107,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 auto account = iter->second;
+                account->proc_history_expired(m_cur_block->id());
                 doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
                 doc.AddMember("msg_cmd", net::api::EXPLORER_ACCOUNT_PAGE, allocator);
                 doc.AddMember("msg_id", msg_id, allocator);

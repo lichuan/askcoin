@@ -265,9 +265,9 @@ public:
                     return EXIT_FAILURE;
                 }
                 
-                if(block_id < mp_ptr->m_import_block_id)
+                if(block_id <= mp_ptr->m_import_block_id)
                 {
-                    CONSOLE_LOG_FATAL("merge_point export block_id can not be less than import block_id");
+                    CONSOLE_LOG_FATAL("merge_point export block_id must be greater than import block_id");
                     return EXIT_FAILURE;
                 }
                 

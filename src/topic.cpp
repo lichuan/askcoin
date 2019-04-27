@@ -55,6 +55,11 @@ void Topic::sub_balance(uint64 value)
     m_balance -= value;
 }
 
+void Topic::set_balance(uint64 value)
+{
+    m_balance = value;
+}
+
 uint64 Topic::get_balance()
 {
     return m_balance;
