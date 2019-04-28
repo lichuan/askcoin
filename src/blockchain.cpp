@@ -259,8 +259,37 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
     {
         return true;
     }
-    
+
     auto &expired_block = iter->second;
+    tx_pair.first = expired_block;
+    
+    if(m_merge_point->m_import_block_id > 0)
+    {
+        if(id <= m_merge_point->m_import_block_id)
+        {
+            auto iter = m_import_tx_map.find(id);
+
+            if(iter == m_import_tx_map.end())
+            {
+                return true;
+            }
+
+            auto &tx_list = iter->second;
+            
+            for(auto tx_id : tx_list)
+            {
+                tx_pair.second.push_back(tx_id);
+                
+                if(m_tx_map.erase(tx_id) != 1)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+    
     std::string block_data;
     leveldb::Status s = m_db->Get(leveldb::ReadOptions(), expired_block->hash(), &block_data);
             
@@ -308,8 +337,6 @@ bool Blockchain::proc_tx_map(std::shared_ptr<Block> block)
     {
         return false;
     }
-    
-    tx_pair.first = expired_block;
     
     for(rapidjson::Value::ConstValueIterator iter = tx_ids.Begin(); iter != tx_ids.End(); ++iter)
     {

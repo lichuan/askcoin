@@ -1373,6 +1373,14 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(block_id <= m_merge_point->m_import_block_id)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             bool have_ratio = false;
             uint32 DISTANCE = 1000;
             
@@ -1850,6 +1858,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             std::string block_hash = iter_block->hash();
+            iter_block_id = iter_block->id();
+            
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(iter_block_id <= m_merge_point->m_import_block_id)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
             
@@ -1948,6 +1966,18 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 doc_rsp.AddMember("result", 0, allocator);
                 connection->send(doc_rsp);
                 ASKCOIN_RETURN;
+            }
+
+            uint64 block_id = iter->second->id();
+            
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(block_id <= m_merge_point->m_import_block_id)
+                {
+                    doc_rsp.AddMember("result", 0, allocator);
+                    connection->send(doc_rsp);
+                    ASKCOIN_RETURN;
+                }
             }
             
             doc_rsp.AddMember("result", 1, allocator);
@@ -2208,6 +2238,15 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(block_id <= m_merge_point->m_import_block_id)
+                {
+                    punish_brief_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             if(!data.HasMember("utc"))
             {
                 punish_brief_req(request);
@@ -2427,6 +2466,16 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 ASKCOIN_RETURN;
             }
 
+            uint64 block_id = iter->second->id();
+
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(block_id <= m_merge_point->m_import_block_id)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
             
@@ -2592,6 +2641,22 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             uint64 block_id = data["id"].GetUint64();
+
+            if(block_id == 0)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(block_id <= m_merge_point->m_import_block_id)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+            }
+
             uint64 utc = data["utc"].GetUint64();
             uint32 version = data["version"].GetUint();
             

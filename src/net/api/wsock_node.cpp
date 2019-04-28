@@ -1634,6 +1634,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
 
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(iter_block->id() <= m_merge_point->m_import_block_id)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             auto pre_block = iter_block->get_parent();
             rapidjson::Document doc;
             doc.SetObject();
@@ -1803,6 +1811,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(iter_block->id() <= m_merge_point->m_import_block_id)
+                {
+                    ASKCOIN_RETURN;
+                }
+            }
+
             rapidjson::Document doc;
             doc.SetObject();
             rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
@@ -2210,6 +2226,14 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 {
                     ASKCOIN_RETURN;
                 }
+
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(iter_block->id() <= m_merge_point->m_import_block_id)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                }
                 
                 auto pre_block = iter_block->get_parent();
                 rsp_doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
@@ -2500,7 +2524,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->close();
                     ASKCOIN_RETURN;
                 }
-                
+
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id_from <= m_merge_point->m_import_block_id)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                }
+
                 rsp_doc.AddMember("block_id_from", block_id_from, allocator);
                 rsp_doc.AddMember("block_id_to", block_id_to, allocator);
                 rapidjson::Value deposit(rapidjson::kArrayType);
@@ -3012,6 +3045,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     block_id_need = cur_block_id;
                 }
                 
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id_need <= m_merge_point->m_import_block_id)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                }
+                
                 auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
                 
                 if(iter == m_account_by_id.end())
@@ -3274,7 +3316,16 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 {
                     block_id_need = cur_block_id;
                 }
-                
+
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id_need <= m_merge_point->m_import_block_id)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                }
+
                 auto iter = m_account_by_id.find(wsock_node->m_exchange_account_id);
                 
                 if(iter == m_account_by_id.end())
@@ -3589,6 +3640,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     connection->send(rsp_doc);
                     return;
                 }
+
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id <= m_merge_point->m_import_block_id)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                }
                 
                 const uint64 DISTANCE = 500;
                 bool left_end = false;
@@ -3613,6 +3673,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 {
                                     left_end = true;
                                     continue;
+                                }
+                                
+                                if(m_merge_point->m_import_block_id > 0)
+                                {
+                                    if(iter_block_id <= m_merge_point->m_import_block_id)
+                                    {
+                                        left_end = true;
+                                        continue;
+                                    }
                                 }
                             }
                             else
@@ -3656,6 +3725,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 left_end = true;
                                 continue;
                             }
+                            
+                            if(m_merge_point->m_import_block_id > 0)
+                            {
+                                if(iter_block_id <= m_merge_point->m_import_block_id)
+                                {
+                                    left_end = true;
+                                    continue;
+                                }
+                            }
                         }
                     }
                     else
@@ -3665,17 +3743,34 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         while(iter == m_block_by_id.end())
                         {
                             right_end = true;
-                            
-                            if(block_id > 1)
+
+                            if(m_merge_point->m_import_block_id > 0)
                             {
-                                block_id -= 1;
-                                iter = m_block_by_id.find(block_id);
+                                if(block_id > m_merge_point->m_import_block_id + 1)
+                                {
+                                    block_id -= 1;
+                                    iter = m_block_by_id.find(block_id);
+                                }
+                                else
+                                {
+                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                    connection->send(rsp_doc);
+                                    ASKCOIN_RETURN;
+                                }
                             }
                             else
                             {
-                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
-                                connection->send(rsp_doc);
-                                ASKCOIN_RETURN;
+                                if(block_id > 1)
+                                {
+                                    block_id -= 1;
+                                    iter = m_block_by_id.find(block_id);
+                                }
+                                else
+                                {
+                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                    connection->send(rsp_doc);
+                                    ASKCOIN_RETURN;
+                                }
                             }
                         }
                         
@@ -3827,6 +3922,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     return;
                 }
                 
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id <= m_merge_point->m_import_block_id)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                }
+                
                 const uint64 DISTANCE = 500;
                 bool left_end = false;
                 bool right_end = false;
@@ -3850,6 +3954,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 {
                                     left_end = true;
                                     continue;
+                                }
+
+                                if(m_merge_point->m_import_block_id > 0)
+                                {
+                                    if(iter_block_id <= m_merge_point->m_import_block_id)
+                                    {
+                                        left_end = true;
+                                        continue;
+                                    }
                                 }
                             }
                             else
@@ -3893,6 +4006,15 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                                 left_end = true;
                                 continue;
                             }
+
+                            if(m_merge_point->m_import_block_id > 0)
+                            {
+                                if(iter_block_id <= m_merge_point->m_import_block_id)
+                                {
+                                    left_end = true;
+                                    continue;
+                                }
+                            }
                         }
                     }
                     else
@@ -3902,17 +4024,34 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         while(iter == m_block_by_id.end())
                         {
                             right_end = true;
-                            
-                            if(block_id > 1)
+
+                            if(m_merge_point->m_import_block_id > 0)
                             {
-                                block_id -= 1;
-                                iter = m_block_by_id.find(block_id);
+                                if(block_id > m_merge_point->m_import_block_id + 1)
+                                {
+                                    block_id -= 1;
+                                    iter = m_block_by_id.find(block_id);
+                                }
+                                else
+                                {
+                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                    connection->send(rsp_doc);
+                                    ASKCOIN_RETURN;
+                                }
                             }
                             else
                             {
-                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
-                                connection->send(rsp_doc);
-                                ASKCOIN_RETURN;
+                                if(block_id > 1)
+                                {
+                                    block_id -= 1;
+                                    iter = m_block_by_id.find(block_id);
+                                }
+                                else
+                                {
+                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                    connection->send(rsp_doc);
+                                    ASKCOIN_RETURN;
+                                }
                             }
                         }
 
