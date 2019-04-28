@@ -45,6 +45,7 @@ Blockchain::Blockchain()
     m_b64_table['='] = 64;
     m_cur_account_id = 0;
     m_last_mine_time = 0;
+    m_merge_point.reset(new Blockchain::Merge_Point);
 }
 
 Blockchain::~Blockchain()
@@ -1721,25 +1722,10 @@ bool Blockchain::start(std::string db_path, bool repair_db)
     };
     
     bool merge_point_exist = false;
-    bool merge_point_export = false;
-    bool merge_point_import = false;
     std::list<Child_Block> block_list;
     std::shared_ptr<Block> the_most_difficult_block;
-    
-    if(m_merge_point)
-    {
-        if(m_merge_point->m_import_block_id > 0)
-        {
-            merge_point_import = true;
-        }
 
-        if(m_merge_point->m_export_block_id > 0)
-        {
-            merge_point_export = true;
-        }
-    }
-    
-    if(!merge_point_import)
+    if(m_merge_point->m_import_block_id == 0)
     {
         std::string block_0;
         s = m_db->Get(leveldb::ReadOptions(), "0", &block_0);
@@ -4330,7 +4316,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             m_broadcast_doc = doc_ptr;
         }
 
-        if(merge_point_export)
+        if(m_merge_point->m_export_block_id > 0)
         {
             if(cur_block_id == m_merge_point->m_export_block_id)
             {
@@ -4352,7 +4338,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         }
     }
     
-    if(merge_point_export)
+    if(m_merge_point->m_export_block_id > 0)
     {
         if(!merge_point_exist)
         {

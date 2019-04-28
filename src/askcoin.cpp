@@ -399,7 +399,7 @@ public:
             return EXIT_SUCCESS;
         }
         
-        if(Blockchain::instance()->m_merge_point && Blockchain::instance()->m_merge_point->m_export_block_id > 0)
+        if(Blockchain::instance()->m_merge_point->m_export_block_id > 0)
         {
             return EXIT_SUCCESS;
         }
