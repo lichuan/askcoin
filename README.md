@@ -18,7 +18,7 @@ In order to weaken the advantages of ASIC mining machine, the mining algorithm o
 | :------: | :--------------: |
 |   CPU    | 16 cores or more |
 |  Memory  |   16G or more    |
-|   Disk   |    1T or more    |
+|   Disk   |   100G or more   |
 | Network  |   100Mb / sec    |
 
 
@@ -76,7 +76,7 @@ The configuration file (***config.json***) for askcoin is as follows:
 - ***network.p2p.max_conn***:  maximum number of P2P network connections allowed.
 - ***network.p2p.init_peer***:  initial peer nodes in P2P networks.
 - ***network.websocket.enable***:  whether to open websocket service.
-- ***network.websocket.host***:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a LAN address (192.168.1.234, for example).
+- ***network.websocket.host***:  websocket address that mobile app or explorer can connect to. If you only want to provide internal network access, you can set this as a private address (such as 192.168.1.234).
 - ***network.websocket.port***:  websocket port that mobile app or explorer can connect to.
 - ***network.websocket.max_conn***:  maximum number of websocket connections allowed.
 
@@ -154,7 +154,7 @@ If you want to be a miner, you need to do the following steps:
 
    ![start](res/start.jpg)
 
-   you can run the command ***tail -f log/askcoin.log*** to check the log's output generated, waiting for your full node to synchronize to the latest block
+   you can run the command ***tail -f log/askcoin.log*** to check the log's output generated, waiting for your full node to synchronize to the latest block (new miners can use the "merge point" to dramatically reduce synchronization time, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point.git) for more information)
 
 4. If you haven't registered an account before, you need to execute ***gen_privkey*** to generate a new private key:
 
@@ -443,7 +443,7 @@ You can refer to the [***askcoin-gen-reg-sign***](https://github.com/lichuan/ask
 
 ## Big data on the chain
 
-With more and more users and transactions, the data on the block chain will become larger and larger. This will bring higher and higher costs to the people who run the full node. In fact, since the beginning of askcoin's design, the problem of data expansion on the chain has been considered. Askcoin is designed to focus on decentralization and real-time Q&A, the lifetime of each topic (or question) is about one day (equivalent to 4320 block intervals). When you run askcoin for several years, the amount of data on the chain may exceed what you can accept, you can freely cut out the expired topics from the chain and choose a widely accepted block as the merging point. You can safely delete all previous blocks, just keep all account information generated until the merge point. This process is also called pruning and merging. As long as the protocol of communication between all nodes remains unchanged or compatible, there will be no adverse impact.
+With more and more users and transactions, the data on the block chain will become larger and larger. This will bring higher and higher costs to the people who run the full node. In fact, since the beginning of askcoin's design, the problem of data expansion on the chain has been considered. Askcoin is designed to focus on decentralization and real-time Q&A, the lifetime of each topic (or question) is about one day (equivalent to 4320 block intervals). When you run askcoin for several years, the amount of data on the chain may exceed what you can accept, you can freely cut out the expired topics from the chain and choose a widely accepted block as the merging point. You can safely delete all previous blocks, just keep all account information generated until the merge point. This process is also called pruning and merging. As long as the protocol of communication between all nodes remains unchanged or compatible, there will be no adverse impact, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point.git) for more information.
 
 ![merge](res/merge.jpg)
 
