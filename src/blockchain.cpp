@@ -2261,8 +2261,9 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             
             std::shared_ptr<Block> block(new Block(block_id, obj["utc"].GetUint64(), obj["version"].GetUint(), \
                                                    obj["zero_bits"].GetUint(), block_hash));
+            block->m_in_main_chain = true;
             auto rp = m_blocks.insert(std::make_pair(block_hash, block));
-
+            
             if(!rp.second)
             {
                 CONSOLE_LOG_FATAL("merge_point import failed, duplicated block hash");
