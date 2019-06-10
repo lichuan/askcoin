@@ -1,6 +1,6 @@
 ## Askcoin
 
-Askcoin is a cryptocurrency for real-time Q&A. It was born to achieve freedom of speech and question-and-answer worldwide. It's decentralized and ASIC-resistant, this is achieved by a new POW consensus algorithm.
+Askcoin is a cryptocurrency for real-time Q&A and prediction platform. It has a built-in decentralized exchange, It was created for people to ask questions freely, to talk freely, to trade freely and to predict events freely. It's decentralized and ASIC-resistant, this is achieved by a new POW consensus algorithm.
 
 As we all know, bitcoin is mined by calculating sha256, so whoever calculates sha256 fast will be able to produce new blocks before anyone else, this is exactly what ASIC mining machines on the market are good at.
 
@@ -154,7 +154,7 @@ If you want to be a miner, you need to do the following steps:
 
    ![start](res/start.jpg)
 
-   you can run the command ***tail -f log/askcoin.log*** to check the log's output generated, waiting for your full node to synchronize to the latest block (new miners can use the "merge point" to dramatically reduce synchronization time, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point) for more information)
+   you can run this command: ***tail -f log/askcoin.log*** on linux shell terminal to check the log's output generated, waiting for your full node to synchronize to the latest block (new miners can use the "merge point" to dramatically reduce synchronization time, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point) for more information)
 
 4. If you haven't registered an account before, you need to execute ***gen_privkey*** to generate a new private key:
 
