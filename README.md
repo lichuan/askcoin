@@ -1,6 +1,6 @@
 ## Askcoin
 
-Askcoin is a cryptocurrency for real-time Q&A and prediction platform. It has a built-in decentralized exchange, It was created for people to ask questions freely, to talk freely, to trade freely and to predict events freely. It's decentralized and ASIC-resistant, this is achieved by a new POW consensus algorithm.
+Askcoin is a cryptocurrency for real-time Q&A and event prediction. It has a built-in decentralized exchange, It was created for people to ask questions freely, to talk freely, to trade freely and to predict events freely. It's decentralized and ASIC-resistant, this is achieved by a new POW consensus algorithm.
 
 As we all know, bitcoin is mined by calculating sha256, so whoever calculates sha256 fast will be able to produce new blocks before anyone else, this is exactly what ASIC mining machines on the market are good at.
 
