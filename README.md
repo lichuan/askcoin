@@ -154,7 +154,7 @@ If you want to be a miner, you need to do the following steps:
 
    ![start](res/start.jpg)
 
-   you can run this command: ***tail -f log/askcoin.log*** on linux shell terminal to check the log's output generated, waiting for your full node to synchronize to the latest block (new miners can use the "merge point" to dramatically reduce synchronization time, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point) for more information)
+   you can open another shell terminal and run this command: ***tail -f log/askcoin.log*** to check the output log generated, waiting for your full node to synchronize to the latest block (new miners can use the "merge point" to dramatically reduce synchronization time, you can refer to [***askcoin-merge-point***](https://github.com/lichuan/askcoin-merge-point) for more information)
 
 4. If you haven't registered an account before, you need to execute ***gen_privkey*** to generate a new private key:
 
