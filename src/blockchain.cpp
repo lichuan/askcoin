@@ -518,7 +518,16 @@ void Blockchain::do_mine()
         rapidjson::Value data(rapidjson::kObjectType);
         data.AddMember("id", cur_block_id + 1, allocator);
         data.AddMember("utc", time(NULL), allocator);
-        data.AddMember("version", ASKCOIN_VERSION, allocator);
+
+        if(cur_block_id + 1 >= HF_1_BLOCK_ID)
+        {
+            data.AddMember("version", ASKCOIN_VERSION, allocator);
+        }
+        else
+        {
+            data.AddMember("version", PRE_HF_1_ASKCOIN_VERSION, allocator);
+        }
+        
         data.AddMember("zero_bits", zero_bits, allocator);
         data.AddMember("pre_hash", rapidjson::Value(cur_block_hash.c_str(), allocator), allocator);
         data.AddMember("miner", rapidjson::Value(miner_pub_key_b64.c_str(), allocator), allocator);
@@ -2967,13 +2976,25 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             std::string pre_hash = data["pre_hash"].GetString();
             const rapidjson::Value &nonce = data["nonce"];
 
-            if(!version_compatible(version, ASKCOIN_VERSION))
+            if(block_id >= HF_1_BLOCK_ID)
             {
-                CONSOLE_LOG_FATAL("merge_point import, verify merge_block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
-                                  block_hash.c_str(), version, ASKCOIN_VERSION);
-                return false;
+                if(!version_compatible(version, ASKCOIN_VERSION))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import, verify merge_block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                                      block_hash.c_str(), version, ASKCOIN_VERSION);
+                    return false;
+                }
             }
-        
+            else
+            {
+                if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+                {
+                    CONSOLE_LOG_FATAL("merge_point import, verify merge_block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                                      block_hash.c_str(), version, PRE_HF_1_ASKCOIN_VERSION);
+                    return false;
+                }
+            }
+            
             if(!nonce.IsArray())
             {
                 ASKCOIN_RETURN false;
@@ -3299,11 +3320,23 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         std::string pre_hash = data["pre_hash"].GetString();
         const rapidjson::Value &nonce = data["nonce"];
 
-        if(!version_compatible(version, ASKCOIN_VERSION))
+        if(block_id >= HF_1_BLOCK_ID)
         {
-            CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
-                              child_block.m_hash.c_str(), version, ASKCOIN_VERSION);
-            return false;
+            if(!version_compatible(version, ASKCOIN_VERSION))
+            {
+                CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                                  child_block.m_hash.c_str(), version, ASKCOIN_VERSION);
+                return false;
+            }
+        }
+        else
+        {
+            if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+            {
+                CONSOLE_LOG_FATAL("verify block version from leveldb failed, hash: %s, block version: %u, askcoin version: %u", \
+                                  child_block.m_hash.c_str(), version, PRE_HF_1_ASKCOIN_VERSION);
+                return false;
+            }
         }
         
         if(!nonce.IsArray())
@@ -4454,11 +4487,12 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         doc.AddMember("accounts", accounts, allocator);
         rapidjson::Value tx_map(rapidjson::kArrayType);
         std::unordered_map<std::string, std::shared_ptr<Block>> blocks;
-        
+        blocks.insert(std::make_pair(m_merge_point->m_export_block_hash, mp_block));
+
         for(auto &p : m_tx_map)
         {
             auto &block = p.second;
-
+            
             if(block->id() + 200 < m_merge_point->m_export_block_id + 1)
             {
                 continue;
@@ -4600,11 +4634,11 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         {
             ASKCOIN_RETURN false;
         }
-    
+
         for(rapidjson::Value::ConstValueIterator iter = peers.Begin(); iter != peers.End(); ++iter)
         {
             const rapidjson::Value &peer_info = *iter;
-
+            
             if(!peer_info.HasMember("host"))
             {
                 ASKCOIN_RETURN false;
@@ -4806,7 +4840,17 @@ void Blockchain::mine_tx()
     uint64 last_mined_cnt = 0;
     uint64 loop_cnt = 0;
     uint64 cur_block_id = m_cur_block->id() + 1;
-    std::shared_ptr<Block> cur_block(new Block(cur_block_id, m_cur_block->utc(), ASKCOIN_VERSION, m_cur_block->zero_bits(), "temp_hash"));
+    std::shared_ptr<Block> cur_block;
+    
+    if(cur_block_id >= HF_1_BLOCK_ID)
+    {
+        cur_block = std::make_shared<Block>(cur_block_id, m_cur_block->utc(), ASKCOIN_VERSION, m_cur_block->zero_bits(), "temp_hash");
+    }
+    else
+    {
+        cur_block = std::make_shared<Block>(cur_block_id, m_cur_block->utc(), PRE_HF_1_ASKCOIN_VERSION, m_cur_block->zero_bits(), "temp_hash");
+    }
+    
     cur_block->set_parent(m_cur_block);
     
     if(!proc_topic_expired(cur_block_id))
@@ -4824,6 +4868,7 @@ void Blockchain::mine_tx()
         // because tx may not be in order, so need loop 3 times to resolve dependency problem.
         if(++cnt > remain_cnt)
         {
+            // todo dex may change loop_cnt?
             if(++loop_cnt >= 3)
             {
                 break;
@@ -5458,10 +5503,20 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     }
     
     uint32 version = data["version"].GetUint();
-    
-    if(!version_compatible(version, ASKCOIN_VERSION))
+
+    if(block_id >= HF_1_BLOCK_ID)
     {
-        ASKCOIN_EXIT(EXIT_FAILURE);
+        if(!version_compatible(version, ASKCOIN_VERSION))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+    }
+    else
+    {
+        if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
     }
     
     if(!data.HasMember("zero_bits"))

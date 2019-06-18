@@ -12,8 +12,17 @@
  -                       ---   ----
  - max version (uint32): 4294967295
  */
-static const uint32 ASKCOIN_VERSION = 2; //3 3 4
-static const char* ASKCOIN_VERSION_NAME = "0.0.2"; //major.minor.revision: 3 3 4
+static const uint32 PRE_HF_1_ASKCOIN_VERSION = 2; //3 3 4
+static const char* PRE_HF_1_ASKCOIN_VERSION_NAME = "0.0.2"; //major.minor.revision: 3 3 4
+
+// first hard fork
+static const uint32 HF_1_ASKCOIN_VERSION = 10000; //3 3 4
+static const char* HF_1_ASKCOIN_VERSION_NAME = "0.1.0"; //major.minor.revision: 3 3 4
+static const uint64 HF_1_BLOCK_ID = 500000;
+
+// latest version
+static const uint32 ASKCOIN_VERSION = HF_1_ASKCOIN_VERSION;
+static const char* ASKCOIN_VERSION_NAME = HF_1_ASKCOIN_VERSION_NAME;
 
 static bool version_compatible(uint32 ver_a, uint32 ver_b)
 {

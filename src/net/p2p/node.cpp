@@ -276,7 +276,8 @@ bool Node::init(std::shared_ptr<fly::net::Connection<Json>> connection)
         doc.AddMember("port", m_port, allocator);
         doc.AddMember("id", conn_id, allocator);
         doc.AddMember("key", peer->m_local_key, allocator);
-        doc.AddMember("version", ASKCOIN_VERSION, allocator);
+        doc.AddMember("version", PRE_HF_1_ASKCOIN_VERSION, allocator);
+        doc.AddMember("latest_version", ASKCOIN_VERSION, allocator);
         connection->send(doc);
     }
 
@@ -396,8 +397,8 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                 }
 
                 auto peer_num = peers.Size();
-
-                if(peer_num > 5)
+                
+                if(peer_num > 2)
                 {
                     connection->close();
                     ASKCOIN_RETURN;
@@ -442,6 +443,12 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                     std::string host = pc["host"].GetString();
                     uint32 port = pc["port"].GetUint();
 
+                    if(host.empty() || port == 0 || host.length() >= 100)
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                    
                     if(host == m_host && port == m_port)
                     {
                         continue;
@@ -494,22 +501,6 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                 
                 return;
             }
-            
-            if(!doc.HasMember("version"))
-            {
-                connection->close();
-                
-                ASKCOIN_RETURN;
-            }
-            
-            const rapidjson::Value &version = doc["version"];
-
-            if(!version.IsUint())
-            {
-                connection->close();
-                
-                ASKCOIN_RETURN;
-            }
 
             if(!doc.HasMember("id"))
             {
@@ -542,19 +533,26 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
                 
                 ASKCOIN_RETURN;
             }
-            
-            uint32 version_u32 = version.GetUint();
+
             uint64 id_u64 = id.GetUint64();
             uint32 key_u32 = key.GetUint();
-            LOG_DEBUG_INFO("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", version_u32, id_u64, key_u32, \
-                     connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
             
-            if(!version_compatible(version_u32, ASKCOIN_VERSION))
+            if(doc.HasMember("latest_version"))
             {
-                LOG_ERROR("unreg peer (m_state:1) !version_compatible(%u,%u), addr: %s", version_u32, ASKCOIN_VERSION, peer->key().c_str());
-                connection->close();
-
-                return;
+                if(!doc["latest_version"].IsUint())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 latest_version = doc["latest_version"].GetUint();
+                LOG_DEBUG_INFO("unreg peer (m_state:1) recv message cmd REG_RSP, version:%u, id:%lu, key:%u from %s:%u", latest_version, id_u64, key_u32, \
+                               connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
+            }
+            else
+            {
+                LOG_DEBUG_INFO("unreg peer (m_state:1) recv message cmd REG_RSP, id:%lu, key:%u from %s:%u", id_u64, key_u32, \
+                               connection->peer_addr().m_host.c_str(), connection->peer_addr().m_port);
             }
 
             peer->m_remote_key = key_u32;
@@ -663,22 +661,6 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             return;
         }
         
-        if(!doc.HasMember("version"))
-        {
-            connection->close();
-                
-            ASKCOIN_RETURN;
-        }
-            
-        const rapidjson::Value &version = doc["version"];
-
-        if(!version.IsUint())
-        {
-            connection->close();
-                
-            ASKCOIN_RETURN;
-        }
-
         if(!doc.HasMember("id"))
         {
             connection->close();
@@ -743,20 +725,27 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             ASKCOIN_RETURN;
         }
         
-        uint32 version_u32 = version.GetUint();
         uint64 id_u64 = id.GetUint64();
         std::string host_str = host.GetString();
         uint16 port_u16 = port.GetUint();
         uint32 key_u32 = key.GetUint();
-        LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", version_u32, id_u64, key_u32, host_str.c_str(), port_u16);
-        
-        if(!version_compatible(version_u32, ASKCOIN_VERSION))
+
+        if(doc.HasMember("latest_version"))
         {
-            LOG_ERROR("unreg peer (m_state:0) !version_compatible(%u,%u), addr: %s:%u", version_u32, ASKCOIN_VERSION, host_str.c_str(), port_u16);
-            connection->close();
-            return;
+            if(!doc["latest_version"].IsUint())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            uint32 latest_version = doc["latest_version"].GetUint();
+            LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, version:%u, id:%lu, key:%u, host:%s, port:%u", latest_version, id_u64, key_u32, host_str.c_str(), port_u16);
         }
-        
+        else
+        {
+            LOG_DEBUG_INFO("unreg peer (m_state:0) recv message cmd REG_REQ, id:%lu, key:%u, host:%s, port:%u", id_u64, key_u32, host_str.c_str(), port_u16);
+        }
+
         if(host_str == m_host && port_u16 == m_port)
         {
             connection->close();
@@ -784,7 +773,7 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
         {
             peer_score = iter->second;
         }
-
+        
         lock.unlock();
         uint8 expect = 0;
 
@@ -798,9 +787,10 @@ void Node::dispatch(std::unique_ptr<fly::net::Message<Json>> message)
             doc.AddMember("msg_cmd", REG_RSP, allocator);
             doc.AddMember("id", conn_id, allocator);
             doc.AddMember("key", peer->m_local_key, allocator);
-            doc.AddMember("version", ASKCOIN_VERSION, allocator);
+            doc.AddMember("version", PRE_HF_1_ASKCOIN_VERSION, allocator);
+            doc.AddMember("latest_version", ASKCOIN_VERSION, allocator);
             connection->send(doc);
-
+            
             std::thread tmp_thread([=]() {
                     std::unique_ptr<fly::net::Client<Json>> client(new fly::net::Client<Json>(peer->m_addr,
                                                                                               std::bind(&Node::init_verify, this, _1, conn_id),
@@ -1471,10 +1461,11 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                             {
                                 ASKCOIN_RETURN;
                             }
-
+                            
                             m_broadcast_by_peer_key[key].m_ratio_cnt = 0;
+                            m_broadcast_by_peer_key[key].m_cnt = 0;
                         }
-
+                        
                         ++m_broadcast_by_peer_key[key].m_ratio_cnt;
                     }
                     
@@ -1532,11 +1523,23 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             
             uint32 version = data["version"].GetUint();
 
-            if(!version_compatible(version, ASKCOIN_VERSION))
+            if(block_id >= HF_1_BLOCK_ID)
             {
-                LOG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
-                punish_peer(peer);
-                ASKCOIN_RETURN;
+                if(!version_compatible(version, ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else
+            {
+                if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_BROADCAST, but !version_compatible(%u, %u), peer addr: %s", version, PRE_HF_1_ASKCOIN_VERSION, peer->key().c_str());
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
             }
             
             if(!data.HasMember("zero_bits"))
@@ -1760,6 +1763,12 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
         }
         else if(cmd == net::p2p::BLOCK_BROADCAST_1)
         {
+            if(doc.MemberCount() != 5)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+            
             if(!doc.HasMember("pow"))
             {
                 punish_peer(peer);
@@ -2274,14 +2283,26 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
             }
             
             uint32 version = data["version"].GetUint();
-            
-            if(!version_compatible(version, ASKCOIN_VERSION))
-            {
-                LOG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
-                punish_brief_req(request);
-                ASKCOIN_RETURN;
+
+            if(block_id >= HF_1_BLOCK_ID)
+            {                
+                if(!version_compatible(version, ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                    punish_brief_req(request);
+                    ASKCOIN_RETURN;
+                }
             }
-                        
+            else
+            {
+                if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_BRIEF_RSP, but !version_compatible(%u, %u), peer addr: %s", version, PRE_HF_1_ASKCOIN_VERSION, peer->key().c_str());
+                    punish_brief_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            
             if(!data.HasMember("pre_hash"))
             {
                 punish_brief_req(request);
@@ -2659,12 +2680,24 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             uint64 utc = data["utc"].GetUint64();
             uint32 version = data["version"].GetUint();
-            
-            if(!version_compatible(version, ASKCOIN_VERSION))
+
+            if(block_id >= HF_1_BLOCK_ID)
             {
-                LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
-                punish_detail_req(request);
-                ASKCOIN_RETURN;
+                if(!version_compatible(version, ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, ASKCOIN_VERSION, peer->key().c_str());
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
+            }
+            else
+            {
+                if(!version_compatible(version, PRE_HF_1_ASKCOIN_VERSION))
+                {
+                    LOG_ERROR("recv BLOCK_DETAIL_RSP, but !version_compatible(%u, %u), peer addr: %s", version, PRE_HF_1_ASKCOIN_VERSION, peer->key().c_str());
+                    punish_detail_req(request);
+                    ASKCOIN_RETURN;
+                }
             }
             
             uint32 zero_bits = data["zero_bits"].GetUint();

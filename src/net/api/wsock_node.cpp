@@ -2830,36 +2830,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
 
             if(cmd == net::api::EXCHANGE_LOCK)
             {
-                // if(m_is_locked)
-                // {
-                //     rsp_doc.AddMember("err_code", net::api::ERR_EXCHANGE_CAN_NOT_REPEAT_LOCKING, allocator);
-                //     connection->send(rsp_doc);
-                //     ASKCOIN_RETURN;
-                // }
-                
-                // if(!doc.HasMember("password"))
-                // {
-                //     connection->close();
-                //     ASKCOIN_RETURN;
-                // }
-                
-                // if(!doc["password"].IsString())
-                // {
-                //     connection->close();
-                //     ASKCOIN_RETURN;
-                // }
-
-                // std::string password = doc["password"].GetString();
-                
-                // if(password.empty())
-                // {
-                //     connection->close();
-                //     ASKCOIN_RETURN;
-                // }
-                
-                // char sha1_buf[20] = {0};
-                // fly::base::sha1(password.c_str(), password.length(), sha1_buf, 20);
-                // m_lock_password.assign(sha1_buf, 20);
                 m_is_locked = true;
                 connection->send(rsp_doc);
             }
@@ -2886,7 +2856,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 uint32 p2p_conn_num = p2p_node->m_peers.size();
                 lock_p2p.unlock();
                 rsp_doc.AddMember("connections", p2p_conn_num, allocator);
-                rsp_doc.AddMember("reserves", account->get_balance(), allocator);
+                rsp_doc.AddMember("balance", account->get_balance(), allocator);
                 connection->send(rsp_doc);
             }
             else if(cmd == net::api::EXCHANGE_UNLOCK)
@@ -3266,7 +3236,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 rsp_doc.AddMember("deposits", deposits, allocator);
-                rsp_doc.AddMember("batchId", batch_id, allocator);
+                rsp_doc.AddMember("batch_id", batch_id, allocator);
                 connection->send(rsp_doc);
             }
             else if(cmd == net::api::EXCHANGE_LIST_WITHDRAW)
@@ -3537,7 +3507,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 }
                 
                 rsp_doc.AddMember("withdraws", withdraws, allocator);
-                rsp_doc.AddMember("batchId", batch_id, allocator);
+                rsp_doc.AddMember("batch_id", batch_id, allocator);
                 connection->send(rsp_doc);
             }
             else if(cmd == net::api::EXCHANGE_DEPOSIT_TX_PROBE)
