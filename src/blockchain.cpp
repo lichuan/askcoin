@@ -44,7 +44,6 @@ Blockchain::Blockchain()
     m_b64_table['/'] = 64;
     m_b64_table['='] = 64;
     m_cur_account_id = 0;
-    m_last_mine_time = 0;
     m_merge_point.reset(new Blockchain::Merge_Point);
 }
 
@@ -484,7 +483,7 @@ void Blockchain::do_mine()
             continue;
         }
         
-        std::list<std::shared_ptr<tx::Tx>> mined_txs;
+        std::list<std::shared_ptr<Tx>> mined_txs;
         uint64 cur_block_id, cur_block_utc;
         uint32 zero_bits;
         std::string cur_block_hash, miner_key;
@@ -1062,7 +1061,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         p2p_doc.AddMember("sign", rapidjson::Value(sign.c_str(), p2p_allocator), p2p_allocator);
         p2p_doc.AddMember("data", data, p2p_allocator);
         
-        std::shared_ptr<tx::Tx_Send> tx_send(new tx::Tx_Send);
+        std::shared_ptr<Tx_Send> tx_send(new Tx_Send);
         tx_send->m_id = tx_id;
         tx_send->m_type = 2;
         tx_send->m_utc = utc;
@@ -1471,7 +1470,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         p2p_doc.AddMember("sign", rapidjson::Value(sign.c_str(), p2p_allocator), p2p_allocator);
         p2p_doc.AddMember("data", data, p2p_allocator);
         
-        std::shared_ptr<tx::Tx_Reg> tx_reg(new tx::Tx_Reg);
+        std::shared_ptr<Tx_Reg> tx_reg(new Tx_Reg);
         tx_reg->m_id = tx_id;
         tx_reg->m_type = 1;
         tx_reg->m_utc = utc;
@@ -3373,15 +3372,23 @@ bool Blockchain::start(std::string db_path, bool repair_db)
         {
             ASKCOIN_RETURN false;
         }
-        
-        if(utc_diff < 10)
+
+        uint64 left_diff = 10, right_diff = 30;
+    
+        if(block_id >= HF_1_BLOCK_ID)
+        {
+            left_diff = 5;
+            right_diff = 15;
+        }
+
+        if(utc_diff < left_diff)
         {
             if(zero_bits != parent_zero_bits + 1)
             {
                 ASKCOIN_RETURN false;
             }
         }
-        else if(utc_diff > 30)
+        else if(utc_diff > right_diff)
         {
             if(parent_zero_bits > 1)
             {
@@ -4682,16 +4689,10 @@ bool Blockchain::start(std::string db_path, bool repair_db)
     m_timer_ctl.add_timer([this]() {
             this->broadcast();
         }, 10000);
-
+    
     m_timer_ctl.add_timer([this]() {
-            uint64 utc_now = time(NULL);
-
-            if(m_last_mine_time + 5 < utc_now)
-            {
-                mine_tx();
-                m_last_mine_time = time(NULL);
-            }
-        }, 1000);
+            mine_tx();
+        }, 5000);
     
     for(auto p : m_account_by_id)
     {
@@ -4831,8 +4832,8 @@ void Blockchain::mine_tx()
         return;
     }
     
-    std::list<std::shared_ptr<tx::Tx>> uv_2_txs;
-    std::list<std::shared_ptr<tx::Tx>> mined_txs;
+    std::list<std::shared_ptr<Tx>> uv_2_txs;
+    std::list<std::shared_ptr<Tx>> mined_txs;
     uv_2_txs.insert(uv_2_txs.begin(), m_uv_2_txs.begin(), m_uv_2_txs.end());
     uint64 cnt = 0;
     uint64 remain_cnt = uv_2_txs.size();
@@ -4903,7 +4904,7 @@ void Blockchain::mine_tx()
         
         if(tx_type == 1)
         {
-            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            std::shared_ptr<Tx_Reg> tx_reg = std::static_pointer_cast<Tx_Reg>(tx);
             auto register_name = tx_reg->m_register_name;
             std::shared_ptr<Account> exist_account;
             
@@ -5009,7 +5010,7 @@ void Blockchain::mine_tx()
             
             if(tx_type == 2) // send coin
             {
-                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                std::shared_ptr<Tx_Send> tx_send = std::static_pointer_cast<Tx_Send>(tx);
                 uint64 amount = tx_send->m_amount;
 
                 if(account->get_balance() < amount)
@@ -5035,7 +5036,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 3) // new topic
             {
-                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                std::shared_ptr<Tx_Topic> tx_topic = std::static_pointer_cast<Tx_Topic>(tx);
                 uint64 reward = tx_topic->m_reward;
                 
                 if(account->get_balance() < reward)
@@ -5075,7 +5076,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 4) // reply
             {
-                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Tx_Reply> tx_reply = std::static_pointer_cast<Tx_Reply>(tx);
                 std::shared_ptr<Topic> topic;
                 
                 if(!get_topic(tx_reply->m_topic_key, topic))
@@ -5142,7 +5143,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 5) // reward
             {
-                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Tx_Reward> tx_reward = std::static_pointer_cast<Tx_Reward>(tx);
                 std::shared_ptr<Topic> topic;
                 uint64 amount = tx_reward->m_amount;
 
@@ -5243,7 +5244,7 @@ void Blockchain::mine_tx()
 
         if(tx_type == 1)
         {
-            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            std::shared_ptr<Tx_Reg> tx_reg = std::static_pointer_cast<Tx_Reg>(tx);
             auto register_name = tx_reg->m_register_name;
             std::shared_ptr<Account> referrer;
             get_account(tx_reg->m_referrer_pubkey, referrer);
@@ -5282,7 +5283,7 @@ void Blockchain::mine_tx()
             
             if(tx_type == 2) // send coin
             {
-                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                std::shared_ptr<Tx_Send> tx_send = std::static_pointer_cast<Tx_Send>(tx);
                 uint64 amount = tx_send->m_amount;
                 std::shared_ptr<Account> receiver;
                 get_account(tx_send->m_receiver_pubkey, receiver);
@@ -5291,7 +5292,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 3) // new topic
             {
-                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                std::shared_ptr<Tx_Topic> tx_topic = std::static_pointer_cast<Tx_Topic>(tx);
                 uint64 reward = tx_topic->m_reward;
                 account->add_balance(reward);
                 account->m_topic_list.pop_back();
@@ -5300,7 +5301,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 4) // reply
             {
-                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Tx_Reply> tx_reply = std::static_pointer_cast<Tx_Reply>(tx);
                 std::shared_ptr<Topic> topic;
                 get_topic(tx_reply->m_topic_key, topic);
                 topic->m_reply_list.pop_back();
@@ -5318,7 +5319,7 @@ void Blockchain::mine_tx()
             }
             else if(tx_type == 5) // reward
             {
-                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Tx_Reward> tx_reward = std::static_pointer_cast<Tx_Reward>(tx);
                 std::shared_ptr<Topic> topic;
                 get_topic(tx_reward->m_topic_key, topic);
                 std::shared_ptr<Reply> reply_to;
@@ -5368,12 +5369,19 @@ void Blockchain::mine_tx()
     uint32 parent_zero_bits = m_cur_block->zero_bits();
     uint64 utc_diff = m_cur_block->utc_diff();
     uint32 zero_bits = 1;
-
-    if(utc_diff < 10)
+    uint64 left_diff = 10, right_diff = 30;
+    
+    if(cur_block_id >= HF_1_BLOCK_ID)
+    {
+        left_diff = 5;
+        right_diff = 15;
+    }
+    
+    if(utc_diff < left_diff)
     {
         zero_bits = parent_zero_bits + 1;
     }
-    else if(utc_diff > 30)
+    else if(utc_diff > right_diff)
     {
         if(parent_zero_bits > 1)
         {
@@ -5666,7 +5674,7 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     uint64 parent_utc = m_cur_block->utc();
     uint32 parent_zero_bits = m_cur_block->zero_bits();
     uint64 utc_diff = m_cur_block->utc_diff();
-            
+    
     if(block_id != parent_block_id + 1)
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
@@ -5676,15 +5684,23 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
     {
         ASKCOIN_EXIT(EXIT_FAILURE);
     }
+
+    uint64 left_diff = 10, right_diff = 30;
     
-    if(utc_diff < 10)
+    if(block_id >= HF_1_BLOCK_ID)
+    {
+        left_diff = 5;
+        right_diff = 15;
+    }
+    
+    if(utc_diff < left_diff)
     {
         if(zero_bits != parent_zero_bits + 1)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
     }
-    else if(utc_diff > 30)
+    else if(utc_diff > right_diff)
     {
         if(parent_zero_bits > 1)
         {
@@ -6669,7 +6685,7 @@ void Blockchain::do_uv_tx()
 
         if(tx_type == 1)
         {
-            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            std::shared_ptr<Tx_Reg> tx_reg = std::static_pointer_cast<Tx_Reg>(tx);
             auto register_name = tx_reg->m_register_name;
             std::shared_ptr<Account> exist_account;
 
@@ -6743,7 +6759,7 @@ void Blockchain::do_uv_tx()
             
             if(tx_type == 2)
             {
-                std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+                std::shared_ptr<Tx_Send> tx_send = std::static_pointer_cast<Tx_Send>(tx);
                 std::shared_ptr<Account> account;
             
                 if(!get_account(pubkey, account))
@@ -6770,7 +6786,7 @@ void Blockchain::do_uv_tx()
             }
             else if(tx_type == 3)
             {
-                std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+                std::shared_ptr<Tx_Topic> tx_topic = std::static_pointer_cast<Tx_Topic>(tx);
                 uint64 reward = tx_topic->m_reward;
                 std::shared_ptr<Topic> exist_topic;
                 
@@ -6807,7 +6823,7 @@ void Blockchain::do_uv_tx()
             }
             else if(tx_type == 4)
             {
-                std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+                std::shared_ptr<Tx_Reply> tx_reply = std::static_pointer_cast<Tx_Reply>(tx);
                 std::shared_ptr<Topic> topic;
 
                 if(!get_topic(tx_reply->m_topic_key, topic))
@@ -6886,7 +6902,7 @@ void Blockchain::do_uv_tx()
             }
             else if(tx_type == 5)
             {
-                std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+                std::shared_ptr<Tx_Reward> tx_reward = std::static_pointer_cast<Tx_Reward>(tx);
                 std::shared_ptr<Account> account;
                 
                 if(!get_account(pubkey, account))
@@ -6985,7 +7001,7 @@ void Blockchain::do_uv_tx()
 
         if(tx_type == 1)
         {
-            std::shared_ptr<tx::Tx_Reg> tx_reg = std::static_pointer_cast<tx::Tx_Reg>(tx);
+            std::shared_ptr<Tx_Reg> tx_reg = std::static_pointer_cast<Tx_Reg>(tx);
             auto register_name = tx_reg->m_register_name;
             fly::base::Scope_CB scb(
                 [this, tx_reg] {
@@ -7051,7 +7067,7 @@ void Blockchain::do_uv_tx()
         }
         else if(tx_type == 2)
         {
-            std::shared_ptr<tx::Tx_Send> tx_send = std::static_pointer_cast<tx::Tx_Send>(tx);
+            std::shared_ptr<Tx_Send> tx_send = std::static_pointer_cast<Tx_Send>(tx);
             fly::base::Scope_CB scb(
                 [this, tx_send, &pubkey] {
                     std::shared_ptr<Account> account;
@@ -7090,7 +7106,7 @@ void Blockchain::do_uv_tx()
         }
         else if(tx_type == 3)
         {
-            std::shared_ptr<tx::Tx_Topic> tx_topic = std::static_pointer_cast<tx::Tx_Topic>(tx);
+            std::shared_ptr<Tx_Topic> tx_topic = std::static_pointer_cast<Tx_Topic>(tx);
             uint64 reward = tx_topic->m_reward;
             fly::base::Scope_CB scb(
                 [this, reward, &pubkey] {
@@ -7135,7 +7151,7 @@ void Blockchain::do_uv_tx()
         }
         else if(tx_type == 4)
         {
-            std::shared_ptr<tx::Tx_Reply> tx_reply = std::static_pointer_cast<tx::Tx_Reply>(tx);
+            std::shared_ptr<Tx_Reply> tx_reply = std::static_pointer_cast<Tx_Reply>(tx);
             std::shared_ptr<Topic> topic_outer;
             std::shared_ptr<Account> account_outer;
             
@@ -7256,7 +7272,7 @@ void Blockchain::do_uv_tx()
         }
         else if(tx_type == 5)
         {
-            std::shared_ptr<tx::Tx_Reward> tx_reward = std::static_pointer_cast<tx::Tx_Reward>(tx);
+            std::shared_ptr<Tx_Reward> tx_reward = std::static_pointer_cast<Tx_Reward>(tx);
             std::shared_ptr<Topic> topic_outer;
             std::shared_ptr<Account> account_outer;
             

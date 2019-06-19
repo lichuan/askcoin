@@ -4,8 +4,6 @@
 #include "fly/base/common.hpp"
 #include "net/p2p/peer.hpp"
 
-namespace tx {
-
 class Tx
 {
 public:
@@ -55,7 +53,5 @@ public:
     std::string m_reply_to;
     uint64 m_amount;
 };
-
-}
 
 #endif

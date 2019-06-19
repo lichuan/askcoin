@@ -7,7 +7,7 @@
 #include "net/p2p/message.hpp"
 #include "blockchain.hpp"
 #include "version.hpp"
-#include "tx/tx.hpp"
+#include "tx.hpp"
 #include "utilstrencodings.h"
 
 using namespace std::placeholders;
@@ -4516,7 +4516,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             ASKCOIN_RETURN;
         }
 
-        std::shared_ptr<tx::Tx_Reg> tx_reg(new tx::Tx_Reg);
+        std::shared_ptr<Tx_Reg> tx_reg(new Tx_Reg);
         tx_reg->m_id = tx_id;
         tx_reg->m_type = 1;
         tx_reg->m_utc = utc;
@@ -4705,7 +4705,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
-            std::shared_ptr<tx::Tx_Send> tx_send(new tx::Tx_Send);
+            std::shared_ptr<Tx_Send> tx_send(new Tx_Send);
             tx_send->m_id = tx_id;
             tx_send->m_type = 2;
             tx_send->m_utc = utc;
@@ -4797,7 +4797,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
-            std::shared_ptr<tx::Tx_Topic> tx_topic(new tx::Tx_Topic);
+            std::shared_ptr<Tx_Topic> tx_topic(new Tx_Topic);
             tx_topic->m_id = tx_id;
             tx_topic->m_type = 3;
             tx_topic->m_utc = utc;
@@ -4884,7 +4884,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
-            std::shared_ptr<tx::Tx_Reply> tx_reply(new tx::Tx_Reply);
+            std::shared_ptr<Tx_Reply> tx_reply(new Tx_Reply);
             
             if(data.HasMember("reply_to"))
             {
@@ -5126,7 +5126,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 ASKCOIN_RETURN;
             }
             
-            std::shared_ptr<tx::Tx_Reward> tx_reward(new tx::Tx_Reward);
+            std::shared_ptr<Tx_Reward> tx_reward(new Tx_Reward);
             tx_reward->m_id = tx_id;
             tx_reward->m_type = 5;
             tx_reward->m_utc = utc;

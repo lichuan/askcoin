@@ -3190,7 +3190,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                 }
 
                 std::shared_ptr<Account> referrer;
-                std::shared_ptr<tx::Tx_Reg> tx_reg(new tx::Tx_Reg);
+                std::shared_ptr<Tx_Reg> tx_reg(new Tx_Reg);
                 tx_reg->m_id = tx_id;
                 tx_reg->m_type = 1;
                 tx_reg->m_utc = utc;
@@ -3355,7 +3355,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
                     
-                    std::shared_ptr<tx::Tx_Send> tx_send(new tx::Tx_Send);
+                    std::shared_ptr<Tx_Send> tx_send(new Tx_Send);
                     tx_send->m_id = tx_id;
                     tx_send->m_type = 2;
                     tx_send->m_utc = utc;
@@ -3453,7 +3453,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
                     
-                    std::shared_ptr<tx::Tx_Topic> tx_topic(new tx::Tx_Topic);
+                    std::shared_ptr<Tx_Topic> tx_topic(new Tx_Topic);
                     tx_topic->m_id = tx_id;
                     tx_topic->m_type = 3;
                     tx_topic->m_utc = utc;
@@ -3541,7 +3541,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
                     
-                    std::shared_ptr<tx::Tx_Reply> tx_reply(new tx::Tx_Reply);
+                    std::shared_ptr<Tx_Reply> tx_reply(new Tx_Reply);
                     tx_reply->m_id = tx_id;
                     tx_reply->m_type = 4;
                     tx_reply->m_utc = utc;
@@ -3749,7 +3749,7 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
                         ASKCOIN_RETURN;
                     }
                     
-                    std::shared_ptr<tx::Tx_Reward> tx_reward(new tx::Tx_Reward);
+                    std::shared_ptr<Tx_Reward> tx_reward(new Tx_Reward);
                     tx_reward->m_id = tx_id;
                     tx_reward->m_type = 5;
                     tx_reward->m_utc = utc;
@@ -3955,7 +3955,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                     peer->m_connection->send(doc);
                     ++request->m_try_num;
                     LOG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
-                    request->m_timer_id = m_timer_ctl.add_timer([=]() {
+                    request->m_timer_id = m_timer_ctl.add_timer([=]() { // todo timer too big?
                             auto &doc = *doc_ptr;
                             
                             if(request->m_chains.empty())
@@ -4351,8 +4351,16 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                 punish_detail_req(request);
                 ASKCOIN_RETURN;
             }
+
+            uint64 left_diff = 10, right_diff = 30;
+    
+            if(block_id >= HF_1_BLOCK_ID)
+            {
+                left_diff = 5;
+                right_diff = 15;
+            }
             
-            if(utc_diff < 10)
+            if(utc_diff < left_diff)
             {
                 if(zero_bits != parent_zero_bits + 1)
                 {
@@ -4360,7 +4368,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                     ASKCOIN_RETURN;
                 }
             }
-            else if(utc_diff > 30)
+            else if(utc_diff > right_diff)
             {
                 if(parent_zero_bits > 1)
                 {

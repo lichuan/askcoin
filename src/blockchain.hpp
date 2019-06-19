@@ -17,7 +17,7 @@
 #include "pending_brief_request.hpp"
 #include "pending_detail_request.hpp"
 #include "timer.hpp"
-#include "tx/tx.hpp"
+#include "tx.hpp"
 #include "command.hpp"
 
 using fly::net::Json;
@@ -165,16 +165,15 @@ private:
     std::unordered_map<uint64, std::list<std::shared_ptr<Topic>>> m_rollback_topics;
     std::unordered_map<uint64, std::pair<std::shared_ptr<Block>, std::list<std::string>>> m_rollback_txs;
     std::list<std::shared_ptr<Topic>> m_topic_list;
-    std::list<std::shared_ptr<tx::Tx>> m_uv_1_txs;
-    std::list<std::shared_ptr<tx::Tx>> m_uv_2_txs;
-    std::list<std::shared_ptr<tx::Tx>> m_mined_txs;
+    std::list<std::shared_ptr<Tx>> m_uv_1_txs;
+    std::list<std::shared_ptr<Tx>> m_uv_2_txs;
+    std::list<std::shared_ptr<Tx>> m_mined_txs;
     std::mutex m_mine_mutex;
     std::atomic<bool> m_need_remine{false};
     std::atomic<bool> m_mine_success{false};
     std::atomic<bool> m_enable_mine{true};
     std::atomic<uint64> m_mine_id_1 {0};
     std::atomic<uint64> m_mine_id_2 {0};
-    uint64 m_last_mine_time;
     std::shared_ptr<rapidjson::Document> m_mine_doc;
     uint64 m_mine_cur_block_id;
     std::string m_mine_cur_block_hash;
@@ -186,13 +185,13 @@ private:
     
     struct Tx_Comp
     {
-        bool operator()(const std::shared_ptr<tx::Tx> &a, const std::shared_ptr<tx::Tx> &b)
+        bool operator()(const std::shared_ptr<Tx> &a, const std::shared_ptr<Tx> &b)
         {
             return a->m_id < b->m_id;
         }
     };
     
-    std::set<std::shared_ptr<tx::Tx>, Tx_Comp> m_uv_3_txs;
+    std::set<std::shared_ptr<Tx>, Tx_Comp> m_uv_3_txs;
     std::array<char, 255> m_b64_table;
     std::shared_ptr<Account> m_reserve_fund_account;
     fly::base::Lock_Queue<std::unique_ptr<fly::net::Message<Json>>> m_peer_messages;
