@@ -49,7 +49,7 @@ public:
     ~Blockchain();
     bool start(std::string db_path, bool repair_db);
     bool get_account(std::string pubkey, std::shared_ptr<Account> &account);
-    std::string sign(std::string privk_b64, std::string hash_b64);
+    // std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
     static bool verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits);
     static bool hash_pow(char hash_arr[32], uint32 zero_bits);

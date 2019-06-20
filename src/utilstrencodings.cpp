@@ -848,10 +848,10 @@ std::string coin_hash_b64(const char *data, uint32 size)
     return b64;
 }
 
-std::string coin_addr_b64(const char *pubkey, uint32 size)
-{
-    uint160 u160 = Hash160(pubkey, pubkey + size);
-    std::string b64 = fly::base::base64_encode(u160.begin(), u160.size());
+// std::string coin_addr_b64(const char *pubkey, uint32 size)
+// {
+//     uint160 u160 = Hash160(pubkey, pubkey + size);
+//     std::string b64 = fly::base::base64_encode(u160.begin(), u160.size());
     
-    return b64;
-}
+//     return b64;
+// }

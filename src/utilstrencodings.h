@@ -192,6 +192,6 @@ bool ParseFixedPoint(const std::string &val, int decimals, int64_t *amount_out);
 
 void coin_hash(const char *data, uint32 size, char h_256[CSHA256::OUTPUT_SIZE]);
 std::string coin_hash_b64(const char *data, uint32 size);
-std::string coin_addr_b64(const char *pubkey, uint32 size);
+//std::string coin_addr_b64(const char *pubkey, uint32 size);
 
 #endif // BITCOIN_UTILSTRENCODINGS_H

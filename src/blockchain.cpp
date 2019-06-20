@@ -124,25 +124,25 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     return hash_pow(hash_raw, zero_bits);
 }
 
-std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
-{
-    char privk[32];
-    fly::base::base64_decode(privk_b64.c_str(), privk_b64.length(), privk, 32);
-    char hash[32];
-    fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
-    CKey ck;
-    ck.Set(privk, privk + 32, false);
-    std::vector<unsigned char> sign_vec;
+// std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
+// {
+//     char privk[32];
+//     fly::base::base64_decode(privk_b64.c_str(), privk_b64.length(), privk, 32);
+//     char hash[32];
+//     fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
+//     CKey ck;
+//     ck.Set(privk, privk + 32, false);
+//     std::vector<unsigned char> sign_vec;
 
-    if(!ck.Sign(uint256(std::vector<unsigned char>(hash, hash + 32)), sign_vec))
-    {
-        CONSOLE_LOG_FATAL("sign hash: %s failed", hash_b64.c_str());
+//     if(!ck.Sign(uint256(std::vector<unsigned char>(hash, hash + 32)), sign_vec))
+//     {
+//         CONSOLE_LOG_FATAL("sign hash: %s failed", hash_b64.c_str());
 
-        return std::string();
-    }
+//         return std::string();
+//     }
 
-    return fly::base::base64_encode(&sign_vec[0], sign_vec.size());
-}
+//     return fly::base::base64_encode(&sign_vec[0], sign_vec.size());
+// }
 
 bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64)
 {
