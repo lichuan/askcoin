@@ -4,6 +4,17 @@
 #include "fly/base/common.hpp"
 #include "net/p2p/peer.hpp"
 
+enum TX_TYPE
+{
+    TX_TYPE_MIN = 1,
+    TX_TYPE_REG = 1,
+    TX_TYPE_SEND,
+    TX_TYPE_TOPIC,
+    TX_TYPE_REPLY,
+    TX_TYPE_REWARD,
+    TX_TYPE_MAX = TX_TYPE_REWARD
+};
+
 class Tx
 {
 public:

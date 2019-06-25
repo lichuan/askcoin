@@ -528,7 +528,9 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
                 data.Accept(writer);
                 std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
+                
+                // because this tx doesn't save to leveldb,
+                // so don't use verify_tx_sign here
                 if(!verify_sign(pubkey, tx_id, tx_sign))
                 {
                     connection->close();
@@ -773,6 +775,8 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             data.Accept(writer);
             std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
             
+            // because this tx doesn't save to leveldb,
+            // so don't use verify_tx_sign here
             if(!verify_sign(pubkey, tx_id, tx_sign))
             {
                 connection->close();
@@ -1954,12 +1958,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     tx_node.Accept(writer);
                     std::string raw_data(buffer.GetString(), buffer.GetSize());
                     std::string pubkey = data["pubkey"].GetString();
-                    
-                    if(!verify_sign(pubkey, tx_id, tx_sign))
-                    {
-                        ASKCOIN_EXIT(EXIT_FAILURE);
-                    }
-                    
                     uint32 tx_type = data["type"].GetUint();
                     doc.AddMember("type", tx_type, allocator);
                     doc.AddMember("utc", tx_utc, allocator);
@@ -1974,6 +1972,11 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     }
 
                     doc.AddMember("owner", rapidjson::StringRef(account->name().c_str()), allocator);
+
+                    if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
                     
                     if(tx_type == 1) // register account
                     {
@@ -1981,6 +1984,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         const rapidjson::Value &sign_data = data["sign_data"];
                         std::string register_name = sign_data["name"].GetString();
                         std::string referrer_pubkey = sign_data["referrer"].GetString();
+                        uint64 block_id = sign_data["block_id"].GetUint64();
+
+                        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
                         std::shared_ptr<Account> referrer;
                         get_account(referrer_pubkey, referrer);
                         uint32 avatar = data["avatar"].GetUint();
@@ -1991,6 +2001,13 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     }
                     else
                     {
+                        uint64 block_id = data["block_id"].GetUint64();
+
+                        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
                         if(tx_type == 2) // send coin
                         {
                             if(data.HasMember("memo"))
@@ -2002,7 +2019,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             uint64 amount = data["amount"].GetUint64();
                             std::string receiver_pubkey = data["receiver"].GetString();
                             std::shared_ptr<Account> receiver;
-                    
+                            
                             if(!get_account(receiver_pubkey, receiver))
                             {
                                 ASKCOIN_EXIT(EXIT_FAILURE);
@@ -2667,13 +2684,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-
-                        std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-                        if(tx_id != tx_id_verify)
-                        {
-                            ASKCOIN_EXIT(EXIT_FAILURE);
-                        }
                         
                         std::string pubkey = data["pubkey"].GetString();
                         
@@ -2685,13 +2695,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         if(pubkey.length() != 88)
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
-                        }
-
-                        if(!verify_sign(pubkey, tx_id, tx_sign))
-                        {
-                            CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
-                
-                            return false;
                         }
             
                         uint32 tx_type = data["type"].GetUint();
@@ -2724,6 +2727,19 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
 
+                        std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+                        
+                        if(tx_id != tx_id_verify)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                        {
+                            CONSOLE_LOG_FATAL("EXCHANGE_LOGIN verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
                         std::shared_ptr<Account> sender;
                 
                         if(!get_account(pubkey, sender))
@@ -3159,22 +3175,23 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         }
 
                         std::string pubkey = data["pubkey"].GetString();
-                        uint64 tx_utc = data["utc"].GetUint64();
-                        rapidjson::StringBuffer buffer;
-                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                        tx_node.Accept(writer);
-                        std::string raw_data(buffer.GetString(), buffer.GetSize());
-
-                        if(!verify_sign(pubkey, tx_id, tx_sign))
-                        {
-                            ASKCOIN_EXIT(EXIT_FAILURE);
-                        }
-                    
                         uint32 tx_type = data["type"].GetUint();
-
+                        
                         if(tx_type != 2)
                         {
                             continue;
+                        }
+
+                        uint64 block_id = data["block_id"].GetUint64();
+                        
+                        if(block_id == 0)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
                         
                         std::shared_ptr<Account> account;
@@ -3406,20 +3423,20 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-                    
+                        
                         std::string tx_sign = tx_node["sign"].GetString();
                         const rapidjson::Value &data = tx_node["data"];
-
+                        
                         if(!is_base64_char(tx_sign))
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-            
+                        
                         if(!data.HasMember("pubkey"))
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
                         }
-
+                        
                         if(!data.HasMember("type"))
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
@@ -3431,22 +3448,23 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         }
 
                         std::string pubkey = data["pubkey"].GetString();
-                        uint64 tx_utc = data["utc"].GetUint64();
-                        rapidjson::StringBuffer buffer;
-                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-                        tx_node.Accept(writer);
-                        std::string raw_data(buffer.GetString(), buffer.GetSize());
-
-                        if(!verify_sign(pubkey, tx_id, tx_sign))
-                        {
-                            ASKCOIN_EXIT(EXIT_FAILURE);
-                        }
-                    
                         uint32 tx_type = data["type"].GetUint();
-
+                        
                         if(tx_type != 2)
                         {
                             continue;
+                        }
+
+                        uint64 block_id = data["block_id"].GetUint64();
+
+                        if(block_id == 0)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                        
+                        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
                         }
 
                         std::shared_ptr<Account> account;
@@ -4236,30 +4254,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     rsp_doc.AddMember("type", tx_type, allocator);
     rapidjson::StringBuffer buffer;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-    doc_data.Accept(writer);
-    std::string tx_id = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-    
-    if(!verify_sign(pubkey, tx_id, tx_sign))
-    {
-        connection->close();
-        ASKCOIN_RETURN;
-    }
-    
-    if(m_tx_map.find(tx_id) != m_tx_map.end())
-    {
-        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
-        connection->send(rsp_doc);
-        ASKCOIN_RETURN;
-    }
-    
-    if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
-    {
-        rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
-        connection->send(rsp_doc);
-        ASKCOIN_RETURN;
-    }
-    
-    rsp_doc.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
+    doc_data.Accept(writer);    
     uint64 cur_block_id  = m_cur_block->id();
     auto doc_ptr = std::make_shared<rapidjson::Document>();
     auto &p2p_doc = *doc_ptr;
@@ -4270,6 +4265,12 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
     p2p_doc.AddMember("sign", rapidjson::Value().CopyFrom(doc["sign"], p2p_allocator), p2p_allocator);
     p2p_doc.AddMember("data", rapidjson::Value().CopyFrom(doc_data, p2p_allocator), p2p_allocator);
     auto &data = p2p_doc["data"];
+    
+    if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+    {
+        connection->close();
+        ASKCOIN_RETURN;
+    }
     
     if(tx_type == 1)
     {
@@ -4353,10 +4354,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             ASKCOIN_RETURN;
         }
         
-        rapidjson::StringBuffer buffer;
-        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        rapidjson::StringBuffer buffer_inner;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer_inner);
         sign_data.Accept(writer);
-        std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+        std::string sign_hash = coin_hash_b64(buffer_inner.GetString(), buffer_inner.GetSize());
                 
         if(!sign_data.HasMember("block_id"))
         {
@@ -4429,7 +4430,31 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
-                
+
+        std::string tx_id = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+        
+        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+    
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+            connection->send(rsp_doc);
+            ASKCOIN_RETURN;
+        }
+    
+        if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+        {
+            rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+            connection->send(rsp_doc);
+            ASKCOIN_RETURN;
+        }
+        
+        rsp_doc.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
+
         if(!is_base64_char(referrer_pubkey))
         {
             connection->close();
@@ -4591,7 +4616,30 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             connection->close();
             ASKCOIN_RETURN;
         }
+
+        std::string tx_id = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
         
+        if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+        {
+            connection->close();
+            ASKCOIN_RETURN;
+        }
+    
+        if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+            connection->send(rsp_doc);
+            ASKCOIN_RETURN;
+        }
+    
+        if(m_uv_tx_ids.find(tx_id) != m_uv_tx_ids.end())
+        {
+            rsp_doc.AddMember("err_code", net::api::ERR_TX_EXIST, allocator);
+            connection->send(rsp_doc);
+            ASKCOIN_RETURN;
+        }
+        
+        rsp_doc.AddMember("tx_id", rapidjson::StringRef(tx_id.c_str()), allocator);
         std::shared_ptr<Account> account;
         
         if(!get_account(pubkey, account))
@@ -5143,11 +5191,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             m_uv_2_txs.push_back(tx_reward);
             net::p2p::Node::instance()->broadcast(p2p_doc);
             connection->send(rsp_doc);
-        }
-        else
-        {
-            connection->close();
-            ASKCOIN_RETURN;
         }
     }
 }

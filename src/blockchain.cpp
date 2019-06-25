@@ -124,26 +124,6 @@ bool Blockchain::verify_hash(std::string block_hash, std::string block_data, uin
     return hash_pow(hash_raw, zero_bits);
 }
 
-// std::string Blockchain::sign(std::string privk_b64, std::string hash_b64)
-// {
-//     char privk[32];
-//     fly::base::base64_decode(privk_b64.c_str(), privk_b64.length(), privk, 32);
-//     char hash[32];
-//     fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
-//     CKey ck;
-//     ck.Set(privk, privk + 32, false);
-//     std::vector<unsigned char> sign_vec;
-
-//     if(!ck.Sign(uint256(std::vector<unsigned char>(hash, hash + 32)), sign_vec))
-//     {
-//         CONSOLE_LOG_FATAL("sign hash: %s failed", hash_b64.c_str());
-
-//         return std::string();
-//     }
-
-//     return fly::base::base64_encode(&sign_vec[0], sign_vec.size());
-// }
-
 bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64)
 {
     if(sign_b64.length() < 80 || sign_b64.length() > 108)
@@ -153,14 +133,90 @@ bool Blockchain::verify_sign(std::string pubk_b64, std::string hash_b64, std::st
     
     char sign[80];
     uint32 len_sign = fly::base::base64_decode(sign_b64.c_str(), sign_b64.length(), sign, 80);
-    char hash[32];
-    fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), hash, 32);
+    char raw_hash[32];
+    uint32 len_hash = fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), raw_hash, 32);
+
+    if(len_hash != 32)
+    {
+        return false;
+    }
+    
+    CPubKey cpk;
+    char pubk[65];
+    fly::base::base64_decode(pubk_b64.c_str(), pubk_b64.length(), pubk, 65);
+    cpk.Set(pubk, pubk + 65);
+    
+    return cpk.Verify(uint256(std::vector<unsigned char>(raw_hash, raw_hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
+}
+
+std::string Blockchain::tx_hash_b64(const char *data, uint32 size, uint64 block_id)
+{
+    if(block_id >= HF_1_BLOCK_ID)
+    {
+        uint32 tx_block_id = block_id;
+        tx_block_id = htonl(tx_block_id);
+        char h_256[CSHA256::OUTPUT_SIZE + 1];
+        CHash256().Write(data, size).Finalize(h_256);
+        memcpy(h_256 + 28, &tx_block_id, 4);
+        h_256[32] = 19; // 'T' on the tail
+        std::string b64 = fly::base::base64_encode(h_256, 33);
+
+        return b64;
+    }
+    
+    return coin_hash_b64(data, size);
+}
+
+bool Blockchain::verify_tx_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64, uint64 block_id)
+{
+    if(sign_b64.length() < 80 || sign_b64.length() > 108)
+    {
+        return false;
+    }
+    
+    char sign[80];
+    uint32 len_sign = fly::base::base64_decode(sign_b64.c_str(), sign_b64.length(), sign, 80);
+    char raw_hash[33];
+    
+    if(block_id >= HF_1_BLOCK_ID)
+    {
+        uint32 len = fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), raw_hash, 33);
+
+        if(len != 33)
+        {
+            return false;
+        }
+
+        if(raw_hash[32] != 19) // 'T' on the tail
+        {
+            return false;
+        }
+
+        uint32 tx_block_id = 0;
+        memcpy(&tx_block_id, raw_hash + 28, 4);
+        tx_block_id = ntohl(tx_block_id);
+        
+        if(tx_block_id != block_id)
+        {
+            return false;
+        }
+    }
+    else
+    {
+        uint32 len = fly::base::base64_decode(hash_b64.c_str(), hash_b64.length(), raw_hash, 32);
+        
+        if(len != 32)
+        {
+            return false;
+        }
+    }
+    
     CPubKey cpk;
     char pubk[65];
     fly::base::base64_decode(pubk_b64.c_str(), pubk_b64.length(), pubk, 65);
     cpk.Set(pubk, pubk + 65);
 
-    return cpk.Verify(uint256(std::vector<unsigned char>(hash, hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
+    return cpk.Verify(uint256(std::vector<unsigned char>(raw_hash, raw_hash + 32)), std::vector<unsigned char>(sign, sign + len_sign));
 }
 
 void Blockchain::del_account_rich(std::shared_ptr<Account> account)
@@ -1034,10 +1090,23 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
         data.Accept(writer);
-        char raw_hash[32] = {0};
+        char raw_hash[33] = {0};
         coin_hash(buffer.GetString(), buffer.GetSize(), raw_hash);
-        std::string tx_id = fly::base::base64_encode(raw_hash, 32);
+        std::string tx_id;
 
+        if(cur_block_id + 1 >= HF_1_BLOCK_ID)
+        {
+            uint32 tx_block_id = cur_block_id + 1;
+            tx_block_id = htonl(tx_block_id);
+            memcpy(raw_hash + 28, &tx_block_id, 4);
+            raw_hash[32] = 19; // 'T' on the tail
+            tx_id = fly::base::base64_encode(raw_hash, 33);
+        }
+        else
+        {
+            tx_id = fly::base::base64_encode(raw_hash, 32);
+        }
+        
         if(m_tx_map.find(tx_id) != m_tx_map.end())
         {
             printf("this tx already exist\n>");
@@ -1443,10 +1512,23 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
         rapidjson::StringBuffer buffer;
         rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
         data.Accept(writer);
-        char raw_hash[32] = {0};
+        char raw_hash[33] = {0};
         coin_hash(buffer.GetString(), buffer.GetSize(), raw_hash);
-        std::string tx_id = fly::base::base64_encode(raw_hash, 32);
-
+        std::string tx_id;
+        
+        if(block_id >= HF_1_BLOCK_ID)
+        {
+            uint32 tx_block_id = block_id;
+            tx_block_id = htonl(tx_block_id);
+            memcpy(raw_hash + 28, &tx_block_id, 4);
+            raw_hash[32] = 19; // 'T' on the tail
+            tx_id = fly::base::base64_encode(raw_hash, 33);
+        }
+        else
+        {
+            tx_id = fly::base::base64_encode(raw_hash, 32);
+        }
+        
         if(m_tx_map.find(tx_id) != m_tx_map.end())
         {
             printf("this tx already exist\n>");
@@ -3673,15 +3755,6 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             {
                 ASKCOIN_RETURN false;
             }
-
-            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(tx_id != tx_id_verify)
-            {
-                CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
-                
-                ASKCOIN_RETURN false;
-            }
             
             std::string pubkey = data["pubkey"].GetString();
 
@@ -3694,15 +3767,13 @@ bool Blockchain::start(std::string db_path, bool repair_db)
             {
                 ASKCOIN_RETURN false;
             }
-
-            if(!verify_sign(pubkey, tx_id, tx_sign))
-            {
-                CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
-                
-                return false;
-            }
             
             uint32 tx_type = data["type"].GetUint();
+
+            if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+            {
+                ASKCOIN_RETURN false;
+            }
 
             if(tx_type == 1) // register account
             {
@@ -3742,10 +3813,10 @@ bool Blockchain::start(std::string db_path, bool repair_db)
                     ASKCOIN_RETURN false;
                 }
 
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                rapidjson::StringBuffer buffer_inner;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer_inner);
                 sign_data.Accept(writer);
-                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                std::string sign_hash = coin_hash_b64(buffer_inner.GetString(), buffer_inner.GetSize());
                 
                 if(!sign_data.HasMember("block_id"))
                 {
@@ -3780,6 +3851,22 @@ bool Blockchain::start(std::string db_path, bool repair_db)
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN false;
+                }
+                
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+            
+                if(tx_id != tx_id_verify)
+                {
+                    CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
+
+                    ASKCOIN_RETURN false;
+                }
+            
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                {
+                    CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
+
+                    return false;
                 }
                 
                 if(fee != 2)
@@ -3920,6 +4007,22 @@ bool Blockchain::start(std::string db_path, bool repair_db)
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
                 {
                     ASKCOIN_RETURN false;
+                }
+
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+                
+                if(tx_id != tx_id_verify)
+                {
+                    CONSOLE_LOG_FATAL("verify tx data from leveldb failed, tx_id: %s, hash doesn't match", tx_id.c_str());
+                    
+                    ASKCOIN_RETURN false;
+                }
+                
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                {
+                    CONSOLE_LOG_FATAL("verify tx sign from leveldb failed, tx_id: %s", tx_id.c_str());
+
+                    return false;
                 }
                 
                 if(fee != 2)
@@ -4298,10 +4401,6 @@ bool Blockchain::start(std::string db_path, bool repair_db)
                     history->m_target_name = account->name();
                     history->m_tx_id = tx_id;
                     reply_to->get_owner()->add_history(history);
-                }
-                else
-                {
-                    ASKCOIN_RETURN false;
                 }
             }
             
@@ -4902,6 +5001,11 @@ void Blockchain::mine_tx()
             continue;
         }
         
+        if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
         if(tx_type == 1)
         {
             std::shared_ptr<Tx_Reg> tx_reg = std::static_pointer_cast<Tx_Reg>(tx);
@@ -5214,10 +5318,6 @@ void Blockchain::mine_tx()
                 reply_to->get_owner()->add_balance(amount);
                 reply->add_balance(amount);
                 topic->m_reply_list.push_back(reply);
-            }
-            else
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
             }
         }
         
@@ -5769,6 +5869,11 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
         uint32 tx_type = data["type"].GetUint();
         
         if(m_tx_map.find(tx_id) != m_tx_map.end())
+        {
+            ASKCOIN_EXIT(EXIT_FAILURE);
+        }
+        
+        if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
         {
             ASKCOIN_EXIT(EXIT_FAILURE);
         }
@@ -6502,10 +6607,6 @@ void Blockchain::mined_new_block(std::shared_ptr<rapidjson::Document> doc_ptr)
                 history->m_target_name = account->name();
                 history->m_tx_id = tx_id;
                 reply_to->get_owner()->add_history(history);
-            }
-            else
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
             }
         }
         
@@ -7698,13 +7799,6 @@ void Blockchain::switch_to_most_difficult()
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
-            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(tx_id != tx_id_verify)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
             
             std::string pubkey = data["pubkey"].GetString();
             
@@ -7718,12 +7812,12 @@ void Blockchain::switch_to_most_difficult()
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
-            if(!verify_sign(pubkey, tx_id, tx_sign))
+            uint32 tx_type = data["type"].GetUint();
+            
+            if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-            
-            uint32 tx_type = data["type"].GetUint();
 
             if(tx_type == 1) // register account
             {
@@ -7757,10 +7851,10 @@ void Blockchain::switch_to_most_difficult()
                 }
                 
                 const rapidjson::Value &sign_data = data["sign_data"];
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                rapidjson::StringBuffer buffer_inner;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer_inner);
                 sign_data.Accept(writer);
-                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                std::string sign_hash = coin_hash_b64(buffer_inner.GetString(), buffer_inner.GetSize());
                 
                 if(!sign_data.HasMember("block_id"))
                 {
@@ -7793,6 +7887,18 @@ void Blockchain::switch_to_most_difficult()
                 }
 
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+            
+                if(tx_id != tx_id_verify)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+            
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -7934,6 +8040,18 @@ void Blockchain::switch_to_most_difficult()
                 }
 
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+            
+                if(tx_id != tx_id_verify)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+            
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -8316,10 +8434,6 @@ void Blockchain::switch_to_most_difficult()
                     history->m_target_name = account->name();
                     history->m_tx_id = tx_id;
                     reply_to->get_owner()->add_history(history);
-                }
-                else
-                {
-                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             }
             
@@ -8695,13 +8809,6 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
-            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(tx_id != tx_id_verify)
-            {
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
             
             std::string pubkey = data["pubkey"].GetString();
             
@@ -8714,14 +8821,14 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
+                        
+            uint32 tx_type = data["type"].GetUint();
             
-            if(!verify_sign(pubkey, tx_id, tx_sign))
+            if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
             
-            uint32 tx_type = data["type"].GetUint();
-
             if(tx_type == 1) // register account
             {
                 if(!data.HasMember("avatar"))
@@ -8754,10 +8861,10 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 }
                 
                 const rapidjson::Value &sign_data = data["sign_data"];
-                rapidjson::StringBuffer buffer;
-                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                rapidjson::StringBuffer buffer_inner;
+                rapidjson::Writer<rapidjson::StringBuffer> writer(buffer_inner);
                 sign_data.Accept(writer);
-                std::string sign_hash = coin_hash_b64(buffer.GetString(), buffer.GetSize());
+                std::string sign_hash = coin_hash_b64(buffer_inner.GetString(), buffer_inner.GetSize());
                 
                 if(!sign_data.HasMember("block_id"))
                 {
@@ -8790,6 +8897,18 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 }
 
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+                
+                if(tx_id != tx_id_verify)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -8931,6 +9050,18 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                 }
 
                 if(block_id + 100 < cur_block_id || block_id > cur_block_id + 100)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+
+                if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), block_id);
+                
+                if(tx_id != tx_id_verify)
                 {
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
@@ -9314,10 +9445,6 @@ uint64 Blockchain::switch_chain(std::shared_ptr<Pending_Detail_Request> request)
                     history->m_tx_id = tx_id;
                     reply_to->get_owner()->add_history(history);
                 }
-                else
-                {
-                    ASKCOIN_EXIT(EXIT_FAILURE);
-                }
             }
             
             m_tx_map.insert(std::make_pair(tx_id, iter_block));
@@ -9476,6 +9603,11 @@ void Blockchain::rollback(uint64 block_id)
             m_tx_map.erase(tx_id);
             uint32 tx_type = data["type"].GetUint();
             
+            if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+            {
+                ASKCOIN_EXIT(EXIT_FAILURE);
+            }
+            
             if(tx_type == 1) // register account
             {
                 const rapidjson::Value &sign_data = data["sign_data"];
@@ -9588,10 +9720,6 @@ void Blockchain::rollback(uint64 block_id)
                     topic->m_reply_list.pop_back();
                     reply_to->get_owner()->pop_history();
                     reply_to->get_owner()->pop_history_for_explorer();
-                }
-                else
-                {
-                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
             }
         }
@@ -9767,7 +9895,12 @@ void Blockchain::rollback(uint64 block_id)
                     tx_pair.second.push_front(tx_id);
                     std::string pubkey = data["pubkey"].GetString();
                     uint32 tx_type = data["type"].GetUint();
-                
+                    
+                    if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
                     if(tx_type == 1 || tx_type == 2)
                     {
                         continue;
@@ -9836,10 +9969,6 @@ void Blockchain::rollback(uint64 block_id)
                         reply_to->add_balance(amount);
                         reply->add_balance(amount);
                         topic->m_reply_list.push_back(reply);
-                    }
-                    else
-                    {
-                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
             
@@ -9915,7 +10044,12 @@ void Blockchain::rollback(uint64 block_id)
                 
                     std::string pubkey = data["pubkey"].GetString();
                     uint32 tx_type = data["type"].GetUint();
-                
+
+                    if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
                     if(tx_type == 1 || tx_type == 2 || tx_type == 3)
                     {
                         continue;
@@ -9975,10 +10109,6 @@ void Blockchain::rollback(uint64 block_id)
                         reply_to->add_balance(amount);
                         reply->add_balance(amount);
                         topic->m_reply_list.push_back(reply);
-                    }
-                    else
-                    {
-                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
             
@@ -10086,7 +10216,12 @@ void Blockchain::rollback(uint64 block_id)
 
                 m_tx_map.erase(tx_id);
                 uint32 tx_type = data["type"].GetUint();
-            
+
+                if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+                {
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
                 if(tx_type == 1) // register account
                 {
                     const rapidjson::Value &sign_data = data["sign_data"];
@@ -10199,10 +10334,6 @@ void Blockchain::rollback(uint64 block_id)
                         topic->m_reply_list.pop_back();
                         reply_to->get_owner()->pop_history();
                         reply_to->get_owner()->pop_history_for_explorer();
-                    }
-                    else
-                    {
-                        ASKCOIN_EXIT(EXIT_FAILURE);
                     }
                 }
             }

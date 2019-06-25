@@ -49,8 +49,8 @@ public:
     ~Blockchain();
     bool start(std::string db_path, bool repair_db);
     bool get_account(std::string pubkey, std::shared_ptr<Account> &account);
-    // std::string sign(std::string privk_b64, std::string hash_b64);
     bool verify_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64);
+    bool verify_tx_sign(std::string pubk_b64, std::string hash_b64, std::string sign_b64, uint64 block_id);
     static bool verify_hash(std::string block_hash, std::string block_data, uint32 zero_bits);
     static bool hash_pow(char hash_arr[32], uint32 zero_bits);
     bool is_base64_char(std::string b64);
@@ -121,6 +121,7 @@ private:
     void notify_register_account(std::shared_ptr<Account> account);
     void notify_register_failed(std::string pubkey, uint32 reason);
     void notify_exchange_account_deposit(std::shared_ptr<Account> receiver, std::shared_ptr<History> history);
+    std::string tx_hash_b64(const char *data, uint32 size, uint64 block_id);
     
 private:
     uint64 switch_chain(std::shared_ptr<Pending_Detail_Request> request);
