@@ -3994,10 +3994,22 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                 do_detail_chain(pending_chain);
                 break;
             }
-            else if(pending_block->m_id <= 1)
+            else
             {
-                punish_brief_req(req);
-                ASKCOIN_RETURN;
+                if(pending_block->m_id <= 1)
+                {
+                    punish_brief_req(req);
+                    ASKCOIN_RETURN;
+                }
+
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(pending_block->m_id <= m_merge_point->m_import_block_id)
+                    {
+                        punish_brief_req(req);
+                        ASKCOIN_RETURN;
+                    }
+                }
             }
             
             auto iter_2 = m_pending_blocks.find(pre_hash);
@@ -4249,12 +4261,24 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
             do_detail_chain(pending_chain);
             break;
         }
-        else if(pending_block->m_id <= 1)
+        else
         {
-            punish_peer(peer);
-            ASKCOIN_RETURN;
+            if(pending_block->m_id <= 1)
+            {
+                punish_peer(peer);
+                ASKCOIN_RETURN;
+            }
+
+            if(m_merge_point->m_import_block_id > 0)
+            {
+                if(pending_block->m_id <= m_merge_point->m_import_block_id)
+                {
+                    punish_peer(peer);
+                    ASKCOIN_RETURN;
+                }
+            }
         }
-    
+        
         auto iter_2 = m_pending_blocks.find(pre_hash);
     
         if(iter_2 != m_pending_blocks.end())
