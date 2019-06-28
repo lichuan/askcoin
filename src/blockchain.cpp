@@ -2155,6 +2155,7 @@ bool Blockchain::start(std::string db_path, bool repair_db)
     }
     else
     {
+        // todo topic expired 30 days
         std::ifstream ifs(m_merge_point->m_import_path);
         rapidjson::IStreamWrapper isw(ifs);
         rapidjson::Document doc;
@@ -9582,16 +9583,6 @@ void Blockchain::rollback(uint64 block_id)
             {
                 ASKCOIN_EXIT(EXIT_FAILURE);
             }
-
-            std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-            if(tx_id != tx_id_verify)
-            {
-                LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
-                          cur_block_id, block_hash.c_str(), tx_id.c_str());
-
-                ASKCOIN_EXIT(EXIT_FAILURE);
-            }
             
             std::string pubkey = data["pubkey"].GetString();
             
@@ -9613,6 +9604,16 @@ void Blockchain::rollback(uint64 block_id)
                 const rapidjson::Value &sign_data = data["sign_data"];
                 std::string register_name = sign_data["name"].GetString();
                 std::string referrer_pubkey = sign_data["referrer"].GetString();
+                uint64 tx_block_id = sign_data["block_id"].GetUint64();
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+                
+                if(tx_id != tx_id_verify)
+                {
+                    LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                              cur_block_id, block_hash.c_str(), tx_id.c_str());
+                    ASKCOIN_EXIT(EXIT_FAILURE);
+                }
+                
                 std::shared_ptr<Account> referrer;
                 get_account(referrer_pubkey, referrer);
                 std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
@@ -9662,6 +9663,16 @@ void Blockchain::rollback(uint64 block_id)
                 {
                     referrer->sub_balance(1);
                     referrer->pop_history();
+                }
+
+                uint64 tx_block_id = data["block_id"].GetUint64();
+                std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+                
+                if(tx_id != tx_id_verify)
+                {
+                    LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                              cur_block_id, block_hash.c_str(), tx_id.c_str());
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
                 
                 if(tx_type == 2) // send coin
@@ -9881,16 +9892,6 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
-                
-                    std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-                    if(tx_id != tx_id_verify)
-                    {
-                        LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
-                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
-                    
-                        ASKCOIN_EXIT(EXIT_FAILURE);
-                    }
 
                     tx_pair.second.push_front(tx_id);
                     std::string pubkey = data["pubkey"].GetString();
@@ -9905,7 +9906,17 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         continue;
                     }
-                
+
+                    uint64 tx_block_id = data["block_id"].GetUint64();
+                    std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+
+                    if(tx_id != tx_id_verify)
+                    {
+                        LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
+                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
                     std::shared_ptr<Account> account;
                     get_account(pubkey, account);
                 
@@ -10031,20 +10042,10 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
                     }
-                
-                    std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-                    if(tx_id != tx_id_verify)
-                    {
-                        LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
-                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
-                    
-                        ASKCOIN_EXIT(EXIT_FAILURE);
-                    }
-                
+
                     std::string pubkey = data["pubkey"].GetString();
                     uint32 tx_type = data["type"].GetUint();
-
+                    
                     if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
                     {
                         ASKCOIN_EXIT(EXIT_FAILURE);
@@ -10054,7 +10055,17 @@ void Blockchain::rollback(uint64 block_id)
                     {
                         continue;
                     }
-                
+
+                    uint64 tx_block_id = data["block_id"].GetUint64();
+                    std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+
+                    if(tx_id != tx_id_verify)
+                    {
+                        LOG_FATAL("rollback, tx_id != tx_id_verify, block_id: %lu, block_hash: %s, tx_id: %s", \
+                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
                     std::shared_ptr<Account> account;
                     get_account(pubkey, account);
                 
@@ -10197,16 +10208,6 @@ void Blockchain::rollback(uint64 block_id)
                     ASKCOIN_EXIT(EXIT_FAILURE);
                 }
 
-                std::string tx_id_verify = coin_hash_b64(buffer.GetString(), buffer.GetSize());
-            
-                if(tx_id != tx_id_verify)
-                {
-                    LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
-                              cur_block_id, block_hash.c_str(), tx_id.c_str());
-
-                    ASKCOIN_EXIT(EXIT_FAILURE);
-                }
-            
                 std::string pubkey = data["pubkey"].GetString();
             
                 if(pubkey.length() != 88)
@@ -10227,6 +10228,16 @@ void Blockchain::rollback(uint64 block_id)
                     const rapidjson::Value &sign_data = data["sign_data"];
                     std::string register_name = sign_data["name"].GetString();
                     std::string referrer_pubkey = sign_data["referrer"].GetString();
+                    uint64 tx_block_id = sign_data["block_id"].GetUint64();
+                    std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+
+                    if(tx_id != tx_id_verify)
+                    {
+                        LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                    
                     std::shared_ptr<Account> referrer;
                     get_account(referrer_pubkey, referrer);
                     std::shared_ptr<Account> referrer_referrer = referrer->get_referrer();
@@ -10277,7 +10288,17 @@ void Blockchain::rollback(uint64 block_id)
                         referrer->sub_balance(1);
                         referrer->pop_history();
                     }
-                
+
+                    uint64 tx_block_id = data["block_id"].GetUint64();
+                    std::string tx_id_verify = tx_hash_b64(buffer.GetString(), buffer.GetSize(), tx_block_id);
+                    
+                    if(tx_id != tx_id_verify)
+                    {
+                        LOG_FATAL("rollback, verify tx data from leveldb failed, block_id: %lu, block_hash: %s, tx_id: %s", \
+                                  cur_block_id, block_hash.c_str(), tx_id.c_str());
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
                     if(tx_type == 2) // send coin
                     {
                         uint64 amount = data["amount"].GetUint64();

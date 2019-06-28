@@ -32,7 +32,7 @@ bool Wsock_Node::start(std::string host, uint16 port)
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
                                                                                 std::bind(&Wsock_Node::be_closed, this, _1),
-                                                                                cpu_num, 1840));
+                                                                                cpu_num, 1840)); // todo size ?
     if(server->start())
     {
         CONSOLE_LOG_INFO("start websocket node success");
