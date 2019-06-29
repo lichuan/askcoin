@@ -4057,7 +4057,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                     peer->m_connection->send(doc);
                     ++request->m_try_num;
                     LOG_INFO("pending_brief_request, id: %lu, hash: %s", pending_block->m_id - 1, pre_hash.c_str());
-                    request->m_timer_id = m_timer_ctl.add_timer([=]() { // todo timer too big?
+                    request->m_timer_id = m_timer_ctl.add_timer([=]() {
                             auto &doc = *doc_ptr;
                             
                             if(request->m_chains.empty())
@@ -4116,7 +4116,7 @@ void Blockchain::finish_brief(std::shared_ptr<Pending_Brief_Request> req)
                                     request->m_attached_chains.pop_front();
                                 }
                             }
-                        }, 1500);
+                        }, 1000);
                 }
                 else
                 {
@@ -4382,7 +4382,7 @@ void Blockchain::do_brief_chain(std::shared_ptr<Pending_Chain> pending_chain)
                                 request->m_attached_chains.pop_front();
                             }
                         }
-                    }, 1500); // todo, 1500?
+                    }, 1000);
             }
             else
             {
@@ -6108,7 +6108,7 @@ void Blockchain::finish_detail(std::shared_ptr<Pending_Detail_Request> request)
                             request->m_attached_chains.pop_front();
                         }
                     }
-                }, 1500);
+                }, 1000);
         }
         else
         {
@@ -6270,7 +6270,7 @@ void Blockchain::do_detail_chain(std::shared_ptr<Pending_Chain> pending_chain)
                         request->m_attached_chains.pop_front();
                     }
                 }
-            }, 1500);
+            }, 1000);
     }
     else
     {
