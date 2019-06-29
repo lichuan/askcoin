@@ -158,7 +158,7 @@ std::string Blockchain::tx_hash_b64(const char *data, uint32 size, uint64 block_
         char h_256[CSHA256::OUTPUT_SIZE + 1];
         CHash256().Write(data, size).Finalize(h_256);
         memcpy(h_256 + 28, &tx_block_id, 4);
-        h_256[32] = 19; // 'T' on the tail
+        h_256[32] = 19; // 'T' at the end
         std::string b64 = fly::base::base64_encode(h_256, 33);
 
         return b64;
@@ -187,7 +187,7 @@ bool Blockchain::verify_tx_sign(std::string pubk_b64, std::string hash_b64, std:
             return false;
         }
 
-        if(raw_hash[32] != 19) // 'T' on the tail
+        if(raw_hash[32] != 19) // 'T' at the end
         {
             return false;
         }
@@ -700,8 +700,9 @@ void Blockchain::do_mine()
     mine_success:
         std::string hex_hash = fly::base::byte2hexstr(hash_raw, 32);
         std::string block_hash = fly::base::base64_encode(hash_raw, 32);
-        LOG_DEBUG_INFO("mine successfully, zero_bits: %u, block_id: %lu, block_hash: %s (hex: %s)", \
-                       zero_bits, cur_block_id + 1, block_hash.c_str(), hex_hash.c_str());
+        LOG_DEBUG_INFO("mine successfully, zero_bits: %u, nonce: [%lu,%lu,%lu,%lu] block_id: %lu, block_hash: %s (hex: %s)", \
+                       zero_bits, data["nonce"][0].GetUint64(), data["nonce"][1].GetUint64(), data["nonce"][2].GetUint64(), data["nonce"][3].GetUint64(), \
+                       cur_block_id + 1, block_hash.c_str(), hex_hash.c_str());
         doc["hash"].SetString(block_hash.c_str(), allocator);
         std::vector<unsigned char> sign_vec;
 
@@ -1099,7 +1100,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             uint32 tx_block_id = cur_block_id + 1;
             tx_block_id = htonl(tx_block_id);
             memcpy(raw_hash + 28, &tx_block_id, 4);
-            raw_hash[32] = 19; // 'T' on the tail
+            raw_hash[32] = 19; // 'T' at the end
             tx_id = fly::base::base64_encode(raw_hash, 33);
         }
         else
@@ -1521,7 +1522,7 @@ void Blockchain::do_command(std::shared_ptr<Command> command)
             uint32 tx_block_id = block_id;
             tx_block_id = htonl(tx_block_id);
             memcpy(raw_hash + 28, &tx_block_id, 4);
-            raw_hash[32] = 19; // 'T' on the tail
+            raw_hash[32] = 19; // 'T' at the end
             tx_id = fly::base::base64_encode(raw_hash, 33);
         }
         else

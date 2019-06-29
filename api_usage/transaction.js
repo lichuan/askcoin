@@ -3,6 +3,7 @@ const { randomBytes } = require('crypto')
 var EC = require('elliptic').ec;
 var ec = new EC('secp256k1');
 var WebSocket = require('ws');
+var crypto = require('crypto');
 
 //..............................protocol.............................
 
@@ -153,7 +154,7 @@ if(pubkey.verify(hash_raw, sign))
 }
 
 //...............................wsock...............................
-var ws = new WebSocket('ws://192.168.0.122:19051');
+var ws = new WebSocket('ws://192.168.0.127:19050');
 var ping_timer;
 
 ws.on('open', function open() {
@@ -167,6 +168,8 @@ ws.on('open', function open() {
     // get info from server
     ws.send(JSON.stringify({msg_type:0, msg_cmd:2, msg_id:100}));
     
+    var HF_1_BLOCK_ID = 500000;
+
     // register account, need generate privkey
     var key_pair = ec.genKeyPair();
     var privkey_hex = key_pair.getPrivate("hex");
@@ -186,6 +189,17 @@ ws.on('open', function open() {
     data_obj.sign = sign_obj.sign;
     data_obj.sign_data = sign_obj.sign_data;
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var tx_buf = Buffer.from(tx_hash_raw);
+    
+    // first hardfork block height
+    if(sign_obj.sign_data.block_id >= HF_1_BLOCK_ID) {
+        // write block_id in the tx, big-endian
+        tx_buf.writeUInt32BE(sign_obj.sign_data.block_id, tx_buf.length - 4);
+        tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+        tx_buf[32] = 19; // add 'T' at the end of tx_id
+    }
+    
+    var tx_id = tx_buf.toString('base64');
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
     var packet = {msg_type:2, msg_cmd:0, msg_id:1, sign:sign_b64, data:data_obj};
@@ -219,6 +233,17 @@ ws.on('open', function open() {
     data_obj.memo = Buffer.from("this is memo data").toString('base64');
     data_obj.receiver = "BAlgyYbC43fc7brIieAc1yKMSsO12ElINyeF9PyjKOgljkkOK1B8fEgRVOP6kGsOwx4X5lGwtkIrSHJttpqWzSM=";
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
+    var tx_buf = Buffer.from(tx_hash_raw);
+    
+    // first hardfork block height
+    if(data_obj.block_id >= HF_1_BLOCK_ID) {
+        // write block_id in the tx, big-endian
+        tx_buf.writeUInt32BE(data_obj.block_id, tx_buf.length - 4);
+        tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+        tx_buf[32] = 19; // add 'T' at the end of tx_id
+    }
+    
+    var tx_id = tx_buf.toString('base64');
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
     var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
@@ -236,7 +261,17 @@ ws.on('open', function open() {
     data_obj.reward = 100;
     data_obj.topic = Buffer.from("this topic data is 中文内容也可以，一共300字节最多，不能超出 问题的描述 questionnnnnnnnnnnnnnnnnnnn").toString('base64');
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
-    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var tx_buf = Buffer.from(tx_hash_raw);
+    
+    // first hardfork block height
+    if(data_obj.block_id >= HF_1_BLOCK_ID) {
+        // write block_id in the tx, big-endian
+        tx_buf.writeUInt32BE(data_obj.block_id, tx_buf.length - 4);
+        tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+        tx_buf[32] = 19; // add 'T' at the end of tx_id
+    }
+    
+    var tx_id = tx_buf.toString('base64');
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
     var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
@@ -255,7 +290,17 @@ ws.on('open', function open() {
     data_obj.topic_key = "R/F/I+BQ+yuU9CWDDzLbA45tMtv8Ld16VfzW0MdbSV8=";
     data_obj.reply = Buffer.from("this topic reply 回复 replyyyyyyyyyyyyyyyyyyyyyyyyy").toString('base64');
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
-    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var tx_buf = Buffer.from(tx_hash_raw);
+    
+    // first hardfork block height
+    if(data_obj.block_id >= HF_1_BLOCK_ID) {
+        // write block_id in the tx, big-endian
+        tx_buf.writeUInt32BE(data_obj.block_id, tx_buf.length - 4);
+        tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+        tx_buf[32] = 19; // add 'T' at the end of tx_id
+    }
+    
+    var tx_id = tx_buf.toString('base64');
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
     var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};
@@ -275,7 +320,17 @@ ws.on('open', function open() {
     data_obj.reply_to = "rLIcxNNqocIfMgTXADE6dupysw5skfTwxdjMbHHLAJg=";
     data_obj.amount = 10;
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
-    var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+    var tx_buf = Buffer.from(tx_hash_raw);
+    
+    // first hardfork block height
+    if(data_obj.block_id >= HF_1_BLOCK_ID) {
+        // write block_id in the tx, big-endian
+        tx_buf.writeUInt32BE(data_obj.block_id, tx_buf.length - 4);
+        tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+        tx_buf[32] = 19; // add 'T' at the end of tx_id
+    }
+    
+    var tx_id = tx_buf.toString('base64');
     var sign = privkey.sign(tx_hash_raw).toDER();
     var sign_b64 = Buffer.from(sign).toString('base64');
     var packet = {msg_type:2, msg_cmd:0, msg_id:2, sign:sign_b64, data:data_obj};

@@ -217,7 +217,19 @@ ws.on('message', function(msg_data) {
         
         data_obj.receiver = msg_obj.pubkey;
         var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
-        var tx_id = Buffer.from(tx_hash_raw).toString('base64');
+
+        var HF_1_BLOCK_ID = 500000;
+        var tx_buf = Buffer.from(tx_hash_raw);
+        
+        // first hardfork block height
+        if(data_obj.block_id >= HF_1_BLOCK_ID) {
+            // write block_id in the tx, big-endian
+            tx_buf.writeUInt32BE(data_obj.block_id, tx_buf.length - 4);
+            tx_buf = Buffer.concat([tx_buf, Buffer.alloc(1)]);
+            tx_buf[32] = 19; // add 'T' at the end of tx_id
+        }
+        
+        var tx_id = tx_buf.toString('base64');
         var sign = exchange_account_privkey.sign(tx_hash_raw).toDER();
         var sign_b64 = Buffer.from(sign).toString('base64');
         ws.send(JSON.stringify({
