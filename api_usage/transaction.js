@@ -235,10 +235,6 @@ ws.on('open', function open() {
     var tx_hash_raw = hash.sha256().update(hash.sha256().update(JSON.stringify(data_obj)).digest()).digest();
     var tx_buf = Buffer.from(tx_hash_raw);
 
-    var abcdefg = "jjjj";
-    var tst_dict = {abcdefg};
-    console.log(tst_dict, "hahhhhhhhhhhhhhhhhhhhh");
-    
     // first hardfork block height
     if(data_obj.block_id >= HF_1_BLOCK_ID) {
         // write block_id in the tx, big-endian

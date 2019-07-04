@@ -2691,9 +2691,10 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         {
                             continue;
                         }
-                    
+
+                        scb.set_cur_cb(1);
                         const rapidjson::Value &tx_node = tx[i];
-                    
+                        
                         if(!tx_node.IsObject())
                         {
                             ASKCOIN_EXIT(EXIT_FAILURE);
