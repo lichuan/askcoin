@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <netinet/in.h>
 #include "fly/base/logger.hpp"
 #include "net/api/wsock_node.hpp"
 #include "net/api/message.hpp"
@@ -32,7 +33,7 @@ bool Wsock_Node::start(std::string host, uint16 port)
                                                                                 std::bind(&Wsock_Node::dispatch, this, _1),
                                                                                 std::bind(&Wsock_Node::close, this, _1),
                                                                                 std::bind(&Wsock_Node::be_closed, this, _1),
-                                                                                cpu_num, 1840)); // todo size ?
+                                                                                cpu_num, 1840)); // todo size in the future ?
     if(server->start())
     {
         CONSOLE_LOG_INFO("start websocket node success");
@@ -1522,12 +1523,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
             return;
         }
 
-        if(user->m_state != 3)
-        {
-            connection->close();
-            ASKCOIN_RETURN;
-        }
-        
         if(cmd == net::api::EXPLORER_NEXT_PAGE)
         {
             if(!doc.HasMember("block_hash"))
@@ -2115,8 +2110,34 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
         }
         else if(cmd == net::api::EXPLORER_QUERY)
         {
-            if(doc.HasMember("id"))
+            if(!doc.HasMember("type"))
             {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(!doc["type"].IsUint())
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            uint32 query_type = doc["type"].GetUint();
+
+            if(query_type == 0)
+            {
+                connection->close();
+                ASKCOIN_RETURN;
+            }
+
+            if(query_type == 1)
+            {
+                if(!doc.HasMember("id"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
                 if(!doc["id"].IsUint64())
                 {
                     connection->close();
@@ -2172,15 +2193,22 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 doc.AddMember("txs", tx_list, allocator);
                 connection->send(doc);
             }
-            else
+            else if(query_type == 2 || query_type == 3)
             {
                 std::shared_ptr<Block> iter_block;
                 rapidjson::Document rsp_doc;
                 rsp_doc.SetObject();
                 rapidjson::Document::AllocatorType &allocator = rsp_doc.GetAllocator();
+                rsp_doc.AddMember("type", query_type, allocator);
                 
-                if(doc.HasMember("block_hash"))
+                if(query_type == 2)
                 {
+                    if(!doc.HasMember("block_hash"))
+                    {
+                        connection->close();
+                        ASKCOIN_RETURN;
+                    }
+                
                     if(!doc["block_hash"].IsString())
                     {
                         connection->close();
@@ -2202,7 +2230,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         rsp_doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
                         rsp_doc.AddMember("msg_cmd", net::api::EXPLORER_QUERY, allocator);
                         rsp_doc.AddMember("msg_id", msg_id, allocator);
-                        rsp_doc.AddMember("type", 2, allocator);
                         connection->send(rsp_doc);
                         ASKCOIN_RETURN;
                     }
@@ -2231,7 +2258,6 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                         rsp_doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
                         rsp_doc.AddMember("msg_cmd", net::api::EXPLORER_QUERY, allocator);
                         rsp_doc.AddMember("msg_id", msg_id, allocator);
-                        rsp_doc.AddMember("type", 3, allocator);
                         connection->send(rsp_doc);
                         ASKCOIN_RETURN;
                     }
@@ -2243,7 +2269,7 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 {
                     ASKCOIN_RETURN;
                 }
-
+                
                 if(m_merge_point->m_import_block_id > 0)
                 {
                     if(iter_block->id() <= m_merge_point->m_import_block_id)
@@ -2366,6 +2392,448 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                 
                 rsp_doc.AddMember("tx_list", tx_list, allocator);
                 connection->send(rsp_doc);
+            }
+            else if(query_type == 4)
+            {
+                if(!doc.HasMember("tx_hash"))
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            
+                if(!doc["tx_hash"].IsString())
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+            
+                std::string tx_hash = doc["tx_hash"].GetString();
+            
+                if(tx_hash.length() != 44)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+
+                rapidjson::Document rsp_doc;
+                rsp_doc.SetObject();
+                rapidjson::Document::AllocatorType &allocator = rsp_doc.GetAllocator();
+                fly::base::Scope_CB scb(
+                    [&] {
+                        rsp_doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+                        rsp_doc.AddMember("msg_cmd", net::api::EXPLORER_QUERY, allocator);
+                        rsp_doc.AddMember("msg_id", msg_id, allocator);
+                        rsp_doc.AddMember("type", 4, allocator);
+                        connection->send(rsp_doc);
+                    },
+                    [] {});
+                char raw_hash[33] = {0};
+                uint32 len = fly::base::base64_decode(tx_hash.c_str(), tx_hash.length(), raw_hash, 33);
+                
+                if(len != 33)
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                if(raw_hash[32] != 19) // 'T' at the end
+                {
+                    ASKCOIN_RETURN;
+                }
+                
+                uint32 tx_block_id = 0;
+                memcpy(&tx_block_id, raw_hash + 28, 4);
+                tx_block_id = ntohl(tx_block_id);
+                uint64 block_id = tx_block_id;
+                
+                if(block_id == 0)
+                {
+                    connection->close();
+                    ASKCOIN_RETURN;
+                }
+                
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(block_id + 100 <= m_merge_point->m_import_block_id)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                }
+                
+                const uint64 DISTANCE = 100;
+                bool left_end = false;
+                bool right_end = false;
+                uint32 offset = 0;
+                bool query_left = true;
+                uint64 iter_block_id = block_id;
+                
+                while(true)
+                {
+                    scb.set_cur_cb(0);
+
+                    if(offset > 0)
+                    {
+                        if(!left_end && !right_end)
+                        {
+                            if(query_left)
+                            {
+                                iter_block_id = block_id - offset;
+                                auto iter = m_block_by_id.find(iter_block_id);
+                                query_left = false;
+                                
+                                if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE)
+                                {
+                                    left_end = true;
+                                    continue;
+                                }
+                                
+                                if(m_merge_point->m_import_block_id > 0)
+                                {
+                                    if(iter_block_id <= m_merge_point->m_import_block_id)
+                                    {
+                                        left_end = true;
+                                        continue;
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                iter_block_id = block_id + offset;
+                                auto iter = m_block_by_id.find(iter_block_id);
+                                query_left = true;
+                                ++offset;
+                                
+                                if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
+                                {
+                                    right_end = true;
+                                    continue;
+                                }
+                            }
+                        }
+                        else if(left_end && right_end)
+                        {
+                            ASKCOIN_RETURN;
+                        }
+                        else if(left_end)
+                        {
+                            iter_block_id = block_id + offset;
+                            auto iter = m_block_by_id.find(iter_block_id);
+                            ++offset;
+
+                            if(iter == m_block_by_id.end() || offset > DISTANCE + 1)
+                            {
+                                right_end = true;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            iter_block_id = block_id - offset;
+                            auto iter = m_block_by_id.find(iter_block_id);
+                            ++offset;
+                            
+                            if(iter == m_block_by_id.end() || iter_block_id < 1 || offset > DISTANCE + 1)
+                            {
+                                left_end = true;
+                                continue;
+                            }
+                            
+                            if(m_merge_point->m_import_block_id > 0)
+                            {
+                                if(iter_block_id <= m_merge_point->m_import_block_id)
+                                {
+                                    left_end = true;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        while(true)
+                        {
+                            if(m_merge_point->m_import_block_id > 0)
+                            {
+                                if(block_id <= m_merge_point->m_import_block_id)
+                                {
+                                    left_end = true;
+                                    block_id += 1;
+                                    continue;
+                                }
+                            }
+                            
+                            auto iter = m_block_by_id.find(block_id);
+
+                            if(iter != m_block_by_id.end())
+                            {
+                                break;
+                            }
+
+                            if(left_end)
+                            {
+                                ASKCOIN_RETURN;
+                            }
+                            
+                            right_end = true;
+                            
+                            if(block_id > 1)
+                            {
+                                block_id -= 1;
+                            }
+                            else
+                            {
+                                ASKCOIN_RETURN;
+                            }
+                            
+                            if(++offset > DISTANCE)
+                            {
+                                ASKCOIN_RETURN;
+                            }
+                        }
+                        
+                        iter_block_id = block_id;
+                        offset = 1;
+                    }
+
+                    std::shared_ptr<Block> iter_block = m_block_by_id[iter_block_id];
+                    rapidjson::Document doc;
+                    doc.SetObject();
+                    rapidjson::Document::AllocatorType &allocator = doc.GetAllocator();
+                    doc.AddMember("msg_type", net::api::MSG_EXPLORER, allocator);
+                    doc.AddMember("msg_cmd", net::api::EXPLORER_TX_PAGE, allocator);
+                    doc.AddMember("msg_id", msg_id, allocator);
+                    doc.AddMember("block_id", iter_block->id(), allocator);
+                    doc.AddMember("block_hash", rapidjson::StringRef(iter_block->hash().c_str()), allocator);
+                    
+                    if(!iter_block->m_in_main_chain)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(iter_block->m_tx_num == 0)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+
+                    std::string block_data;
+                    leveldb::Status s = m_db->Get(leveldb::ReadOptions(), iter_block->hash(), &block_data);
+                
+                    if(!s.ok())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    rapidjson::Document doc_1;
+                    const char *block_data_str = block_data.c_str();
+                    doc_1.Parse(block_data_str);
+        
+                    if(doc_1.HasParseError())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!doc_1.HasMember("data"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!doc_1.HasMember("tx"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    const rapidjson::Value &data = doc_1["data"];
+        
+                    if(!data.IsObject())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(!data.HasMember("tx_ids"))
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    const rapidjson::Value &tx_ids = data["tx_ids"];
+                    const rapidjson::Value &tx = doc_1["tx"];
+        
+                    if(!tx_ids.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+
+                    if(!tx.IsArray())
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    uint32 tx_num = tx_ids.Size();
+
+                    if(tx_num > 2000)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+        
+                    if(tx.Size() != tx_num)
+                    {
+                        ASKCOIN_EXIT(EXIT_FAILURE);
+                    }
+                
+                    for(uint32 i = 0; i < tx_num; ++i)
+                    {
+                        std::string tx_id = tx_ids[i].GetString();
+                    
+                        if(tx_id != tx_hash)
+                        {
+                            continue;
+                        }
+                    
+                        const rapidjson::Value &tx_node = tx[i];
+                    
+                        if(!tx_node.IsObject())
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!tx_node.HasMember("sign"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!tx_node.HasMember("data"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        std::string tx_sign = tx_node["sign"].GetString();
+                        const rapidjson::Value &data = tx_node["data"];
+
+                        if(!is_base64_char(tx_sign))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("pubkey"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        if(!data.HasMember("type"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+            
+                        if(!data.HasMember("utc"))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        uint64 tx_utc = data["utc"].GetUint64();
+                        rapidjson::StringBuffer buffer;
+                        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+                        tx_node.Accept(writer);
+                        std::string raw_data(buffer.GetString(), buffer.GetSize());
+                        std::string pubkey = data["pubkey"].GetString();
+                        uint32 tx_type = data["type"].GetUint();
+                        doc.AddMember("type", tx_type, allocator);
+                        doc.AddMember("utc", tx_utc, allocator);
+                        doc.AddMember("tx_hash", rapidjson::Value(tx_id.c_str(), allocator), allocator);
+                        doc.AddMember("pubkey", rapidjson::Value(pubkey.c_str(), allocator), allocator);
+                        doc.AddMember("raw", rapidjson::Value(raw_data.c_str(), allocator), allocator);
+                        std::shared_ptr<Account> account;
+                        
+                        if(!get_account(pubkey, account))
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+
+                        doc.AddMember("owner", rapidjson::StringRef(account->name().c_str()), allocator);
+
+                        if(tx_type < TX_TYPE_MIN || tx_type > TX_TYPE_MAX)
+                        {
+                            ASKCOIN_EXIT(EXIT_FAILURE);
+                        }
+                    
+                        if(tx_type == 1) // register account
+                        {
+                            std::string reg_sign = data["sign"].GetString();
+                            const rapidjson::Value &sign_data = data["sign_data"];
+                            std::string register_name = sign_data["name"].GetString();
+                            std::string referrer_pubkey = sign_data["referrer"].GetString();
+                            uint64 block_id = sign_data["block_id"].GetUint64();
+
+                            if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+                        
+                            std::shared_ptr<Account> referrer;
+                            get_account(referrer_pubkey, referrer);
+                            uint32 avatar = data["avatar"].GetUint();
+                            doc.AddMember("name", rapidjson::Value(register_name.c_str(), allocator), allocator);
+                            doc.AddMember("avatar", avatar, allocator);
+                            doc.AddMember("referrer_name", rapidjson::StringRef(referrer->name().c_str()), allocator);
+                            doc.AddMember("referrer_pubkey", rapidjson::StringRef(referrer_pubkey.c_str()), allocator);
+                        }
+                        else
+                        {
+                            uint64 block_id = data["block_id"].GetUint64();
+
+                            if(!verify_tx_sign(pubkey, tx_id, tx_sign, block_id))
+                            {
+                                ASKCOIN_EXIT(EXIT_FAILURE);
+                            }
+
+                            if(tx_type == 2) // send coin
+                            {
+                                if(data.HasMember("memo"))
+                                {
+                                    std::string memo = data["memo"].GetString();
+                                    doc.AddMember("memo", rapidjson::Value(memo.c_str(), allocator), allocator);
+                                }
+                            
+                                uint64 amount = data["amount"].GetUint64();
+                                std::string receiver_pubkey = data["receiver"].GetString();
+                                std::shared_ptr<Account> receiver;
+                            
+                                if(!get_account(receiver_pubkey, receiver))
+                                {
+                                    ASKCOIN_EXIT(EXIT_FAILURE);
+                                }
+                            
+                                doc.AddMember("receiver", rapidjson::StringRef(receiver->name().c_str()), allocator);
+                                doc.AddMember("receiver_pubkey", rapidjson::Value(receiver_pubkey.c_str(), allocator), allocator);
+                                doc.AddMember("amount", amount, allocator);
+                            }
+                            else if(tx_type == 3) // new topic
+                            {
+                                uint64 reward = data["reward"].GetUint64();
+                                std::string topic_data = data["topic"].GetString();
+                                doc.AddMember("reward", reward, allocator);
+                            }
+                            else if(tx_type == 4) // reply
+                            {
+                            }
+                            else if(tx_type == 5) // reward
+                            {
+                                uint64 amount = data["amount"].GetUint64();
+                                doc.AddMember("reward", amount, allocator);
+                            }
+                        }
+                        
+                        connection->send(doc);
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                connection->close();
+                ASKCOIN_RETURN;
             }
         }
         else
@@ -3726,39 +4194,43 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     }
                     else
                     {
-                        auto iter = m_block_by_id.find(block_id);
-                        
-                        while(iter == m_block_by_id.end())
+                        while(true)
                         {
-                            right_end = true;
-
                             if(m_merge_point->m_import_block_id > 0)
                             {
-                                if(block_id > m_merge_point->m_import_block_id + 1)
-                                {
-                                    block_id -= 1;
-                                    iter = m_block_by_id.find(block_id);
-                                }
-                                else
+                                if(block_id <= m_merge_point->m_import_block_id)
                                 {
                                     rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
                                     connection->send(rsp_doc);
                                     ASKCOIN_RETURN;
                                 }
                             }
+                            
+                            auto iter = m_block_by_id.find(block_id);
+
+                            if(iter != m_block_by_id.end())
+                            {
+                                break;
+                            }
+                            
+                            right_end = true;
+                            
+                            if(block_id > 1)
+                            {
+                                block_id -= 1;
+                            }
                             else
                             {
-                                if(block_id > 1)
-                                {
-                                    block_id -= 1;
-                                    iter = m_block_by_id.find(block_id);
-                                }
-                                else
-                                {
-                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
-                                    connection->send(rsp_doc);
-                                    ASKCOIN_RETURN;
-                                }
+                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                connection->send(rsp_doc);
+                                ASKCOIN_RETURN;
+                            }
+                            
+                            if(++offset > DISTANCE)
+                            {
+                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                connection->send(rsp_doc);
+                                ASKCOIN_RETURN;
                             }
                         }
                         
@@ -4007,39 +4479,43 @@ void Blockchain::do_wsock_message(std::unique_ptr<fly::net::Message<Wsock>> &mes
                     }
                     else
                     {
-                        auto iter = m_block_by_id.find(block_id);
-                        
-                        while(iter == m_block_by_id.end())
+                        while(true)
                         {
-                            right_end = true;
-
                             if(m_merge_point->m_import_block_id > 0)
                             {
-                                if(block_id > m_merge_point->m_import_block_id + 1)
-                                {
-                                    block_id -= 1;
-                                    iter = m_block_by_id.find(block_id);
-                                }
-                                else
+                                if(block_id <= m_merge_point->m_import_block_id)
                                 {
                                     rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
                                     connection->send(rsp_doc);
                                     ASKCOIN_RETURN;
                                 }
                             }
+                            
+                            auto iter = m_block_by_id.find(block_id);
+
+                            if(iter != m_block_by_id.end())
+                            {
+                                break;
+                            }
+                            
+                            right_end = true;
+                            
+                            if(block_id > 1)
+                            {
+                                block_id -= 1;
+                            }
                             else
                             {
-                                if(block_id > 1)
-                                {
-                                    block_id -= 1;
-                                    iter = m_block_by_id.find(block_id);
-                                }
-                                else
-                                {
-                                    rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
-                                    connection->send(rsp_doc);
-                                    ASKCOIN_RETURN;
-                                }
+                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                connection->send(rsp_doc);
+                                ASKCOIN_RETURN;
+                            }
+                            
+                            if(++offset > DISTANCE)
+                            {
+                                rsp_doc.AddMember("err_code", net::api::ERR_TX_NOT_EXIST, allocator);
+                                connection->send(rsp_doc);
+                                ASKCOIN_RETURN;
                             }
                         }
 

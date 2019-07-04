@@ -1852,31 +1852,33 @@ void Blockchain::do_peer_message(std::unique_ptr<fly::net::Message<Json>> &messa
 
             if(iter_block_id > block_id + DISTANCE)
             {
+                uint64 target_block_id = block_id + DISTANCE;
+                
+                if(m_merge_point->m_import_block_id > 0)
+                {
+                    if(target_block_id <= m_merge_point->m_import_block_id)
+                    {
+                        ASKCOIN_RETURN;
+                    }
+                }
+                
                 auto iter = m_block_by_id.find(block_id + DISTANCE);
 
-                if(iter != m_block_by_id.end())
+                if(iter == m_block_by_id.end())
                 {
-                    iter_block = iter->second;
+                    ASKCOIN_EXIT(EXIT_FAILURE);
                 }
-            }
-            
-            if(!(iter_block->m_accum_pow > declared_pow))
-            {
-                iter_block = m_most_difficult_block;
-                ASKCOIN_TRACE;
+                
+                iter_block = iter->second;
+                
+                if(!(iter_block->m_accum_pow > declared_pow))
+                {
+                    iter_block = m_most_difficult_block;
+                    ASKCOIN_TRACE;
+                }
             }
             
             std::string block_hash = iter_block->hash();
-            iter_block_id = iter_block->id();
-            
-            if(m_merge_point->m_import_block_id > 0)
-            {
-                if(iter_block_id <= m_merge_point->m_import_block_id)
-                {
-                    ASKCOIN_RETURN;
-                }
-            }
-            
             std::string block_data;
             leveldb::Status s = m_db->Get(leveldb::ReadOptions(), block_hash, &block_data);
             
